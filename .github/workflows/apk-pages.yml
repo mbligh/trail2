@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: trail-${{ github.ref }}
+  group: trail2-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -55,14 +55,14 @@ jobs:
         run: |
           mkdir -p _site
           cp site/index.html _site/index.html
-          cp app/build/outputs/apk/debug/app-debug.apk _site/Trail.apk
+          cp app/build/outputs/apk/debug/app-debug.apk _site/Trail2.apk
           cd _site
-          sha256sum Trail.apk > Trail.apk.sha256
+          sha256sum Trail2.apk > Trail2.apk.sha256
       - name: Save APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Trail-apk
-          path: _site/Trail.apk
+          name: Trail2-apk
+          path: _site/Trail2.apk
           if-no-files-found: error
       - name: Upload Pages site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
