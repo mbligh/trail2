@@ -1,0 +1,11 @@
+{
+  "boundary": {
+    "url": "https://maps.nj.gov/arcgis/rest/services/Framework/Government_Boundaries/MapServer/2/query?where=NAME%20%3D%20%27Tewksbury%20Township%27&outFields=NAME&outSR=4326&returnGeometry=true&f=geojson",
+    "name": "Tewksbury Township, NJ"
+  },
+  "styleUrl": "https://tiles.openfreemap.org/styles/bright",
+  "sources": [
+    {"id": "openmaptiles", "minzoom": 0, "maxzoom": 14},
+    {"id": "ne2_shaded", "minzoom": 0, "maxzoom": 6}
+  ]
+}

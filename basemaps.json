@@ -1,21 +1,387 @@
-[
-  {
-    "name": "openstreetmap",
-    "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    "attribution": "© OpenStreetMap contributors",
-    "attributionUrl": "https://www.openstreetmap.org/copyright"
+{
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "url": "https://tiles.openfreemap.org/planet",
+      "archive": "maps/tewksbury-streets.mbtiles",
+      "cacheVersion": "openfreemap-openmaptiles-v1",
+      "attribution": "\u00a9 OpenFreeMap \u00b7 \u00a9 OpenMapTiles \u00b7 \u00a9 OpenStreetMap contributors"
+    },
+    "ne2_shaded": {
+      "type": "raster",
+      "tileSize": 256,
+      "maxzoom": 6,
+      "tiles": [
+        "https://tiles.openfreemap.org/natural_earth/ne2sr/{z}/{x}/{y}.png"
+      ],
+      "archive": "maps/tewksbury-earth.mbtiles",
+      "attribution": "Natural Earth"
+    },
+    "nj-orthos": {
+      "type": "raster",
+      "tileSize": 256,
+      "maxzoom": 20,
+      "tiles": [
+        "https://maps.nj.gov/arcgis/rest/services/Basemap/Orthos_Natural_2020_NJ_WM/MapServer/tile/{z}/{y}/{x}"
+      ],
+      "archive": "maps/njsatellite.mbtiles",
+      "attribution": "2020 aerial imagery \u00b7 NJOIT Office of GIS"
+    },
+    "osm-raster": {
+      "type": "raster",
+      "tileSize": 256,
+      "maxzoom": 19,
+      "tiles": [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      "archive": "maps/openstreetmap.mbtiles",
+      "attribution": "\u00a9 OpenStreetMap contributors"
+    },
+    "topo-raster": {
+      "type": "raster",
+      "tileSize": 256,
+      "maxzoom": 17,
+      "tiles": [
+        "https://a.tile.opentopomap.org/{z}/{x}/{y}.png"
+      ],
+      "archive": "maps/opentopomap.mbtiles",
+      "attribution": "\u00a9 OpenStreetMap contributors, SRTM \u00b7 \u00a9 OpenTopoMap (CC BY-SA 3.0)"
+    }
   },
-  {
-    "name": "njsatellite",
-    "url": "https://maps.nj.gov/arcgis/rest/services/Basemap/Orthos_Natural_2020_NJ_WM/MapServer/tile/{z}/{y}/{x}",
-    "attribution": "2020 aerial imagery · NJOIT Office of GIS",
-    "attributionUrl": "https://maps.nj.gov/arcgis/rest/services/Basemap/Orthos_Natural_2020_NJ_WM/MapServer"
-  },
-  {
-    "name": "opentopomap",
-    "url": "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-    "maxZoom": 17,
-    "attribution": "© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC BY-SA 3.0)",
-    "attributionUrl": "https://opentopomap.org/about#verwendung"
-  }
-]
+  "basemaps": [
+    {
+      "name": "bright",
+      "label": "Bright",
+      "style": "styles/bright.json",
+      "attribution": "\u00a9 OpenFreeMap \u00b7 \u00a9 OpenMapTiles \u00b7 \u00a9 OpenStreetMap contributors",
+      "attributionUrl": "https://openfreemap.org/"
+    },
+    {
+      "name": "hybrid",
+      "label": "NJ Satellite + roads/trails/labels",
+      "style": "styles/hybrid.json",
+      "attribution": "2020 aerial imagery \u00b7 NJOIT Office of GIS \u00b7 \u00a9 OpenFreeMap \u00b7 \u00a9 OpenStreetMap contributors",
+      "attributionUrl": "https://maps.nj.gov/"
+    },
+    {
+      "name": "njsatellite",
+      "label": "NJ Satellite",
+      "source": "nj-orthos",
+      "attribution": "2020 aerial imagery \u00b7 NJOIT Office of GIS",
+      "attributionUrl": "https://maps.nj.gov/"
+    },
+    {
+      "name": "openstreetmap",
+      "label": "OpenStreetMap",
+      "source": "osm-raster",
+      "attribution": "\u00a9 OpenStreetMap contributors",
+      "attributionUrl": "https://www.openstreetmap.org/copyright"
+    },
+    {
+      "name": "opentopomap",
+      "label": "OpenTopoMap",
+      "source": "topo-raster",
+      "attribution": "\u00a9 OpenStreetMap contributors, SRTM \u00b7 \u00a9 OpenTopoMap (CC BY-SA 3.0)",
+      "attributionUrl": "https://opentopomap.org/about#verwendung"
+    }
+  ],
+  "overlays": [
+    {
+      "id": "contours",
+      "name": "NJ contours (100\u201310 ft)",
+      "sources": {
+        "nj-contours": {
+          "type": "vector",
+          "url": "pmtiles://https://mapping.mbligh.org/contours.pmtiles",
+          "attribution": "Contours derived from NJOGIS statewide DEM"
+        }
+      },
+      "layers": [
+        {
+          "id": "nj-contour-lines-100",
+          "type": "line",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 9,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              100
+            ],
+            0
+          ],
+          "paint": {
+            "line-color": "#ff00dc",
+            "line-opacity": 0.9,
+            "line-width": [
+              "case",
+              [
+                "==",
+                [
+                  "%",
+                  [
+                    "get",
+                    "elevation_ft"
+                  ],
+                  100
+                ],
+                0
+              ],
+              2.2,
+              1.25
+            ]
+          },
+          "maxzoom": 12
+        },
+        {
+          "id": "nj-contour-lines-50",
+          "type": "line",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 12,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              50
+            ],
+            0
+          ],
+          "paint": {
+            "line-color": "#ff00dc",
+            "line-opacity": 0.9,
+            "line-width": [
+              "case",
+              [
+                "==",
+                [
+                  "%",
+                  [
+                    "get",
+                    "elevation_ft"
+                  ],
+                  100
+                ],
+                0
+              ],
+              2.2,
+              1.25
+            ]
+          },
+          "maxzoom": 14
+        },
+        {
+          "id": "nj-contour-labels-50",
+          "type": "symbol",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 12,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              50
+            ],
+            0
+          ],
+          "layout": {
+            "symbol-placement": "line",
+            "symbol-spacing": 450,
+            "text-field": [
+              "to-string",
+              [
+                "get",
+                "elevation_ft"
+              ]
+            ],
+            "text-font": [
+              "Noto Sans Regular"
+            ],
+            "text-size": 11
+          },
+          "paint": {
+            "text-color": "#b0008f",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 2
+          },
+          "maxzoom": 14
+        },
+        {
+          "id": "nj-contour-lines-20",
+          "type": "line",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 14,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              20
+            ],
+            0
+          ],
+          "paint": {
+            "line-color": "#ff00dc",
+            "line-opacity": 0.9,
+            "line-width": [
+              "case",
+              [
+                "==",
+                [
+                  "%",
+                  [
+                    "get",
+                    "elevation_ft"
+                  ],
+                  100
+                ],
+                0
+              ],
+              2.2,
+              1.25
+            ]
+          },
+          "maxzoom": 16
+        },
+        {
+          "id": "nj-contour-labels-20",
+          "type": "symbol",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 14,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              20
+            ],
+            0
+          ],
+          "layout": {
+            "symbol-placement": "line",
+            "symbol-spacing": 450,
+            "text-field": [
+              "to-string",
+              [
+                "get",
+                "elevation_ft"
+              ]
+            ],
+            "text-font": [
+              "Noto Sans Regular"
+            ],
+            "text-size": 11
+          },
+          "paint": {
+            "text-color": "#b0008f",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 2
+          },
+          "maxzoom": 16
+        },
+        {
+          "id": "nj-contour-lines-10",
+          "type": "line",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 16,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              10
+            ],
+            0
+          ],
+          "paint": {
+            "line-color": "#ff00dc",
+            "line-opacity": 0.9,
+            "line-width": [
+              "case",
+              [
+                "==",
+                [
+                  "%",
+                  [
+                    "get",
+                    "elevation_ft"
+                  ],
+                  100
+                ],
+                0
+              ],
+              2.2,
+              1.25
+            ]
+          },
+          "maxzoom": 24
+        },
+        {
+          "id": "nj-contour-labels-10",
+          "type": "symbol",
+          "source": "nj-contours",
+          "source-layer": "contours",
+          "minzoom": 16,
+          "filter": [
+            "==",
+            [
+              "%",
+              [
+                "get",
+                "elevation_ft"
+              ],
+              10
+            ],
+            0
+          ],
+          "layout": {
+            "symbol-placement": "line",
+            "symbol-spacing": 450,
+            "text-field": [
+              "to-string",
+              [
+                "get",
+                "elevation_ft"
+              ]
+            ],
+            "text-font": [
+              "Noto Sans Regular"
+            ],
+            "text-size": 11
+          },
+          "paint": {
+            "text-color": "#b0008f",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 2
+          },
+          "maxzoom": 24
+        }
+      ]
+    }
+  ]
+}

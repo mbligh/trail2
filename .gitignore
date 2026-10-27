@@ -5,3 +5,6 @@ local.properties
 .idea/
 
 .kotlin/
+
+.map-downloads/
+__pycache__/

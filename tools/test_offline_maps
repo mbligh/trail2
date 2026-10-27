@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Offline packaging regression tests; no network access."""
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+from pathlib import Path
+import sqlite3
+import tempfile
+import unittest
+from unittest.mock import patch
+from shapely.geometry import box, shape
+
+loader = importlib.machinery.SourceFileLoader('prepare_maps', str(Path(__file__).with_name('prepare_maps')))
+spec = importlib.util.spec_from_loader(loader.name, loader)
+maps = importlib.util.module_from_spec(spec)
+loader.exec_module(maps)
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class CoverageTests(unittest.TestCase):
+    def test_partial_tiles_on_all_four_sides_of_boundary_are_kept(self):
+        # The township straddles four tiles; no tile center lies within it.
+        polygon = box(-0.001, -0.001, 0.001, 0.001)
+        self.assertEqual(set(maps.intersecting_tiles(polygon, 2, 2)), {(2,1,1),(2,1,2),(2,2,1),(2,2,2)})
+
+    def test_polygon_not_just_its_bounding_rectangle(self):
+        polygon = shape({'type': 'Polygon', 'coordinates': [[[-170,80],[-100,80],[-100,10],[-170,80]]]})
+        selected = set(maps.intersecting_tiles(polygon, 4, 4))
+        self.assertTrue(selected)
+        self.assertTrue(all(polygon.intersects(box(*maps.tile_bounds(*tile))) for tile in selected))
+        self.assertNotIn((4,0,7), selected)
+
+    def test_tms_rows_and_download_failure(self):
+        source = {'tiles': ['https://example.org/{z}/{x}/{y}.pbf'], 'type': 'vector', 'archive': 'maps/example.mbtiles'}
+        settings = {'id': 'example', 'minzoom': 2, 'maxzoom': 2}
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'map.mbtiles'
+            with patch.object(maps, 'fetch', return_value=b'\x1a\x00'):
+                report = maps.download_archive(source, box(1,1,2,2), settings, output, Path(temporary))
+            with sqlite3.connect(output) as db:
+                self.assertEqual(db.execute('SELECT zoom_level,tile_column,tile_row FROM tiles').fetchall(), [(2,2,2)])
+            self.assertEqual(report['tileCount'], 1)
+            with patch.object(maps, 'fetch', side_effect=OSError('missing boundary tile')):
+                with self.assertRaises(OSError):
+                    maps.download_archive(source, box(1,1,2,2), settings, Path(temporary)/'bad.mbtiles', Path(temporary))
+
+    def test_generated_package_complete_and_hashes_match(self):
+        root = ROOT / 'app/build/generated/mapAssets'
+        if not root.exists():
+            self.skipTest('Run tools/prepare_maps first for actual package checks')
+        manifest = json.loads((root/'offline-manifest.json').read_text())
+        boundary = json.loads((root/'offline-boundary.geojson').read_text())
+        geometry = shape(boundary['features'][0]['geometry'])
+        for item in manifest['sources']:
+            with sqlite3.connect(root/item['archive']) as db:
+                actual = {(z,x,(1<<z)-1-row) for z,x,row in db.execute('SELECT zoom_level,tile_column,tile_row FROM tiles')}
+                self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+            expected = set(maps.intersecting_tiles(geometry, item['minzoom'], item['maxzoom']))
+            self.assertEqual(actual, expected, item['source'])
+            self.assertEqual(len(actual), item['tileCount'])
+        for path, digest in manifest['resources'].items():
+            self.assertEqual(hashlib.sha256((root/path).read_bytes()).hexdigest(), digest, path)
+        bright = json.loads((root/'styles/bright.json').read_text())
+        hybrid = json.loads((root/'styles/hybrid.json').read_text())
+        self.assertFalse(any(layer.get('source-layer') == 'poi' for layer in bright['layers']))
+        self.assertEqual(hybrid['layers'][0]['type'], 'raster')
+        self.assertFalse(any(layer['type'] in ('fill','background') for layer in hybrid['layers'][1:]))
+        resources = json.loads((root/'bundled-resources.json').read_text())
+        self.assertTrue(any('Noto%20Sans%20Regular/0-255.pbf' in url for url in resources))
+        self.assertTrue(any(url.endswith('@2x.png') for url in resources))
+
+
+if __name__ == '__main__':
+    unittest.main()

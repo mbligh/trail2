@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""Build reproducible offline MapLibre assets; fail on any missing selected tile."""
+import argparse
+import concurrent.futures
+import copy
+import gzip
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import re
+import shutil
+import sqlite3
+import time
+import urllib.request
+
+ROOT = Path(__file__).resolve().parents[1]
+USER_AGENT = 'Trail2/2.0 (https://github.com/mbligh/trail2)'
+
+
+def tile_bounds(z, x, y):
+    n = 2 ** z
+    lon = lambda v: v / n * 360 - 180
+    lat = lambda v: math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * v / n))))
+    return lon(x), lat(y + 1), lon(x + 1), lat(y)
+
+
+def intersecting_tiles(geometry, minzoom, maxzoom):
+    from shapely.geometry import box
+    west, south, east, north = geometry.bounds
+    for z in range(minzoom, maxzoom + 1):
+        n = 2 ** z
+        fx = lambda lon: (lon + 180) / 360 * n
+        fy = lambda lat: (1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n
+        # Include touching tiles on both sides of an exact tile boundary.
+        x0, x1 = max(0, math.floor(fx(west) - 1e-9)), min(n - 1, math.floor(fx(east) + 1e-9))
+        y0, y1 = max(0, math.floor(fy(north) - 1e-9)), min(n - 1, math.floor(fy(south) + 1e-9))
+        for x in range(x0, x1 + 1):
+            for y in range(y0, y1 + 1):
+                if geometry.intersects(box(*tile_bounds(z, x, y))):
+                    yield z, x, y
+
+
+def fetch(url, cache):
+    path = cache / hashlib.sha256(url.encode()).hexdigest()
+    if path.exists():
+        return path.read_bytes()
+    error = None
+    for attempt in range(4):
+        try:
+            request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = response.read()
+            if not data:
+                raise ValueError('Empty response: ' + url)
+            tmp = path.with_suffix('.part')
+            tmp.write_bytes(data)
+            tmp.replace(path)
+            return data
+        except Exception as exc:
+            error = exc
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+    raise RuntimeError(f'Unable to download {url}: {error}')
+
+
+def normalize_source(source, cache):
+    result = copy.deepcopy(source)
+    if result.get('url', '').startswith('https://'):
+        metadata = json.loads(fetch(result.pop('url'), cache))
+        if 'tiles' not in metadata:
+            raise ValueError('TileJSON has no tiles')
+        for key in ('tiles', 'minzoom', 'maxzoom', 'bounds', 'attribution'):
+            if key in metadata and key not in result:
+                result[key] = metadata[key]
+    return result
+
+
+def download_archive(source, geometry, settings, output, cache):
+    templates = source['tiles']
+    if any('tile.openstreetmap.org' in url for url in templates):
+        raise ValueError('Provide an authorized archive instead of bulk downloading public OSM raster tiles')
+    low, high = settings['minzoom'], settings['maxzoom']
+    if high > source.get('maxzoom', 22):
+        raise ValueError('Offline zoom exceeds native source zoom')
+    tiles = list(intersecting_tiles(geometry, low, high))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(output)
+    db.execute("PRAGMA journal_mode=OFF")  # Staging directory is promoted only after validation.
+    db.executescript('CREATE TABLE metadata (name TEXT, value TEXT); CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB, PRIMARY KEY(zoom_level,tile_column,tile_row));')
+    def download(tile):
+        z, x, y = tile
+        url = templates[(x + y) % len(templates)].replace('{z}', str(z)).replace('{x}', str(x)).replace('{y}', str(y))
+        data = fetch(url, cache)
+        if data.startswith(b'\x1f\x8b'):
+            data = gzip.decompress(data)
+        if source['type'] == 'raster' and not data.startswith((b'\x89PNG', b'\xff\xd8', b'RIFF')):
+            raise ValueError('Invalid raster tile: ' + url)
+        if source['type'] == 'vector' and (data.startswith((b'<', b'{')) or len(data) < 2):
+            raise ValueError('Invalid vector tile: ' + url)
+        return z, x, (1 << z) - 1 - y, data
+    print(f"Packaging {settings['id']}: {len(tiles)} intersecting tiles (z{low}–{high})", flush=True)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            for i, row in enumerate(pool.map(download, tiles), 1):
+                db.execute('INSERT INTO tiles VALUES (?,?,?,?)', row)
+                if i % 50 == 0:
+                    print(f"  {settings['id']}: {i}/{len(tiles)}", flush=True)
+        bounds = geometry.bounds
+        metadata = {'name': settings['id'], 'type': 'baselayer', 'version': '1', 'format': 'pbf' if source['type'] == 'vector' else 'png', 'minzoom': str(low), 'maxzoom': str(high), 'bounds': ','.join(map(str, bounds)), 'attribution': source.get('attribution', '')}
+        db.executemany('INSERT INTO metadata VALUES (?,?)', metadata.items())
+        db.commit()
+        assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+        assert db.execute('SELECT count(*) FROM tiles').fetchone()[0] == len(tiles)
+    finally:
+        db.close()
+    return {'source': settings['id'], 'archive': source['archive'], 'tileCount': len(tiles), 'minzoom': low, 'maxzoom': high, 'bounds': list(geometry.bounds), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=ROOT / 'app/build/generated/mapAssets')
+    args = parser.parse_args()
+    config = json.loads((ROOT / 'basemaps.json').read_text())
+    offline = json.loads((ROOT / 'offline-maps.json').read_text())
+    fingerprint = hashlib.sha256((ROOT / 'offline-maps.json').read_bytes() + (ROOT / 'basemaps.json').read_bytes() + Path(__file__).read_bytes()).hexdigest()[:16]
+    cache = ROOT / '.map-downloads' / fingerprint
+    cache.mkdir(parents=True, exist_ok=True)
+    stage = args.output.with_name(args.output.name + '.tmp')
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+    resources = {}
+    def resource(url, relative):
+        path = stage / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(fetch(url, cache))
+        resources[url] = relative
+    try:
+        boundary_data = json.loads(fetch(offline['boundary']['url'], cache))
+        from shapely.geometry import shape
+        from shapely.ops import unary_union
+        features = boundary_data['features']
+        if not features:
+            raise ValueError('Boundary query returned no features')
+        geometry = unary_union([shape(f['geometry']) for f in features])
+        if geometry.is_empty or not geometry.is_valid:
+            raise ValueError('Invalid offline boundary')
+        (stage / 'offline-boundary.geojson').write_text(json.dumps(boundary_data))
+        # Package the exact Bright source style, including its licence/provenance.
+        style = json.loads(fetch(offline['styleUrl'], cache))
+        style['layers'] = [l for l in style['layers'] if l.get('source-layer') != 'poi' and not re.search(r'(^|[-_])pois?($|[-_])', l['id'].lower())]
+        fonts = set()
+        for layer in style['layers']:
+            layout = layer.get('layout', {})
+            field = layout.get('text-field')
+            if field and 'name' in json.dumps(field):
+                layout['text-field'] = ['coalesce', ['get', 'name:en'], ['get', 'name_en'], ['get', 'name:latin'], ['get', 'name']]
+            font = layout.get('text-font')
+            if font:
+                if not isinstance(font, list) or not all(isinstance(v, str) for v in font):
+                    raise ValueError('Dynamic fonts need an explicit offline font package')
+                fonts.add(','.join(font))
+        sprite = style.get('sprite')
+        if sprite:
+            for suffix in ('.json', '.png', '@2x.json', '@2x.png'):
+                resource(sprite + suffix, 'sprites/bright' + suffix)
+        # Latin/extended Latin and typographical punctuation cover the English NJ style.
+        ranges = list(range(0, 2048, 256)) + [8192, 8448]
+        for font in sorted(fonts):
+            for start in ranges:
+                block = f'{start}-{start + 255}'
+                url = style['glyphs'].replace('{fontstack}', urllib.parse.quote(font, safe=',')).replace('{range}', block)
+                resource(url, f'fonts/{font}/{block}.pbf')
+        resolved = {key: normalize_source(value, cache) for key, value in config['sources'].items()}
+        manifest = {'name': offline['boundary']['name'], 'boundaryUrl': offline['boundary']['url'], 'styleUrl': offline['styleUrl'], 'selection': 'every tile intersecting boundary, including partially intersecting tiles', 'sources': []}
+        for settings in offline['sources']:
+            source = resolved[settings['id']]
+            archive = source['archive']
+            uploaded = ROOT / archive
+            legacy = ROOT / 'app/src/main/assets' / archive
+            candidate = next((p for p in (uploaded, legacy) if p.exists() and p.stat().st_size), None)
+            if candidate:
+                target = stage / archive
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(candidate, target)
+            else:
+                manifest['sources'].append(download_archive(source, geometry, settings, stage / archive, cache))
+        (stage / 'styles').mkdir()
+        (stage / 'styles/bright.json').write_text(json.dumps(style))
+        hybrid = copy.deepcopy(style)
+        hybrid['sources']['nj-orthos'] = resolved['nj-orthos']
+        hybrid['layers'] = [l for l in hybrid['layers'] if l['type'] in ('line', 'symbol', 'circle')]
+        for layer in hybrid['layers']:
+            if layer['type'] == 'symbol' and layer.get('layout', {}).get('text-field'):
+                layer.setdefault('paint', {}).update({'text-halo-color': '#ffffff', 'text-halo-width': 1.5})
+        hybrid['layers'].insert(0, {'id': 'nj-orthos', 'type': 'raster', 'source': 'nj-orthos', 'paint': {'raster-resampling': 'linear'}})
+        (stage / 'styles/hybrid.json').write_text(json.dumps(hybrid))
+        for sidecar in stage.rglob('*.mbtiles-*'):
+            sidecar.unlink()
+        # Uploaded map resources are retained verbatim and override generated files.
+        for path in (ROOT / 'maps').rglob('*'):
+            if path.is_file() and path.name != 'README.md':
+                target = stage / 'maps' / path.relative_to(ROOT / 'maps')
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+        (stage / 'resolved-sources.json').write_text(json.dumps(resolved))
+        (stage / 'bundled-resources.json').write_text(json.dumps(resources))
+        manifest['resources'] = {p.relative_to(stage).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in stage.rglob('*') if p.is_file()}
+        (stage / 'offline-manifest.json').write_text(json.dumps(manifest, indent=2))
+        shutil.rmtree(args.output, ignore_errors=True)
+        stage.rename(args.output)
+        print(f'Offline maps ready: {args.output}', flush=True)
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+
+
+if __name__ == '__main__':
+    main()
