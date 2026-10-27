@@ -101,7 +101,7 @@ class MainActivity : Activity(), LocationListener {
         prefs.edit().putBoolean("maplibre_migrated", true).putString("basemap", selectedBasemap.name).apply()
         mapConfig.overlays.filter { prefs.getBoolean("overlay_${it.id}", it.defaultVisible) }.forEach { enabledOverlays.add(it.id) }
         map = TrailMap(this, mapConfig, selectedBasemap,
-            LatLng(prefs.getFloat("lat", 40.7f).toDouble(), prefs.getFloat("lon", -74.7f).toDouble()),
+            LatLng(prefs.getFloat("lat", 40.692f).toDouble(), prefs.getFloat("lon", -74.771f).toDouble()),
             prefs.getFloat("zoom", 17f).toDouble(), savedInstanceState?.getBundle("maplibre")).apply {
             onDrag = { following = false; refreshStatus() }
             onCameraChanged = { showAttribution() }
