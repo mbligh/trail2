@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: trail-play
+  group: trail2-play
   cancel-in-progress: false
 jobs:
   configuration:
@@ -87,16 +87,18 @@ jobs:
           name: Trail-play-bundle
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+      # Explicit repository variable guards against publishing before the separate
+      # mbligh.trail listing and its credentials are configured in Play Console.
       - name: Upload and publish to internal testing
-        if: needs.configuration.outputs.publish == 'true'
+        if: needs.configuration.outputs.publish == 'true' && vars.ENABLE_TRAIL2_PLAY_UPLOAD == 'true'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5
         with:
           serviceAccountJsonPlainText: ${{ secrets.TRAIL_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: net.pocketmap
+          packageName: mbligh.trail
           releaseFiles: app/build/outputs/bundle/release/app-release.aab
           tracks: internal
           status: completed
-          releaseName: Trail build ${{ github.run_number }}.${{ github.run_attempt }}
+          releaseName: Trail 2 build ${{ github.run_number }}.${{ github.run_attempt }}
       - name: Remove upload key
         if: always()
         run: rm -rf .private-signing
