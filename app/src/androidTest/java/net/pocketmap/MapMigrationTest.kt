@@ -18,7 +18,6 @@ import org.maplibre.android.geometry.LatLng
 import org.junit.runner.RunWith
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.module.http.HttpRequestUtil
-import java.io.File
 import java.io.IOException
 
 /** Exercises the real native renderer and local tile route, with all network blocked. */
@@ -75,10 +74,12 @@ class MapMigrationTest {
                 await(scenario, "$choice restores trails and recording") { map -> native(map)?.style?.isFullyLoaded == true && native(map)?.queryRenderedFeatures(android.graphics.RectF(0f,0f,map.width.toFloat(),map.height.toFloat()), "trail-lines", "trail-recording")?.size?.let { it >= 2 } == true }
             }
             assertEquals(emptyList<String>(), errors)
-            instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
-                val output = File(context.getExternalFilesDir(null), "maplibre-offline.png")
-                output.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+            await(scenario, "Bright streets restored for screenshot") { map ->
+                native(map)?.queryRenderedFeatures(android.graphics.RectF(0f,0f,map.width.toFloat(),map.height.toFloat()))?.any { it.hasProperty("class") } == true
             }
+            Thread.sleep(500)
+            instrumentation.waitForIdleSync()
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("screencap -p /data/local/tmp/maplibre-offline.png")).use { it.readBytes() }
         }
     }
 

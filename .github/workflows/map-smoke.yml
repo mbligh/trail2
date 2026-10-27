@@ -65,7 +65,7 @@ jobs:
         if: always()
         run: |
           mkdir -p smoke-results
-          timeout 10 adb pull /sdcard/Android/data/mbligh.trail/files/maplibre-offline.png smoke-results/ || true
+          timeout 10 adb pull /data/local/tmp/maplibre-offline.png smoke-results/ || true
           timeout 10 adb logcat -d > smoke-results/logcat.txt || true
           cp /tmp/emulator.log smoke-results/ || true
       - uses: actions/upload-artifact@v6
