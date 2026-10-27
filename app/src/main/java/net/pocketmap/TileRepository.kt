@@ -52,8 +52,11 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         if (url.startsWith("pmtiles://https://")) pmtiles[url.removePrefix("pmtiles://")] = source.optString("cacheVersion", "1")
         if (url.startsWith("pmtiles://asset://")) source.put("url", "pmtiles://" + android.net.Uri.fromFile(assetFile(url.removePrefix("pmtiles://asset://"))).toString())
         if (source.optString("type") in listOf("raster", "vector", "raster-dem") && (source.has("tiles") || source.optString("archive").endsWith(".mbtiles"))) {
-            if (!stores.containsKey(id)) {
-                val archive = source.optString("archive")
+            val archive = source.optString("archive")
+            // Also namespace MapLibre's own ambient cache, not just our MBTiles files.
+            // Different styles may legitimately reuse a source ID for different data.
+            val route = hash(id + source.toString() + manifest.optString(archive))
+            if (!stores.containsKey(route)) {
                 val seed = if (archive.isNotBlank()) runCatching {
                     val file = assetFile(archive)
                     if (file.length() == 0L) null else SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
@@ -68,20 +71,28 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
                         }
                     }
                 }
-                val key = source.optString("cacheVersion").ifBlank { source.getJSONArray("tiles").toString() + source.optString("archive") }
+                val identity = source.optString("cacheIdentity").ifBlank { source.getJSONArray("tiles").toString() + archive }
+                val key = identity + source.optString("cacheVersion")
                 val cacheFile = File(context.filesDir, "map-cache/${hash(id + key)}.mbtiles")
                 // Preserve the three original sources' existing offline runtime caches.
                 val legacyName = when (id) { "nj-orthos" -> "njsatellite"; "osm-raster" -> "openstreetmap"; "topo-raster" -> "opentopomap"; else -> null }
                 val legacy = legacyName?.let { File(context.filesDir, "maps/$it-cache.mbtiles") }
-                if (!cacheFile.exists() && legacy?.exists() == true) {
-                    cacheFile.parentFile?.mkdirs(); legacy.copyTo(cacheFile)
+                val migrated = File(context.filesDir, "map-cache/legacy-$id-migrated")
+                if (!migrated.exists() && legacy?.exists() == true) {
+                    cacheFile.parentFile?.mkdirs()
+                    if (!cacheFile.exists()) legacy.copyTo(cacheFile)
+                    migrated.writeText(cacheFile.name)
                 }
-                stores[id] = Store(JSONObject(source.toString()), seed, MbTilesCache(cacheFile))
+                stores[route] = Store(JSONObject(source.toString()), seed, MbTilesCache(cacheFile))
+            }
+            val installed = stores.getValue(route).definition
+            for (key in listOf("minzoom", "maxzoom", "bounds")) {
+                if (!source.has(key) && installed.has(key)) source.put(key, installed.get(key))
             }
             source.remove("url")
-            source.put("tiles", JSONArray().put("https://trail.tiles.invalid/$id/{z}/{x}/{y}"))
+            source.put("tiles", JSONArray().put("https://trail.tiles.invalid/$id/$route/{z}/{x}/{y}"))
         }
-        source.remove("archive"); source.remove("cacheVersion")
+        source.remove("archive"); source.remove("cacheVersion"); source.remove("cacheIdentity")
         return source
     }
 
@@ -111,9 +122,9 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
                 .header("Content-Range",contentRange).header("Accept-Ranges","bytes").body(data.toResponseBody(mime.toMediaType())).build()
         }
         val parts = url.pathSegments
-        if (parts.size != 4) throw IOException("Invalid tile path")
-        val store = synchronized(this) { stores[parts[0]] } ?: throw IOException("Unknown tile source")
-        val z = parts[1].toInt(); val x = parts[2].toInt(); val y = parts[3].toInt()
+        if (parts.size != 5) throw IOException("Invalid tile path")
+        val store = synchronized(this) { stores[parts[1]] } ?: throw IOException("Unknown tile source")
+        val z = parts[2].toInt(); val x = parts[3].toInt(); val y = parts[4].toInt()
         val mime = if (store.definition.optString("type") == "vector") "application/x-protobuf" else "image/png"
         val seed = synchronized(this) { if (closed) null else store.seed?.let { MbTilesCache.read(it, z, x, y) } }
         (seed ?: store.cache.get(z, x, y))?.let { return response(chain, it, mime) }

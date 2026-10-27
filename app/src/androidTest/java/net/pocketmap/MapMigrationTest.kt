@@ -110,6 +110,33 @@ class MapMigrationTest {
         assertEquals(40.691,selected.latitude,0.000001)
     }
 
+    @Test fun offlineOnlyArchiveKeepsZoomLimitsAcrossSwitches() {
+        TileRepository(context).use { repo ->
+            val definition = JSONObject("""{"type":"vector","archive":"maps/tewksbury-streets.mbtiles"}""")
+            val first = repo.styleSource("offline-only",definition)
+            val again = repo.styleSource("offline-only",definition)
+            assertEquals(14,first.getInt("maxzoom"))
+            assertEquals(14,again.getInt("maxzoom"))
+            val local = repo.styleSource("local-pmtiles",JSONObject("""{"type":"vector","url":"pmtiles://asset://maps/tewksbury-streets.mbtiles"}"""))
+            assertTrue(local.getString("url").startsWith("pmtiles://file:///"))
+        }
+    }
+
+    @Test fun reusedSourceIdsAndUpdatedSeedsCannotMixNativeCacheEntries() {
+        TileRepository(context).use { repo ->
+            val first = repo.styleSource("shared",JSONObject("""{"type":"vector","cacheVersion":"v1","tiles":["https://example.org/a/{z}/{x}/{y}"]}"""))
+            val second = repo.styleSource("shared",JSONObject("""{"type":"vector","cacheVersion":"v1","tiles":["https://example.org/b/{z}/{x}/{y}"]}"""))
+            assertNotEquals(first.getJSONArray("tiles").getString(0),second.getJSONArray("tiles").getString(0))
+            val client = OkHttpClient.Builder().addInterceptor(repo).addInterceptor { chain ->
+                val data = if (chain.request().url.pathSegments.first() == "a") byteArrayOf(1) else byteArrayOf(2)
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(data.toResponseBody("application/x-protobuf".toMediaType())).build()
+            }.build()
+            fun get(source: JSONObject) = client.newCall(Request.Builder().url(source.getJSONArray("tiles").getString(0).replace("{z}","14").replace("{x}","200").replace("{y}","300")).build()).execute().use { it.body!!.bytes() }
+            assertArrayEquals(byteArrayOf(1),get(first))
+            assertArrayEquals(byteArrayOf(2),get(second))
+        }
+    }
+
     @Test fun remoteArchiveRangesRemainAvailableOfflineAfterReopen() {
         val definition = JSONObject("""{"type":"vector","url":"pmtiles://https://example.org/map.pmtiles","cacheVersion":"${SystemClock.elapsedRealtimeNanos()}"}""")
         val request = Request.Builder().url("https://example.org/map.pmtiles").header("Range","bytes=0-2").build()
@@ -133,15 +160,16 @@ class MapMigrationTest {
     @Test fun runtimeTilesRemainAvailableOfflineAfterRepositoryReopens() {
         val id = "cache-test"
         val definition = JSONObject("""{"type":"vector","maxzoom":14,"tiles":["https://example.org/{z}/{x}/{y}"],"cacheVersion":"${SystemClock.elapsedRealtimeNanos()}"}""")
-        val request = Request.Builder().url("https://trail.tiles.invalid/$id/14/100/200").build()
         val data = byteArrayOf(26,0)
         TileRepository(context).use { repo ->
-            repo.styleSource(id,definition)
+            val source = repo.styleSource(id,definition)
+            val request = Request.Builder().url(source.getJSONArray("tiles").getString(0).replace("{z}","14").replace("{x}","100").replace("{y}","200")).build()
             val client = OkHttpClient.Builder().addInterceptor(repo).addInterceptor { chain -> Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(data.toResponseBody("application/x-protobuf".toMediaType())).build() }.build()
             assertArrayEquals(data,client.newCall(request).execute().use { it.body!!.bytes() })
         }
         TileRepository(context).use { repo ->
-            repo.styleSource(id,definition)
+            val source = repo.styleSource(id,definition)
+            val request = Request.Builder().url(source.getJSONArray("tiles").getString(0).replace("{z}","14").replace("{x}","100").replace("{y}","200")).build()
             val client = OkHttpClient.Builder().addInterceptor(repo).addInterceptor { throw IOException("offline") }.build()
             assertArrayEquals(data,client.newCall(request).execute().use { it.body!!.bytes() })
         }

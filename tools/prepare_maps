@@ -68,6 +68,7 @@ def fetch(url, cache):
 def normalize_source(source, cache):
     result = copy.deepcopy(source)
     if result.get('url', '').startswith('https://'):
+        result['cacheIdentity'] = result['url']
         metadata = json.loads(fetch(result.pop('url'), cache))
         if 'tiles' not in metadata:
             raise ValueError('TileJSON has no tiles')
