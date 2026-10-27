@@ -43,7 +43,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
@@ -59,7 +59,7 @@ jobs:
           cd _site
           sha256sum Trail2.apk > Trail2.apk.sha256
       - name: Save APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Trail2-apk
           path: _site/Trail2.apk
