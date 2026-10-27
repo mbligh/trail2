@@ -27,6 +27,7 @@ class MapMigrationTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     @Before fun grantLocationForUiTests() {
+        instrumentation.runOnMainSync { org.maplibre.android.MapLibre.getInstance(context) }
         for (permission in listOf("ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS")) {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.$permission")).use { it.readBytes() }
         }
@@ -55,6 +56,10 @@ class MapMigrationTest {
             scenario.onActivity { activity ->
                 MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.setBoolean(activity,false)
                 renderer(activity).apply { onError = { errors.add(it) }; offline(this); setCenter(LatLng(40.69,-74.78)) }
+                activity.onLocationChanged(Location(LocationManager.GPS_PROVIDER).apply {
+                    latitude = 40.69; longitude = -74.78; accuracy = 4f
+                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(); time = System.currentTimeMillis()
+                })
             }
             await(scenario, "Bright vector roads render from bundled tiles") { map ->
                 val native = native(map)

@@ -72,7 +72,7 @@ def normalize_source(source, cache):
         metadata = json.loads(fetch(result.pop('url'), cache))
         if 'tiles' not in metadata:
             raise ValueError('TileJSON has no tiles')
-        for key in ('tiles', 'minzoom', 'maxzoom', 'bounds', 'attribution'):
+        for key in ('tiles', 'minzoom', 'maxzoom', 'bounds', 'attribution', 'vector_layers'):
             if key in metadata and key not in result:
                 result[key] = metadata[key]
     return result
@@ -100,6 +100,8 @@ def download_archive(source, geometry, settings, output, cache):
             raise ValueError('Invalid raster tile: ' + url)
         if source['type'] == 'vector' and (data.startswith((b'<', b'{')) or len(data) < 2):
             raise ValueError('Invalid vector tile: ' + url)
+        if source['type'] == 'vector':
+            data = gzip.compress(data, mtime=0)
         return z, x, (1 << z) - 1 - y, data
     print(f"Packaging {settings['id']}: {len(tiles)} intersecting tiles (z{low}–{high})", flush=True)
     try:
@@ -110,6 +112,8 @@ def download_archive(source, geometry, settings, output, cache):
                     print(f"  {settings['id']}: {i}/{len(tiles)}", flush=True)
         bounds = geometry.bounds
         metadata = {'name': settings['id'], 'type': 'baselayer', 'version': '1', 'format': 'pbf' if source['type'] == 'vector' else 'png', 'minzoom': str(low), 'maxzoom': str(high), 'bounds': ','.join(map(str, bounds)), 'attribution': source.get('attribution', '')}
+        if source['type'] == 'vector':
+            metadata['json'] = json.dumps({'vector_layers': source.get('vector_layers', [])})
         db.executemany('INSERT INTO metadata VALUES (?,?)', metadata.items())
         db.commit()
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'

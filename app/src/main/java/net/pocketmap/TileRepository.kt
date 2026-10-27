@@ -13,6 +13,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.module.http.HttpRequestUtil
 import java.io.Closeable
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -92,7 +96,7 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
             source.remove("url")
             source.put("tiles", JSONArray().put("https://trail.tiles.invalid/$id/$route/{z}/{x}/{y}"))
         }
-        source.remove("archive"); source.remove("cacheVersion"); source.remove("cacheIdentity")
+        source.remove("archive"); source.remove("cacheVersion"); source.remove("cacheIdentity"); source.remove("vector_layers")
         return source
     }
 
@@ -127,7 +131,7 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         val z = parts[2].toInt(); val x = parts[3].toInt(); val y = parts[4].toInt()
         val mime = if (store.definition.optString("type") == "vector") "application/x-protobuf" else "image/png"
         val seed = synchronized(this) { if (closed) null else store.seed?.let { MbTilesCache.read(it, z, x, y) } }
-        (seed ?: store.cache.get(z, x, y))?.let { return response(chain, it, mime) }
+        (seed ?: store.cache.get(z, x, y))?.let { return response(chain, uncompressed(it), mime) }
         val templates = store.definition.getJSONArray("tiles")
         if (templates.length() == 0) return Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(404).message("Tile outside bundled coverage").body(ByteArray(0).toResponseBody()).build()
         val remote = templates.getString((x + y) % templates.length()).replace("{z}", "$z").replace("{x}", "$x").replace("{y}", "$y")
@@ -137,8 +141,17 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         val contentType = result.header("Content-Type") ?: mime
         result.close()
         // A full disk must not prevent display of a successfully fetched tile.
-        runCatching { store.cache.put(z, x, y, data) }.onFailure { Log.w("TrailTiles", "Cannot cache tile", it) }
+        runCatching { store.cache.put(z, x, y, if (store.definition.optString("type") == "vector") compressed(data) else data) }.onFailure { Log.w("TrailTiles", "Cannot cache tile", it) }
         return response(chain, data, contentType)
+    }
+    private fun uncompressed(data: ByteArray): ByteArray = if (data.size >= 2 && data[0] == 0x1f.toByte() && data[1] == 0x8b.toByte()) {
+        GZIPInputStream(ByteArrayInputStream(data)).use { it.readBytes() }
+    } else data
+    private fun compressed(data: ByteArray): ByteArray {
+        if (data.size >= 2 && data[0] == 0x1f.toByte() && data[1] == 0x8b.toByte()) return data
+        val output = ByteArrayOutputStream()
+        GZIPOutputStream(output).use { it.write(data) }
+        return output.toByteArray()
     }
     private fun response(chain: Interceptor.Chain, data: ByteArray, mime: String) = Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(data.toResponseBody(mime.toMediaType())).build()
     @Synchronized override fun close() {
