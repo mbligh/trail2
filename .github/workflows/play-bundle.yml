@@ -5,6 +5,10 @@ on:
     paths:
       - 'app/**'
       - 'basemaps.json'
+      - 'offline-maps.json'
+      - 'maps/**'
+      - 'tools/prepare_maps'
+      - 'tools/test_offline_maps'
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'gradle/**'
@@ -74,8 +78,22 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: echo "TRAIL_VERSION_CODE=$((10000 + RUN_NUMBER * 100 + RUN_ATTEMPT))" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install offline map builder
+        run: python -m pip install shapely==2.1.2
+      - name: Cache offline map downloads
+        uses: actions/cache@v5
+        with:
+          path: .map-downloads
+          key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
+      - name: Validate offline tile selection
+        run: python tools/test_offline_maps
       - name: Test, lint, and build release bundle
         run: ./gradlew --no-daemon testReleaseUnitTest lintRelease bundleRelease
+      - name: Verify complete bundled offline coverage
+        run: python tools/test_offline_maps
       - name: Verify bundle signature
         run: |
           jarsigner -verify app/build/outputs/bundle/release/app-release.aab > .private-signing/verification.txt

@@ -1,14 +1,23 @@
 package net.pocketmap
 
-import org.junit.Assert.assertEquals
+import org.junit.Assert.*
 import org.junit.Test
 
 class BasemapTest {
-    @Test fun tileTemplatesRespectProviderCoordinateOrder() {
-        assertEquals("https://tile.openstreetmap.org/15/9573/12316.png", Basemap("osm", "https://tile.openstreetmap.org/{z}/{x}/{y}.png").tileUrl(15, 9573, 12316))
-        assertEquals("https://maps.nj.gov/tile/15/12316/9573", Basemap("nj", "https://maps.nj.gov/tile/{z}/{y}/{x}").tileUrl(15, 9573, 12316))
+    @Test fun configuredMapsAndIndependentLayerDefaults() {
+        val config = """{"sources":{},"basemaps":[{"name":"streets","style":"maps/custom/style.json"},{"name":"hybrid","label":"Satellite and roads","style":"styles/hybrid.json"}],"overlays":[{"id":"parcels","name":"Parcels","defaultVisible":true,"sources":{"parcel-data":{"type":"geojson","data":"asset://maps/parcels.geojson"}},"layers":[]}]}"""
+        val parsed = MapConfiguration { if (it == "basemaps.json") config else "{}" }
+        assertEquals(listOf("streets", "hybrid"), parsed.basemaps.map { it.name })
+        assertEquals("Satellite and roads", parsed.basemaps[1].label)
+        assertEquals("maps/custom/style.json", parsed.basemaps[0].style)
+        assertTrue(parsed.overlays.single().defaultVisible)
+        assertTrue(parsed.sources.has("parcel-data"))
     }
-    @Test(expected = IllegalArgumentException::class) fun rejectsMissingCoordinates() {
-        Basemap("broken", "https://example.org/{z}/{x}.png")
+    @Test(expected = IllegalArgumentException::class) fun duplicateMapNamesAreRejected() {
+        MapConfiguration { if (it == "basemaps.json") """{"basemaps":[{"name":"same"},{"name":"same"}]}""" else "{}" }
+    }
+    @Test fun standardMbtilesRowsAreFlipped() {
+        assertEquals(0L, MbTilesCache.xyzToTmsY(0,0))
+        assertEquals(20451L, MbTilesCache.xyzToTmsY(15,12316))
     }
 }

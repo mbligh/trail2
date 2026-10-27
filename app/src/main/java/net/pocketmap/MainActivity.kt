@@ -4,31 +4,17 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
+import org.maplibre.android.geometry.LatLng
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
-import android.view.MotionEvent
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import org.osmdroid.config.Configuration
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.events.MapListener
-import org.osmdroid.events.ScrollEvent
-import org.osmdroid.events.ZoomEvent
-import org.osmdroid.views.overlay.Overlay
-import org.osmdroid.views.overlay.FolderOverlay
-import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.Polygon
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.util.BoundingBox
 import android.widget.PopupMenu
 import java.util.concurrent.Executors
 import java.io.File
@@ -39,49 +25,28 @@ class MainActivity : Activity(), LocationListener {
     private lateinit var basemapButton: android.widget.ImageButton
     private lateinit var attribution: TextView
     private lateinit var zoomLevel: TextView
-    private lateinit var map: MapView
+    private lateinit var map: TrailMap
+    private lateinit var mapConfig: MapConfiguration
+    private val enabledOverlays = mutableSetOf<String>()
     private lateinit var status: TextView
     private lateinit var recenter: android.widget.ImageButton
     private lateinit var manager: LocationManager
     private val trailExecutor = Executors.newSingleThreadExecutor()
     private lateinit var trailStatus: TextView
     private lateinit var trailRepository: TrailRepository
-    private val trailOverlay = FolderOverlay()
     private var trailDocument: TrailKml.Document? = null
     private var refreshingTrails = false
     private var destroyed = false
     private var trailsVisible = true
     private lateinit var recordButton: android.widget.ImageButton
     private lateinit var recordStatus: TextView
-    private val recordingOverlay = FolderOverlay()
     private var lastRecordedPoint: RecordedTrack.Point? = null
-    // Display-only connector: never append foreground fixes to the saved track.
-    private val liveRecordingOverlay = object : Overlay() {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(21, 101, 192)
-            style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND
-        }
-        override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
-            if (shadow || !RecordingService.running) return
-            val last = lastRecordedPoint ?: return
-            val fix = current ?: return
-            if (prefs.getString("recorded_track", null) != displayedTrack) return
-            // Follow existing gap handling and do not connect stale/backward fixes.
-            if (fix.time < last.time || fix.time - last.time > 90_000L ||
-                android.os.SystemClock.elapsedRealtimeNanos() - fix.elapsedRealtimeNanos > 30_000_000_000L) return
-            val from = mapView.projection.toPixels(GeoPoint(last.latitude, last.longitude), null)
-            val to = mapView.projection.toPixels(GeoPoint(fix.latitude, fix.longitude), null)
-            paint.strokeWidth = dp(4).toFloat()
-            canvas.drawLine(from.x.toFloat(), from.y.toFloat(), to.x.toFloat(), to.y.toFloat(), paint)
-        }
-    }
     private val recordingHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var displayedTrack = ""
     private var displayedLength = -1L
     private var recordedPointCount = 0
     private val recordingTick = object : Runnable {
-        override fun run() { updateRecording(); if (facingHeading != null) map.invalidate(); if (active) recordingHandler.postDelayed(this, 1000) }
+        override fun run() { updateRecording(); if (facingHeading != null) redrawMap(); if (active) recordingHandler.postDelayed(this, 1000) }
     }
     private var following = true
     private var active = false
@@ -98,49 +63,8 @@ class MainActivity : Activity(), LocationListener {
     private var reportEditor: android.widget.EditText? = null
     private var reportDialog: android.app.AlertDialog? = null
     private val prefs by lazy { getSharedPreferences("map", MODE_PRIVATE) }
-    private val dot = object : Overlay() {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
-            if (shadow) return
-            val fix = current ?: return
-            val point = mapView.projection.toPixels(GeoPoint(fix.latitude, fix.longitude), null)
-            val heading = facingHeading?.takeIf { android.os.SystemClock.elapsedRealtime() - headingTime < 5_000L }
-            paint.style = Paint.Style.FILL
-            if (heading == null) {
-                paint.color = Color.WHITE
-                canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), dp(10).toFloat(), paint)
-                paint.color = Color.rgb(21, 101, 192)
-                canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), dp(7).toFloat(), paint)
-            } else {
-                val saved = canvas.save()
-                canvas.translate(point.x.toFloat(), point.y.toFloat())
-                canvas.rotate(heading)
-                val triangle = android.graphics.Path().apply {
-                    moveTo(0f, -dp(15).toFloat())
-                    lineTo(dp(10).toFloat(), dp(10).toFloat())
-                    lineTo(-dp(10).toFloat(), dp(10).toFloat())
-                    close()
-                }
-                paint.color = Color.WHITE
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = dp(4).toFloat()
-                paint.strokeJoin = Paint.Join.ROUND
-                canvas.drawPath(triangle, paint)
-                paint.style = Paint.Style.FILL
-                paint.color = Color.rgb(21, 101, 192)
-                canvas.drawPath(triangle, paint)
-                canvas.restoreToCount(saved)
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Configuration.getInstance().apply {
-            userAgentValue = "Trail/1.12 (net.pocketmap; personal Android map)"
-            osmdroidBasePath = File(filesDir, "osmdroid")
-            osmdroidTileCache = File(cacheDir, "tiles")
-        }
         manager = getSystemService(LOCATION_SERVICE) as LocationManager
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.setOnApplyWindowInsetsListener { view, insets ->
@@ -169,35 +93,20 @@ class MainActivity : Activity(), LocationListener {
             visibility = android.view.View.GONE
         }
         statusColumn.addView(recordStatus)
-        basemaps = Basemap.load(assets)
-        selectedBasemap = basemaps.find { it.name == prefs.getString("basemap", "openstreetmap") }
-            ?: basemaps.find { it.name == "openstreetmap" } ?: basemaps.first()
-        map = MapView(this, tileProvider(selectedBasemap)).apply {
-            setMultiTouchControls(true)
-            minZoomLevel = 3.0
-            maxZoomLevel = 19.0
-            controller.setZoom(prefs.getFloat("zoom", 17f).toDouble().coerceAtMost(19.0))
-            controller.setCenter(GeoPoint(prefs.getFloat("lat", 40.7f).toDouble(), prefs.getFloat("lon", -74.7f).toDouble()))
-            overlays.add(trailOverlay)
-            overlays.add(recordingOverlay)
-            overlays.add(liveRecordingOverlay)
-            overlays.add(dot)
-            addMapListener(object : MapListener {
-                override fun onScroll(event: ScrollEvent?): Boolean { showAttribution(); return false }
-                override fun onZoom(event: ZoomEvent?): Boolean { showAttribution(); return false }
-            })
-        }
-        var startX = 0f
-        var startY = 0f
-        map.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { startX = event.x; startY = event.y }
-                MotionEvent.ACTION_MOVE -> if (event.pointerCount == 1 && (kotlin.math.abs(event.x - startX) > dp(12) || kotlin.math.abs(event.y - startY) > dp(12))) {
-                    following = false
-                    refreshStatus()
-                }
-            }
-            false
+        mapConfig = MapConfiguration(this)
+        basemaps = mapConfig.basemaps
+        val oldChoice = prefs.getString("basemap", "bright")
+        val choice = if (!prefs.getBoolean("maplibre_migrated", false) && oldChoice == "openstreetmap") "bright" else oldChoice
+        selectedBasemap = basemaps.find { it.name == choice } ?: basemaps.first()
+        prefs.edit().putBoolean("maplibre_migrated", true).putString("basemap", selectedBasemap.name).apply()
+        mapConfig.overlays.filter { prefs.getBoolean("overlay_${it.id}", it.defaultVisible) }.forEach { enabledOverlays.add(it.id) }
+        map = TrailMap(this, mapConfig, selectedBasemap,
+            LatLng(prefs.getFloat("lat", 40.7f).toDouble(), prefs.getFloat("lon", -74.7f).toDouble()),
+            prefs.getFloat("zoom", 17f).toDouble(), savedInstanceState?.getBundle("maplibre")).apply {
+            onDrag = { following = false; refreshStatus() }
+            onCameraChanged = { showAttribution() }
+            onError = { message -> android.widget.Toast.makeText(this@MainActivity, "Map: $message", android.widget.Toast.LENGTH_LONG).show() }
+            setOverlays(enabledOverlays.toSet())
         }
         val mapFrame = android.widget.FrameLayout(this)
         mapFrame.addView(map, android.widget.FrameLayout.LayoutParams(-1, -1))
@@ -210,19 +119,18 @@ class MainActivity : Activity(), LocationListener {
             setOnClickListener { anchor ->
                 PopupMenu(this@MainActivity, anchor).apply {
                     basemaps.forEachIndexed { index, basemap ->
-                        menu.add(0, index, index, basemap.name).apply {
+                        menu.add(0, index, index, basemap.label).apply {
                             isCheckable = true
                             isChecked = basemap.name == selectedBasemap.name
                         }
                     }
                     setOnMenuItemClickListener { item ->
                         selectedBasemap = basemaps[item.itemId]
-                        map.setTileProvider(tileProvider(selectedBasemap))
-                        map.maxZoomLevel = 19.0
+                        map.setBasemap(selectedBasemap)
                         prefs.edit().putString("basemap", selectedBasemap.name).apply()
                         basemapButton.contentDescription = "Choose basemap: ${selectedBasemap.name}"
                         showAttribution()
-                        map.invalidate()
+                        redrawMap()
                         true
                     }
                     show()
@@ -271,7 +179,7 @@ class MainActivity : Activity(), LocationListener {
                 following = true
                 if (!hasPermission()) requestLocationPermission()
                 else if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER) && !manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                current?.let { map.controller.setCenter(GeoPoint(it.latitude, it.longitude)) }
+                current?.let { map.controller.setCenter(LatLng(it.latitude, it.longitude)) }
                 refreshStatus()
             }
         }
@@ -295,20 +203,35 @@ class MainActivity : Activity(), LocationListener {
                     menu.add(0, 6, 3, "Legend")
                     menu.add(0, 4, 4, "Share recorded KML…")
                     menu.add(0, 5, 5, "Share recorded GPX…")
+                    if (mapConfig.overlays.isNotEmpty()) {
+                        val layers = menu.addSubMenu("Map layers")
+                        mapConfig.overlays.forEachIndexed { index, overlay ->
+                            layers.add(0, 100 + index, index, overlay.name).apply {
+                                isCheckable = true; isChecked = overlay.id in enabledOverlays
+                            }
+                        }
+                    }
                     setOnMenuItemClickListener { item ->
+                        if (item.itemId >= 100) {
+                            val overlay = mapConfig.overlays[item.itemId - 100]
+                            if (!enabledOverlays.add(overlay.id)) enabledOverlays.remove(overlay.id)
+                            prefs.edit().putBoolean("overlay_${overlay.id}", overlay.id in enabledOverlays).apply()
+                            map.setOverlays(enabledOverlays.toSet())
+                            return@setOnMenuItemClickListener true
+                        }
                         when (item.itemId) {
                             4 -> chooseRecordedTrack(false)
                             5 -> chooseRecordedTrack(true)
                             1 -> refreshTrails()
                             2 -> trailDocument?.let { document ->
-                                val points = document.features.flatMap { it.points }.map { GeoPoint(it.latitude, it.longitude) }
+                                val points = document.features.flatMap { it.points }.map { LatLng(it.latitude, it.longitude) }
                                 following = false
                                 trailsVisible = true
-                                trailOverlay.isEnabled = true
-                                map.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), true, dp(40))
+                                map.setTrailsVisible(true)
+                                map.zoomTo(points, dp(40))
                                 refreshStatus()
                             }
-                            3 -> { trailsVisible = !trailsVisible; trailOverlay.isEnabled = trailsVisible; map.invalidate() }
+                            3 -> { trailsVisible = !trailsVisible; map.setTrailsVisible(trailsVisible); redrawMap() }
                             6 -> showLegend()
                         }
                         true
@@ -365,7 +288,7 @@ class MainActivity : Activity(), LocationListener {
         phoneHeading = PhoneHeading(this, rotation, { current }) { heading ->
             facingHeading = heading
             headingTime = android.os.SystemClock.elapsedRealtime()
-            map.invalidate()
+            redrawMap()
         }
         trailRepository = TrailRepository(filesDir)
         refreshTrails()
@@ -412,11 +335,6 @@ class MainActivity : Activity(), LocationListener {
             .setView(content)
             .setPositiveButton("Done", null)
             .show()
-    }
-
-    private fun tileProvider(basemap: Basemap): TrailTileProvider {
-        val stores = BasemapTileStorage.prepare(this, basemap)
-        return TrailTileProvider.create(this, basemap.tileSource(), stores.seedFile, stores.cacheFile)
     }
 
     private fun showAttribution() {
@@ -542,6 +460,7 @@ class MainActivity : Activity(), LocationListener {
         outState.putInt("reportAccuracy", reportAccuracy)
         outState.putString("reportPhoto", reportPhoto)
         outState.putString("cameraPhoto", cameraPhoto)
+        val mapState = Bundle(); map.onSaveInstanceState(mapState); outState.putBundle("maplibre", mapState)
         super.onSaveInstanceState(outState)
     }
 
@@ -555,7 +474,7 @@ class MainActivity : Activity(), LocationListener {
     private fun toggleRecording() {
         if (RecordingService.running) {
             lastRecordedPoint = null
-            map.invalidate()
+            redrawMap()
             stopService(Intent(this, RecordingService::class.java))
             android.app.AlertDialog.Builder(this).setTitle("Recording saved")
                 .setMessage("Your track is saved on this phone.")
@@ -663,24 +582,10 @@ class MainActivity : Activity(), LocationListener {
             val points = RecordedTrack.read(file)
             recordedPointCount = points.size
             lastRecordedPoint = points.lastOrNull()
-            recordingOverlay.items.clear()
-            val segments = mutableListOf<MutableList<GeoPoint>>()
-            points.forEachIndexed { index, point ->
-                if (index == 0 || point.time - points[index - 1].time > 90_000) segments.add(mutableListOf())
-                segments.last().add(GeoPoint(point.latitude, point.longitude))
-            }
-            for (segment in segments.filter { it.size >= 2 }) recordingOverlay.add(Polyline(map).apply {
-                setPoints(segment); title = "Recorded trail"; outlinePaint.color = Color.rgb(21, 101, 192); outlinePaint.strokeWidth = dp(4).toFloat()
-            })
-            for (pin in RecordedPins.read(file)) recordingOverlay.add(Marker(map).apply {
-                position = GeoPoint(pin.latitude, pin.longitude)
-                title = "Pin"
-                icon = getDrawable(R.drawable.ic_track_pin)
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            })
-            map.invalidate()
+            map.showRecording(points, RecordedPins.read(file))
+            redrawMap()
         }
-        map.invalidate() // Also remove the live segment after a notification stop or stale fix.
+        redrawMap() // Also remove the live segment after a notification stop or stale fix.
         recordStatus.text = if (running) if (recordedPointCount == 0) "● Recording • waiting for GPS" else "● Recording • $recordedPointCount points • every 30s" else ""
         recordStatus.visibility = if (running) android.view.View.VISIBLE else android.view.View.GONE
         recordStatus.setTextColor(if (running) Color.RED else Color.DKGRAY)
@@ -717,48 +622,20 @@ class MainActivity : Activity(), LocationListener {
     }
     private fun showTrails(document: TrailKml.Document) {
         trailDocument = document
-        trailOverlay.items.clear()
-        for (feature in document.features.sortedBy { if (it.kind == "Polygon") 0 else if (it.kind == "LineString") 1 else 2 }) {
-            val points = feature.points.map { GeoPoint(it.latitude, it.longitude) }
-            when (feature.kind) {
-                "LineString" -> trailOverlay.add(Polyline(map).apply {
-                    setPoints(points)
-                    title = feature.name
-                    outlinePaint.color = feature.style.lineColor
-                    outlinePaint.strokeWidth = dp(feature.style.width.toInt().coerceAtLeast(2)).toFloat()
-                })
-                "Polygon" -> trailOverlay.add(Polygon(map).apply {
-                    setPoints(points)
-                    holes = feature.holes.map { ring -> ring.map { GeoPoint(it.latitude, it.longitude) } }
-                    title = feature.name
-                    fillPaint.color = if (feature.style.fill) feature.style.fillColor else Color.TRANSPARENT
-                    outlinePaint.color = if (feature.style.outline) feature.style.lineColor else Color.TRANSPARENT
-                    outlinePaint.strokeWidth = dp(2).toFloat()
-                })
-                "Point" -> trailOverlay.add(Marker(map).apply {
-                    position = points.first()
-                    title = feature.name
-                    val resource = when (feature.style.iconId) {
-                        "1763" -> R.drawable.mymaps_1763
-                        "1899" -> R.drawable.mymaps_1899
-                        "1205" -> R.drawable.mymaps_1205
-                        "503" -> R.drawable.mymaps_503
-                        else -> 0
-                    }
-                    if (resource != 0) {
-                        val bitmap = android.graphics.BitmapFactory.decodeResource(resources, resource)
-                        val width = dp((28 * feature.style.iconScale).toInt())
-                        val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, width, (width * bitmap.height.toFloat() / bitmap.width).toInt().coerceAtLeast(1), true)
-                        icon = android.graphics.drawable.BitmapDrawable(resources, scaled).apply {
-                            if (feature.style.iconId == "503") setTint(feature.style.iconColor)
-                        }
-                    }
-                    setAnchor(Marker.ANCHOR_CENTER, if (feature.style.iconId == "1763") Marker.ANCHOR_CENTER else Marker.ANCHOR_BOTTOM)
-                })
-            }
+        map.showTrails(document, trailsVisible)
+        redrawMap()
+    }
+
+    private fun redrawMap() {
+        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        val fix = current
+        val last = lastRecordedPoint?.takeIf { point ->
+            RecordingService.running && prefs.getString("recorded_track", null) == displayedTrack &&
+                fix != null && fix.time >= point.time && fix.time - point.time <= 90_000L &&
+                now - fix.elapsedRealtimeNanos <= 30_000_000_000L
         }
-        trailOverlay.isEnabled = trailsVisible
-        map.invalidate()
+        val heading = facingHeading?.takeIf { android.os.SystemClock.elapsedRealtime() - headingTime < 5_000L }
+        map.setPosition(fix, heading, last)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -816,19 +693,22 @@ class MainActivity : Activity(), LocationListener {
         current = Location(chosen)
         if (following && (previous == null || previous.latitude != chosen.latitude ||
                 previous.longitude != chosen.longitude)) {
-            map.controller.setCenter(GeoPoint(chosen.latitude, chosen.longitude))
+            map.controller.setCenter(LatLng(chosen.latitude, chosen.longitude))
         }
-        map.invalidate()
+        redrawMap()
         refreshStatus()
     }
     override fun onProviderEnabled(provider: String) { startLocation() }
-    override fun onProviderDisabled(provider: String) { current = null; map.invalidate(); startLocation() }
+    override fun onProviderDisabled(provider: String) { current = null; redrawMap(); startLocation() }
     @Deprecated("Legacy callback")
     override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) { }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1) startLocation()
     }
+    override fun onStart() { super.onStart(); map.onStart() }
+    override fun onStop() { map.onStop(); super.onStop() }
+    override fun onLowMemory() { super.onLowMemory(); map.onLowMemory() }
     override fun onResume() { super.onResume(); active = true; phoneHeading.start(); map.onResume(); startLocation(); recordingHandler.removeCallbacks(recordingTick); recordingHandler.post(recordingTick) }
     override fun onPause() {
         recentLocations.clear()
@@ -840,5 +720,5 @@ class MainActivity : Activity(), LocationListener {
         map.onPause()
         super.onPause()
     }
-    override fun onDestroy() { destroyed = true; trailExecutor.shutdownNow(); map.onDetach(); super.onDestroy() }
+    override fun onDestroy() { destroyed = true; trailExecutor.shutdownNow(); map.onDestroy(); super.onDestroy() }
 }

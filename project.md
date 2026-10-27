@@ -1,178 +1,161 @@
-# Trail — project context and requirements
-
-Last collated: 2026-10-10. This document describes the agreed product requirements and the implementation as of Trail 1.8. Use it to resume development without needing the original conversation. Keep it current when behavior or requirements change.
-
-## Purpose and scope
-
-Trail is a small native Android application for following trails, recording walks or rides, and reporting trail problems with a location and optional photograph. Favor a simple map interface, standard Android camera/share flows, and on-device storage. No account, backend, analytics, Google Play Services, or API key is required.
-
-The displayed application name is **Trail**. The canonical repository is **mbligh/trail**, with the Android project at the repository root. It was moved out of **mbligh/tools/trail**; earlier development history remains in that repository. The Android application ID stays **net.pocketmap** so new APKs update the original Pocket Map/Trail installation.
-
-## 1. Current GPS position and map interaction
-
-- Obtain the current GPS position and display a blue location dot over a basemap.
-- Follow the position while the user moves, retaining the chosen zoom.
-- Support pinch zoom and map dragging. Dragging pauses following; **Recenter** restores it.
-- Display location status/accuracy and handle missing permission, disabled location providers, and waiting for a GPS fix.
-- Preserve map center and zoom across sessions.
-- Foreground map following is distinct from explicitly recording a track: merely opening the app does not start a recording.
-
-Current implementation uses Android LocationManager with GPS and network providers for foreground location updates. Foreground updates stop when the activity is paused. Approximate location can display a position, but recording requires precise location and GPS enabled.
-
-## 2. Basemap
-
-Default to **OpenStreetMap street tiles**, rendered with osmdroid. Display OpenStreetMap attribution with a link to its copyright page.
-
-Tiles are cached through the map engine's normal cache behavior. Internet access is required for tiles not already cached. There is currently no bulk tile download or guaranteed offline map package. Satellite imagery is requested only in shared Google Maps links; it is not the app's default basemap.
-
-## 3. Google My Maps trail overlay
-
-Source map:
-https://www.google.com/maps/d/u/0/edit?mid=1zy-nQvF6-6P7JSs3paMU8byWHoE&usp=sharing
-
-Map ID: **1zy-nQvF6-6P7JSs3paMU8byWHoE**.
-
-Requirements:
-
-- Overlay the source trail geometry and places on the OpenStreetMap basemap.
-- Use only the layer named **Trails**; ignore all other layers. The exact source layer name is plural, even when described conversationally as the “trail layer.”
-- Prefer automatically fetching current data at app startup. An exported KML/KMZ was the acceptable fallback discussed if dynamic loading proved impossible.
-- Preserve source styles, including line colors and My Maps marker artwork.
-- Allow users to refresh, hide/show, or zoom to the overlay. Zooming to trails pauses GPS following; Recenter restores it.
-- Tap features to display their names. Show whether overlay data is refreshed, cached, or unavailable.
-
-Implemented ingestion is the dynamic **KML** export:
-https://www.google.com/maps/d/kml?mid=1zy-nQvF6-6P7JSs3paMU8byWHoE&forcekml=1
-
-A background fetch runs at startup. The last validated KML is stored privately, shown on subsequent starts, and retained if refreshing fails. The map must remain accessible without Google sign-in. This Google export endpoint is not a versioned API.
-
-**Implementation boundary:** arbitrary local KML/KMZ file selection and KMZ decompression are not implemented. Do not describe them as existing capabilities. The current KML route satisfies the preference for dynamic source updates.
-
-The initial Trails layer contains 108 lines and 10 places, with no polygons. These are historical smoke-test expectations, not a limit on future map edits. The parser supports style maps, KML color conversion, multigeometry, polygons and holes. Styles are resolved from the whole document even though only Trails features are displayed. Unsafe XML/DOCTYPE/entity input and oversized data are rejected; network links, ground overlays, and HTML balloons are not loaded.
-
-## 4. My Maps icons
-
-The requirement is to retain recognizable source icons, particularly the blue camper/trailer artwork for **Hell Mountain Parking**, rather than replacing everything with generic map pins.
-
-Current implementation bundles the current My Maps camper, blue pin, blank marker, and medical artwork in drawable-nodpi so those icons also work offline. KML marker scale is respected; blank markers use the KML tint. Some My Maps KML exports use a generic blank icon for custom symbols, so the original composed artwork was obtained from the My Maps viewer and bundled separately.
-
-Startup refresh downloads KML, not arbitrary remote artwork. New unsupported icon types currently fall back to a standard pin until their artwork/mapping is added. Preserving icons remains the requirement; generic fallback is a known implementation limitation.
-
-## 5. Track recording and GPX sharing
-
-- Provide a red circular **Record** control at the bottom right, approximately 56 dp across. While recording it becomes a red stop square.
-- Start a new recording on activation. Request the first fresh GPS point immediately; do not intentionally wait 30 seconds before requesting it.
-- Subsequently save GPS samples at least 30 seconds apart. Actual availability/delivery depends on GPS and Android; never fabricate a point when a fix is missing.
-- Draw the recorded path so far as a **blue line**, growing as saved samples arrive. At least two points are required to draw a segment.
-- Continue recording when the screen is locked or the map activity is backgrounded, using a location foreground service and a recording notification with a Stop action.
-- When stopped from the app, retain the track and offer to share it as a **GPX** file through the standard Android share chooser, including Gmail or another email app.
-- Keep earlier recordings and support sharing them later through **Trails → Share recorded GPX…**.
-- The current/latest recorded path remains visible after stopping or reopening the app.
-
-The first sample is the first delivered fresh fix, not a guarantee of an instantaneous fix when the user taps Record. Very short recordings may have zero or one point and cannot necessarily draw a line. A zero-point track produces an explanatory message rather than an empty GPX attachment.
-
-Each recording has a separate private CSV file; completed samples are appended immediately. GPX 1.1 exports include latitude, longitude, UTC timestamps, and elevation when supplied. Gaps longer than 90 seconds produce separate GPX/map segments to avoid drawing a misleading connection across a GPS outage.
-
-Screen-locked recording was reported working by the user. Process termination or a phone restart stops recording; previously saved points remain available. Starting a new recording after reopening is explicit. No automatic resumption is currently provided.
-
-## 6. Location report flag, optional camera photo, and sharing
-
-- Provide a red **Flag** control at the bottom left, approximately the same size as Record.
-- Capture the current location when the flag is activated. A fix older than 30 seconds is rejected; ask the user to wait for a fresh location.
-- Start an editable report with latitude and longitude as plain text, six decimal places, separated by a comma and space: **40.672725, -74.749000**. Decimal formatting must remain consistent regardless of phone locale.
-- Include a Google Maps URL for the same coordinates, requesting **satellite view**.
-- Display GPS accuracy separately; coordinate decimal precision is not a claim of equivalent physical accuracy.
-- Allow the user to add a description, such as “tree blocking trail,” before sharing.
-- Offer **Take photo** as an optional action using the phone's standard camera app. Confirming returns to the report with a full-resolution JPEG attached. Offer **Retake photo** once attached.
-- Preserve the captured coordinates and edited description while using the camera, including activity recreation. Canceling the camera retains the report and any earlier attachment.
-- Share text alone or text plus photo through the standard Android share chooser.
-- Supply **mbligh@mbligh.org** as the suggested email To recipient and **Trail location report** as the subject. Nothing is sent automatically; the receiving app handles review and sending.
-
-Current satellite URL format:
-https://www.google.com/maps/@?api=1&map_action=map&center=40.672725%2C-74.749000&zoom=18&basemap=satellite
-
-This documented map-view URL centers the satellite map on the reported location **without a pin**. The Google Maps app or browser handles opening it. Receiving share apps decide whether they retain supplied text, image, subject, and recipient extras; the email recipient cannot be enforced by Trail.
-
-Reports capture a fixed location instead of silently updating while the user edits or takes a photo. Camera capture uses a URI grant and the existing camera app, without requesting camera or general storage permission. Photos are kept in private app storage. Camera access is revoked on return; share targets receive read access. Attachments remain available after sharing so receiving apps can read them. There is no photo-retention cleanup policy yet; uninstalling removes private data.
-
-## Architecture, storage, and compatibility
-
-- Native Kotlin Android activity/UI. Android 8+ (minimum API 26); compile/target API 36 as of this snapshot.
-- JDK 17, Kotlin 2.1.20, Android Gradle Plugin 8.9.1, Gradle wrapper 8.13; osmdroid 6.1.20.
-- MainActivity: map, following, overlay display, controls, report editor/camera result, and sharing.
-- TrailRepository and TrailKml: startup refresh/cache and parsing/style resolution.
-- RecordingService and RecordedTrack: foreground recording, private persisted samples, and GPX export.
-- LocationReport: consistent coordinate formatting and satellite URL.
-- GpxProvider and ReportPhotoProvider: scoped URI access to exported tracks and report photos; never expose unrelated private files.
-- Location permission is needed; precise permission and enabled GPS are required for recording. Foreground-service/notification declarations support recording while locked.
-- No analytics or app backend. Tile/KML requests contact their respective external services; user-initiated sharing hands report data to the chosen app.
-- osmdroid is archived upstream and currently pinned. Replacing it is a future implementation decision, not an agreed new feature.
-- iPhone support was discussed and deferred. There is no iOS target or shared Kotlin Multiplatform UI currently.
-
-Preserve application ID and the included development signing key across builds so APKs update existing installations. The key alias is androiddebugkey and its standard debug passwords are android. These are personal development APKs, not a Play Store release. App version at this snapshot is 1.8 / versionCode 9; increment version metadata when releasing application changes.
-
-## Repository, automated builds, and distribution
-
-Canonical source: https://github.com/mbligh/trail
-Default branch: **main**.
-Download page: https://mbligh.github.io/trail/
-APK URL: https://mbligh.github.io/trail/Trail.apk
-
-The **Build and publish APK** Actions workflow runs on main pushes changing app/** and also relevant Gradle files, wrapper, signing key, workflow, or site files. Pull requests run validation without publishing; workflow_dispatch supports manual builds.
-
-On an Ubuntu 24.04 runner with Java 17, it runs:
-./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
-
-It publishes the signed debug APK, an HTML download page, and SHA-256 checksum to GitHub Pages, and retains an APK Actions artifact. Failed validation must not replace the previous download. GitHub Pages requires the repository's Pages source to be set to **GitHub Actions**; deployment status should be checked in Actions rather than inferred from this document. Documentation-only changes such as project.md do not trigger an APK rebuild.
-
-## Validation and guidance for future work
-
-Ten unit tests passed with the Trail 1.7 build, covering KML parsing, GPX recovery/export, report formatting/link consistency under different locales, and photo-path confinement. Android lint and APK signing verification passed. The first standalone-repository CI build also passed tests, lint, and APK assembly; Pages enablement was a separate configuration step.
-
-Keep manual phone checks for GPS acquisition/permissions, map gestures, a multi-minute screen-off recording, stop/share behavior, photo capture/cancel/retake, activity rotation, and Gmail text/photo/recipient handling. User confirmation of screen-locked recording is useful evidence but does not cover every device or camera/share app.
-
-When editing, preserve the simple two-corner controls, current-location behavior, exact Trails-layer filtering, existing icon artwork, blue recorded line, editable report, optional photo flow, and install compatibility. Update this document when requirements or implementation boundaries change; do not silently turn previously discussed options into claimed implemented features.
-
-## Configurable basemap selector (1.8)
-
-A selector at the top-left of the map lists every entry in repository-root basemaps.json. Each entry requires name and url; the HTTPS URL uses {z}, {x}, and {y} placeholders for standard 256-pixel Web Mercator tiles at supported app zoom levels 3–19. Optional attribution and attributionUrl update the attribution footer. The configuration is bundled as an Android asset by Gradle, so adding entries requires rebuilding, not changing Kotlin code. Config changes also trigger Actions.
-
-Initial choices are openstreetmap and njsatellite (2020 NJ aerial imagery). OSM is the initial default; the user's choice is remembered. Switching preserves position, zoom, trails, recording, and report controls. Each URL has its own disk-cache namespace so tiles from different basemaps cannot mix. NJ ArcGIS takes /tile/{z}/{y}/{x}, despite the initially suggested x/y order. The service exposes 256-pixel EPSG:3857 tiles; imagery coverage is New Jersey.
-
-## Phone-facing position marker (1.9)
-
-The blue GPS dot becomes a blue triangle when the phone reports a reliable compass heading. Its tip follows the top of the displayed screen, including landscape rotation, and updates while stationary. The map stays north-up; this is phone-facing direction, not GPS travel bearing. Rotation-vector sensors are preferred, with geomagnetic rotation-vector fallback. Magnetic heading is corrected to true north using the current GPS position, and circular smoothing handles crossing 0/360 degrees.
-
-If no supported heading sensor is available, accuracy is low/unreliable, the top edge is almost vertical (horizontal facing direction undefined), or heading data is older than five seconds, show the original dot. Sensor listening runs only while the activity is visible. Recording remains independent. Phone checks: turn in place outdoors, rotate the display, compare to known directions, and check magnetic interference/low-accuracy fallback.
-
-## Live recording connector (1.10)
-
-While recording is on, display a blue segment from the latest saved 30-second sample to the current foreground GPS position. It moves on each foreground location update and starts from the newest saved sample when recording appends another point. The segment is display-only: it does not change sampling, CSV, or exported GPX. Hide it when recording stops, before the first saved point, for stale/backward fixes, or across a gap over 90 seconds. The saved blue track remains visible when stopped.
-
-## Play Store internal testing setup (2026-10-12)
-
-The developer account is approved and Trail has an internal testing draft with Play App Signing enabled. Package ID remains net.pocketmap. Play signs installed APKs; a separate private PKCS12 upload key (alias trail-upload) signs uploaded bundles. Never commit that key or its password. The existing public development APK signing stays unchanged; transitioning to Google-signed installations requires uninstalling the development app, so export saved tracks first.
-
-.github/workflows/play-bundle.yml builds signed release AABs on relevant main pushes and manual dispatch once repository secrets TRAIL_UPLOAD_KEYSTORE_BASE64 and TRAIL_UPLOAD_PASSWORD are set. Use the same password for the PKCS12 store and key. Before secrets are configured, the bundle job is skipped. Release tests, lint and signature verification precede the Trail-play-bundle artifact. First upload is manual in Play Console. Automated Play API uploads are not yet configured; they require a service account with access to this app and Android Publisher API authorization. Increment versionCode for each subsequent Play upload. Tester selection and first release publication remain Play Console steps.
-
-## Topographic basemap and compact controls (1.11)
-
-basemaps.json includes opentopomap using https://a.tile.opentopomap.org/{z}/{x}/{y}.png, with OpenStreetMap/SRTM data and OpenTopoMap CC BY-SA 3.0 credit. Optional maxZoom defaults to 19; OpenTopoMap specifies 17. Source and map zoom limits use this value, including clamping remembered zoom and when switching basemaps. Recenter/follow is a 56 dp circular crosshair icon in the top-right corner; blue indicates following and dark gray indicates paused. Existing permission/location-settings behavior remains. The fixed bottom copyright banner is removed. Map credits appear as a floating overlay on startup and basemap changes, collapse to an information button after five seconds, and can be opened with source/licence links. The Trails menu and recording/report controls remain.
-
-Play internal testing release 1.10 was built with the private upload key, uploaded manually and published by the user without reported errors. Tester invitation: https://play.google.com/apps/internaltest/4701485827526250377. Subsequent signed bundles build automatically but Play API upload is still awaiting service-account setup; use the Trail-play-bundle Actions artifact for manual uploads meanwhile.
-
-## Automatic Play internal-track publishing
-
-The Play bundle workflow now uploads and publishes validated signed AABs to the internal track when TRAIL_PLAY_SERVICE_ACCOUNT_JSON is configured. This secret contains the complete JSON key for a Google Cloud service account, with Android Publisher API enabled and app-specific Play permissions to view Trail and release to testing tracks. Never store credentials in git or chat. Until configured, upload is skipped and the signed bundle artifact remains available. Production publishing is not configured.
-
-Play builds override versionCode using 10000 + github.run_number * 100 + github.run_attempt to avoid reused codes on app changes and reruns. Keep this workflow's run numbering continuous; recreating/resetting it requires adjusting the base above all previously uploaded codes. VersionName remains the human-facing app version. Publishing is serialized; do not concurrently edit releases manually in Play Console. Failed upload retains the bundle artifact and reports failure. The upload action is pinned to its v1 commit. Service-account access and first real automated upload must be verified after the user configures the secret.
-
-Verified 2026-10-13: service-account JSON secret configured by user; workflow run 38457476569 attempt 2 passed release tests/lint/signature checks and Upload and publish to internal testing. Automatic Play publishing is operational. Subsequent relevant main pushes publish to internal; manual workflow runs are also supported. Tester invitation remains unchanged. Google Cloud project used: sync-mbligh.
-
-## Header information button (1.12)
-
-Move the map attribution/information control to the far right of the white status header above the map, aligned to the top. No attribution control overlays the map. Startup/basemap credit text still appears for five seconds before collapsing to the circular information symbol; tapping it opens the existing credits/licence dialog. Location, trail and recording status occupy the header column to its left. Recenter remains at the map's top-right. Release automatically publishes to Play internal testing.
-
-## GPS selection and recording pins (2026-10-20)
-
-The activity keeps a 15-second location window, prefers recent GPS fixes (newest within a tolerance of the best reported accuracy), and uses network positions only when no recent GPS fix is available. Cached positions older than 15 seconds are not accepted at resume. The recording service continues requesting GPS exclusively and publishes its latest raw GPS fix separately from its 30-second persisted samples. While recording, pin placement prefers that service fix, requires it to be at most 15 seconds old, and warns with an explicit Save anyway option when accuracy exceeds 25 m, is unknown, or only a network fallback is available. The map can still display a network fallback. This is intended to prevent transient coarse network locations after screen unlock from displacing accurate GPS pins.
+# Trail 2 — requirements and implementation
+
+Updated 2026-10-27 for the MapLibre migration (2.0).
+
+## Product and identity
+
+Small native Android application for following trails, recording walks/rides, and
+sharing trail problems with an accurate location and optional photograph. Favor
+existing Android UI/camera/share flows and on-device data. No account, backend,
+analytics, Google Play Services or API key. Offline tile/track storage is local
+SQLite/MBTiles and private files; an external database would defeat offline use.
+
+Repository `mbligh/trail2`, default branch `main`. On-device label **Trail 2**,
+application ID **mbligh.trail**, Kotlin namespace `net.pocketmap`. This is independent
+of `mbligh/trail`/`net.pocketmap`; both can be installed. Preserve Trail 2's application
+ID, development signing key, private recordings/pins/reports and preferences.
+
+## Interface compatibility
+
+Replace osmdroid with MapLibre Native while keeping controls and behavior as close
+as possible. Underlying tile appearance may change. Retain:
+
+- White status header, left basemap icon, right info/zoom and hamburger menu.
+- Existing 37 dp corner controls: recording bottom right, report flag bottom left,
+  recording pin top left, Recenter top right; existing margins/icons/colors.
+- Pinch zoom, single-finger dragging that pauses following, Recenter that restores
+  following and existing permission/location-settings behavior. Map remains north-up,
+  with rotation/tilt disabled. Preserve geographic center and apparent scale across
+  updates/sessions. Translate saved 256px-world zooms to MapLibre's 512px world while
+  retaining the displayed 3–19 zoom convention.
+- Blue position dot; blue phone-facing triangle when heading is reliable and under
+  five seconds old. Existing sensor smoothing/true-north/display-rotation logic stays.
+- Refresh/zoom/hide/show trails, legend, saved recording exports, blue track/pins,
+  fixed-location report editor, camera capture/cancel/retake and Android sharing.
+- Add configurable overlay toggles inside Menu → Map layers. Save their state and
+  restore app-owned trails/track/pins after every style/layer change.
+
+## Maps, layers, offline coverage
+
+Use MapLibre Native Android 13.7.1. Follow the mapping repository's MapLibre demo:
+OpenFreeMap **Bright**, POI/business labels removed; NJ 2020 satellite hybrid retains
+vector lines/labels with white text halos. Keep standalone satellite, OSM raster and
+OpenTopoMap choices. Bright is default; migrate the previous OSM street default to
+Bright once, retaining other explicit choices.
+
+`basemaps.json` contains configured sources, basemap choices and overlay groups.
+Raster basemaps can reference one source; vector/layered basemaps reference standard
+style JSON. Overlays contain standard sources/layers, optional default visibility,
+and appear independently in the existing menu. Initial contours use the demo's
+magenta 100/50/20/10-foot zoom bands. Local MBTiles, local/remote PMTiles, bundled or
+remote GeoJSON, fonts/sprites/styles can be supplied without Kotlin changes.
+
+Upload reusable resources to `maps/` and edit configuration. Local PMTiles URLs use
+`pmtiles://asset://maps/name.pmtiles`; bundled GeoJSON/styles/sprites/fonts can use
+`asset://maps/...`. MBTiles `archive` paths point to bundled resources. Both raster
+and vector MBTiles are supported, including offline-only archives with source zoom
+metadata. Supply all dependencies for an offline vector style. See maps/README.md.
+
+`offline-maps.json` controls the automatic bundled coverage. `tools/prepare_maps`
+queries the official NJ government boundary for Tewksbury Township; Shapely selects
+**every tile intersecting the boundary, including partially intersecting/touching
+tiles**, at each source zoom. It packages 70 OpenFreeMap vector tiles at zooms 0–14,
+seven Natural Earth overview tiles at zooms 0–6, and the Bright style's sprites and
+Latin/extended Latin/punctuation glyphs for its English NJ labels. Source-native
+maximum zoom is 14; MapLibre overzooms without limiting the user's existing zoom.
+The street map must work on a clean install without a connection anywhere within
+Tewksbury. Satellite imagery is not preloaded by default; it uses uploaded archives
+or the runtime tile cache. KML trails retain their existing startup refresh/cache
+behavior, so first-time trail retrieval still needs a connection.
+
+Generation uses a staging directory and validates completeness/integrity before
+promotion. `offline-manifest.json` records source/boundary URLs, coverage, tile counts,
+and SHA-256 hashes. Generated assets and download caches are excluded from Git.
+Gradle invokes generation and bundles root configuration automatically. Source data
+is cached in Actions; changing offline configuration refreshes it. Never bulk-download
+public OSM raster tiles; use a permitted source/archive.
+
+`TileRepository` supplies seed MBTiles and persistent runtime MBTiles to MapLibre
+through its HTTP client hook, with online fallback. `MbTilesCache` retains the standard
+TMS row convention and FIFO 500 MiB high/400 MiB low watermarks per source. Existing
+raster cache files migrate, and app version updates do not delete offline data. Seeds
+remain immutable and outside eviction. `RangeCache` caches PMTiles header/directory
+and tile byte ranges with a separate shared 500/400 MiB cap; viewed remote contour
+regions can be revisited offline. Bundling a complete PMTiles archive guarantees
+coverage without prior viewing. `cacheVersion` invalidates changed source content.
+
+## GPS behavior — must survive the renderer migration
+
+The user previously saw dramatically poorer GPS accuracy with the screen locked;
+that was fixed before this migration. **Preserve that fix and existing inaccurate-fix
+filtering.** MapLibre must not replace LocationManager or own recording acquisition.
+
+RecordingService is unchanged:
+
+- Require precise permission and enabled GPS; start explicitly while the app is visible.
+- Use a location foreground service/notification; request GPS only every five seconds,
+  independently of activity/map lifecycle, including while the phone is locked.
+- Reject fixes older than 45 seconds. Keep a 10-second recent GPS window. First fresh
+  sample is saved immediately; subsequent sampling windows are at least 30 seconds
+  apart. Select the newest fix whose accuracy is within max(best×2, best+5 m).
+- Publish the latest raw GPS fix separately from persisted samples.
+- Append completed CSV points immediately; gaps over 90 seconds split map/GPX/KML
+  segments. Process termination/reboot stops recording; never auto-resume or invent fixes.
+
+Foreground activity location selection is unchanged:
+
+- Request GPS and network while visible, stop the activity's requests on pause.
+- Reject cached/live fixes outside the 15-second window. Prefer accurate recent GPS
+  (including the recorder's stream) using the same best×2/best+5 m tolerance; network
+  is fallback. A newer coarse network fix must not displace available good GPS.
+- Pins prefer the recorder's GPS, require a fix no older than 15 seconds, and warn
+  with an explicit Save anyway choice for >25 m, unknown accuracy, or network fallback.
+- Blue live connector is display-only, never persisted; hide it when stopped/stale,
+  backward in time, across >90-second gaps, or displaying a different recording.
+
+A native emulator regression covers GPS selection across pause/resume and the
+recorder's accuracy-window selection. Physical GNSS reception/locked-screen accuracy
+still needs a real outdoor phone test; simulated fixes cannot establish hardware quality.
+
+## Trails, recording, reports
+
+Fetch public KML from https://www.google.com/maps/d/kml?mid=1zy-nQvF6-6P7JSs3paMU8byWHoE&forcekml=1.
+Only the folder named **Trails** is rendered. Preserve style maps, line colors/widths,
+polygons/holes, names on tap and the bundled My Maps camper, blue pin, blank marker,
+and medical artwork (including tint/scale/anchors). Cache the last validated document;
+retain it on refresh failure. Parser/network safety limits remain unchanged. No local
+KML/KMZ import is added. Fresh install trail refresh needs a connection.
+
+RecordedTrack/RecordedPins storage and KML/GPX exports are unchanged. Blue saved path
+and pins remain visible after stop/reopen. Recording control changes circle to stop
+square, and Stop offers Share KML. Menu retains both saved KML and GPX exports.
+KML preserves the existing accuracy-colored segments; GPX retains coordinates/time/
+elevation and pins. The recording notification retains its Stop action.
+
+Reports capture a fixed recent location, six-decimal locale-independent coordinates,
+accuracy, and the existing Google satellite link. Editable description, optional
+full-resolution camera photo and draft restoration remain. Standard share chooser
+suggests mbligh@mbligh.org and subject Trail location report; nothing sends directly.
+Existing scoped URI providers and permission grants remain unchanged.
+
+## Architecture and distribution
+
+Native Kotlin Activity/UI, Android 8+/API 26 minimum, compile/target 36, JDK 17,
+AGP 8.9.1, Kotlin 2.1.20, Gradle 8.13. MapLibre adds native libraries; validate 16 KiB
+alignment in the APK/bundle. No WebView or browser UI.
+
+- MainActivity: existing controls, report/share flow, foreground location selection.
+- TrailMap: native rendering/lifecycle, styles, runtime GeoJSON, heading/dot/connector.
+- MapConfiguration: JSON map and layer definitions; no provider-specific UI logic.
+- TileRepository/MbTilesCache/RangeCache: offline seeds, persistent caches, online fallback.
+- TrailRepository/TrailKml, RecordingService/RecordedTrack/RecordedPins, PhoneHeading,
+  GpxProvider/ReportPhotoProvider: retain their established responsibilities.
+
+Main app/config/map/builder changes automatically run unit tests/lint, package offline
+maps, verify coverage, build signed debug APK and publish at
+https://mbligh.github.io/trail2/Trail2.apk. Preserve the development signing key.
+Play AABs use existing private upload secrets; internal publishing remains guarded by
+ENABLE_TRAIL2_PLAY_UPLOAD=true and separate app setup. Never commit credentials.
+Failures must not replace the last successful distribution. Native emulator smoke tests
+exercise offline rendering/style changes, cache persistence and GPS selection, saving
+screenshots/logs. Update version metadata on app releases and keep this document current.

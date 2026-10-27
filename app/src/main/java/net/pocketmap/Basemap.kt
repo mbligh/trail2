@@ -1,39 +1,58 @@
 package net.pocketmap
 
-import android.content.res.AssetManager
+import android.content.Context
 import org.json.JSONArray
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.MapTileIndex
-import java.net.URI
-import java.security.MessageDigest
+import org.json.JSONObject
 
-data class Basemap(val name: String, val url: String, val attribution: String = name, val attributionUrl: String? = null, val maxZoom: Int = 19) {
+/** Map choices and layer groups are data; the UI does not know any provider IDs. */
+data class Basemap(val name: String, val label: String, val style: String?, val source: String?, val attribution: String, val attributionUrl: String?)
+data class MapOverlay(val id: String, val name: String, val defaultVisible: Boolean, val definition: JSONObject)
+
+class MapConfiguration(private val readAsset: (String) -> String) {
+    constructor(context: Context) : this({ path -> context.assets.open(path).bufferedReader().use { it.readText() } })
+    private val config = JSONObject(readAsset("basemaps.json"))
+    val sources = JSONObject(readAsset("resolved-sources.json"))
+    val basemaps: List<Basemap> = config.getJSONArray("basemaps").let { array ->
+        (0 until array.length()).map { index -> array.getJSONObject(index).let {
+            Basemap(it.getString("name"), it.optString("label", it.getString("name")), it.optString("style").takeIf(String::isNotBlank), it.optString("source").takeIf(String::isNotBlank), it.optString("attribution"), it.optString("attributionUrl").takeIf(String::isNotBlank))
+        } }.also { require(it.isNotEmpty() && it.map(Basemap::name).distinct().size == it.size) }
+    }
+    val overlays: List<MapOverlay> = config.optJSONArray("overlays")?.let { array ->
+        (0 until array.length()).map { array.getJSONObject(it).let { item ->
+            MapOverlay(item.getString("id"), item.getString("name"), item.optBoolean("defaultVisible"), item)
+        } }
+    } ?: emptyList()
+
     init {
-        require(maxZoom in 3..19) { "Basemap maxZoom must be between 3 and 19" }
-        require(name.isNotBlank()) { "Basemap name is required" }
-        require(listOf("{z}", "{x}", "{y}").all { url.contains(it) }) { "Basemap URL must include {z}, {x}, and {y}" }
-        require(URI(tileUrl(0, 0, 0)).scheme == "https") { "Basemap URL must use HTTPS" }
-    }
-    fun tileUrl(z: Int, x: Int, y: Int) = url.replace("{z}", z.toString()).replace("{x}", x.toString()).replace("{y}", y.toString())
-    fun tileSource(): XYTileSource {
-        val digest = MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
-        return object : XYTileSource("Trail-$digest", 0, maxZoom, 256, ".png", arrayOf(url), attribution) {
-            override fun getTileURLString(index: Long): String {
-                val zoom = MapTileIndex.getZoom(index)
-                if (zoom > maxZoom) return ""
-                return tileUrl(zoom, MapTileIndex.getX(index), MapTileIndex.getY(index))
-            }
+        overlays.forEach { overlay ->
+            overlay.definition.optJSONObject("sources")?.let { extra -> extra.keys().forEach { id ->
+                require(!sources.has(id)) { "Duplicate map source: $id" }
+                sources.put(id, extra.getJSONObject(id))
+            } }
         }
+        require(overlays.map { it.id }.distinct().size == overlays.size)
     }
-    companion object {
-        fun load(assets: AssetManager): List<Basemap> {
-            val json = JSONArray(assets.open("basemaps.json").bufferedReader().use { it.readText() })
-            val maps = (0 until json.length()).map { index ->
-                val item = json.getJSONObject(index)
-                Basemap(item.getString("name"), item.getString("url"), item.optString("attribution", item.getString("name")), item.optString("attributionUrl").takeIf { it.isNotBlank() }, item.optInt("maxZoom", 19))
-            }
-            require(maps.isNotEmpty() && maps.map { it.name }.distinct().size == maps.size) { "Basemaps must have unique names and at least one entry" }
-            return maps
+
+    fun style(basemap: Basemap, enabled: Set<String>, tiles: TileRepository): JSONObject {
+        val result = if (basemap.style != null) JSONObject(readAsset(basemap.style))
+        else JSONObject().put("version", 8).put("sources", JSONObject().put(basemap.source!!, sources.getJSONObject(basemap.source)))
+            .put("layers", JSONArray().put(JSONObject().put("id", "basemap").put("type", "raster").put("source", basemap.source)))
+        val styleSources = result.getJSONObject("sources")
+        styleSources.keys().asSequence().toList().forEach { id ->
+            if (sources.has(id)) styleSources.put(id, sources.getJSONObject(id))
         }
+        val layers = result.getJSONArray("layers")
+        // Only install enabled overlays, so unchecked remote sources make no requests.
+        overlays.filter { it.id in enabled }.forEach { overlay ->
+            overlay.definition.optJSONObject("sources")?.keys()?.forEach { id -> styleSources.put(id, sources.getJSONObject(id)) }
+            val definitions = overlay.definition.getJSONArray("layers")
+            for (i in 0 until definitions.length()) layers.put(JSONObject(definitions.getJSONObject(i).toString()))
+        }
+        // Raster choices can still display symbol overlays with the bundled Bright fonts.
+        if (!result.has("glyphs")) result.put("glyphs", "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf")
+        styleSources.keys().asSequence().toList().forEach { id ->
+            styleSources.put(id, tiles.styleSource(id, styleSources.getJSONObject(id)))
+        }
+        return result
     }
 }

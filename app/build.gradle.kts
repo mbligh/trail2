@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "net.pocketmap"
     compileSdk = 36
-    defaultConfig { applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 13; versionName = "1.32" }
+    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 14; versionName = "2.0" }
     signingConfigs.getByName("debug") { storeFile = rootProject.file("development-signing.jks"); storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android" }
     signingConfigs.create("upload") {
         System.getenv("TRAIL_UPLOAD_KEYSTORE")?.let { storeFile = file(it) }
@@ -18,7 +18,15 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
-dependencies { implementation(files("libs/osmdroid-android-6.1.20.aar")); testImplementation("junit:junit:4.13.2") }
+dependencies {
+    implementation("org.maplibre.gl:android-sdk:13.7.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20250517")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+}
 
 // Bundle the repository-root configuration on every build; do not maintain a second copy.
 val bundleBasemaps by tasks.registering(Sync::class) {
@@ -26,4 +34,13 @@ val bundleBasemaps by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/basemapAssets"))
 }
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/basemapAssets"))
-tasks.named("preBuild").configure { dependsOn(bundleBasemaps) }
+val prepareMaps by tasks.registering(Exec::class) {
+    inputs.files(rootProject.file("offline-maps.json"), rootProject.file("basemaps.json"), rootProject.file("tools/prepare_maps"))
+    inputs.dir(rootProject.file("maps"))
+    outputs.dir(layout.buildDirectory.dir("generated/mapAssets"))
+    workingDir(rootProject.projectDir)
+    commandLine("python3", "tools/prepare_maps", "--output", layout.buildDirectory.dir("generated/mapAssets").get().asFile.absolutePath)
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/mapAssets"))
+android.androidResources.noCompress += listOf("mbtiles", "pmtiles")
+tasks.named("preBuild").configure { dependsOn(bundleBasemaps, prepareMaps) }
