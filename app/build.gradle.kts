@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "net.pocketmap"
     compileSdk = 36
-    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 15; versionName = "2.0.1" }
+    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 16; versionName = "2.0.2" }
     signingConfigs.getByName("debug") { storeFile = rootProject.file("development-signing.jks"); storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android" }
     signingConfigs.create("upload") {
         System.getenv("TRAIL_UPLOAD_KEYSTORE")?.let { storeFile = file(it) }
@@ -22,6 +22,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:13.7.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("org.json:json:20250517")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core:1.6.1")

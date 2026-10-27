@@ -52,6 +52,9 @@ the recorder's recent GPS fix and warn before saving a poor/unknown/network fix.
 
 Starting a recording requires precise location and enabled GPS. Recording continues
 while the map is paused or the screen is locked; its notification offers Stop.
+Recording stops automatically after four hours, retaining saved tracks and pins.
+The limit includes time waiting for GPS and time with the screen locked; reopening
+the map does not reset it. Start a new recording to get another four hours.
 Process termination or reboot stops recording, retaining saved points. No automatic
 resumption is added. The blue saved path, display-only live connector, recording
 pins and existing KML/GPX formats remain. Reports capture a fixed coordinate with
