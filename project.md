@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-27 for the MapLibre migration (2.0).
+Updated 2026-10-27 for the four-hour recording limit (2.0.2).
 
 ## Product and identity
 
@@ -90,7 +90,7 @@ The user previously saw dramatically poorer GPS accuracy with the screen locked;
 that was fixed before this migration. **Preserve that fix and existing inaccurate-fix
 filtering.** MapLibre must not replace LocationManager or own recording acquisition.
 
-RecordingService is unchanged:
+RecordingService retains the existing GPS acquisition and filtering:
 
 - Require precise permission and enabled GPS; start explicitly while the app is visible.
 - Use a location foreground service/notification; request GPS only every five seconds,
@@ -101,6 +101,14 @@ RecordingService is unchanged:
 - Publish the latest raw GPS fix separately from persisted samples.
 - Append completed CSV points immediately; gaps over 90 seconds split map/GPX/KML
   segments. Process termination/reboot stops recording; never auto-resume or invent fixes.
+- Stop automatically four hours after recording starts, including time waiting for
+  GPS and time with the screen locked. Use elapsed realtime, a service-owned timer,
+  and an idle-capable wake alarm; GPS callbacks also enforce the deadline before
+  accepting fixes. Android may defer the inexact wake alarm when deeply idle, but
+  no GPS points are accepted after the deadline. No exact-alarm permission is needed.
+  Reopening the map or repeated start commands do not reset the deadline. Cancel the
+  timer/alarm when stopped; a new recording gets a fresh four hours. Keep all saved
+  points and pins. Service lifecycle tests cover timeout and restart on API 28/35.
 
 Foreground activity location selection is unchanged:
 
