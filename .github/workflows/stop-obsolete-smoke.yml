@@ -15,5 +15,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh run cancel 40507953599 || true
-          gh run cancel 40509133705 || true
+          gh api --method POST repos/$GH_REPO/actions/runs/40507953599/force-cancel || true
+          gh api --method POST repos/$GH_REPO/actions/runs/40509133705/force-cancel || true
