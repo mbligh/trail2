@@ -50,7 +50,7 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         val source = JSONObject(definition.toString())
         val url = source.optString("url")
         if (url.startsWith("pmtiles://https://")) pmtiles[url.removePrefix("pmtiles://")] = source.optString("cacheVersion", "1")
-        if (url.startsWith("pmtiles://asset://")) source.put("url", "pmtiles://" + assetFile(url.removePrefix("pmtiles://asset://")).toURI().toString())
+        if (url.startsWith("pmtiles://asset://")) source.put("url", "pmtiles://" + android.net.Uri.fromFile(assetFile(url.removePrefix("pmtiles://asset://"))).toString())
         if (source.optString("type") in listOf("raster", "vector", "raster-dem") && (source.has("tiles") || source.optString("archive").endsWith(".mbtiles"))) {
             if (!stores.containsKey(id)) {
                 val archive = source.optString("archive")
