@@ -39,9 +39,15 @@ jobs:
           sdkmanager 'emulator' 'system-images;android-35;google_apis;x86_64'
           echo no | avdmanager create avd -n trail-test -k 'system-images;android-35;google_apis;x86_64' --force
           "$ANDROID_HOME/emulator/emulator" -avd trail-test -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -camera-back none -camera-front none > /tmp/emulator.log 2>&1 &
-          adb wait-for-device
+          timeout 180 adb wait-for-device || { cat /tmp/emulator.log; exit 1; }
           for attempt in $(seq 1 120); do
-            if adb shell getprop sys.boot_completed | tr -d '\r' | grep -q '^1$'; then exit 0; fi
+            if adb shell getprop sys.boot_completed | tr -d '\r' | grep -q '^1$'; then
+              adb shell input keyevent 82
+              adb shell settings put global window_animation_scale 0
+              adb shell settings put global transition_animation_scale 0
+              adb shell settings put global animator_duration_scale 0
+              exit 0
+            fi
             sleep 2
           done
           cat /tmp/emulator.log

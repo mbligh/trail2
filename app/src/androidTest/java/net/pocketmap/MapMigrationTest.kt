@@ -13,6 +13,8 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
+import org.maplibre.android.geometry.LatLng
 import org.junit.runner.RunWith
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.module.http.HttpRequestUtil
@@ -24,6 +26,11 @@ import java.io.IOException
 class MapMigrationTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
+    @Before fun grantLocationForUiTests() {
+        for (permission in listOf("ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS")) {
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.$permission")).use { it.readBytes() }
+        }
+    }
     private fun renderer(activity: MainActivity): TrailMap = MainActivity::class.java.getDeclaredField("map").apply { isAccessible = true }.get(activity) as TrailMap
     private fun native(map: TrailMap): MapLibreMap? = TrailMap::class.java.getDeclaredField("native").apply { isAccessible = true }.get(map) as MapLibreMap?
     private fun offline(map: TrailMap) {
@@ -46,7 +53,8 @@ class MapMigrationTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val errors = mutableListOf<String>()
             scenario.onActivity { activity ->
-                renderer(activity).apply { onError = { errors.add(it) }; offline(this) }
+                MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.setBoolean(activity,false)
+                renderer(activity).apply { onError = { errors.add(it) }; offline(this); setCenter(LatLng(40.69,-74.78)) }
             }
             await(scenario, "Bright vector roads render from bundled tiles") { map ->
                 val native = native(map)
