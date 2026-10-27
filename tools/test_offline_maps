@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from shapely.geometry import box, shape
+from shapely.ops import unary_union
 
 loader = importlib.machinery.SourceFileLoader('prepare_maps', str(Path(__file__).with_name('prepare_maps')))
 spec = importlib.util.spec_from_loader(loader.name, loader)
@@ -59,6 +60,9 @@ class CoverageTests(unittest.TestCase):
             expected = set(maps.intersecting_tiles(geometry, item['minzoom'], item['maxzoom']))
             self.assertEqual(actual, expected, item['source'])
             self.assertEqual(len(actual), item['tileCount'])
+            for zoom in range(item['minzoom'],item['maxzoom']+1):
+                coverage = unary_union([box(*maps.tile_bounds(z,x,y)) for z,x,y in actual if z == zoom])
+                self.assertTrue(coverage.covers(geometry), f"Township not fully covered: {item['source']} z{zoom}")
         for path, digest in manifest['resources'].items():
             self.assertEqual(hashlib.sha256((root/path).read_bytes()).hexdigest(), digest, path)
         bright = json.loads((root/'styles/bright.json').read_text())
