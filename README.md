@@ -1,3 +1,22 @@
+# Trail 2 (MapLibre development)
+
+This is an independent development copy of [Trail](https://github.com/mbligh/trail). It currently retains the osmdroid implementation while the mapping-engine migration is planned. The Android application ID is `mbligh.trail` (separate from the original `net.pocketmap`), so both applications can be installed simultaneously. The on-device label is **Trail 2**. The source namespace remains `net.pocketmap` temporarily; it does not control the Play package ID.
+
+## Independent distribution setup
+
+- The mirrored repository includes its own APK Pages and Play bundle workflows. GitHub Pages needs to be enabled for this repository (Settings → Pages → Source: GitHub Actions); it is not copied by `git push --mirror`.
+- The APK workflow publishes `Trail2.apk` at `https://mbligh.github.io/trail2/` once Pages is configured.
+- The Play workflow builds a signed bundle only if `TRAIL_UPLOAD_KEYSTORE_BASE64` and `TRAIL_UPLOAD_PASSWORD` secrets exist in **this** repository. Add `TRAIL_PLAY_SERVICE_ACCOUNT_JSON` for Play uploads.
+- **Play publishing is disabled by default**. Create the distinct `mbligh.trail` app in Play Console first, confirm the app signing/upload key and grant the service account access to it, then set the repository Actions variable `ENABLE_TRAIL2_PLAY_UPLOAD=true` to enable internal testing uploads.
+- Repository secrets and Pages settings are not transferred by cloning or mirroring. Use a dedicated upload key for this separate Play app if desired. Never commit upload signing secrets.
+- The bundled `development-signing.jks` signs local debug APKs; it is not a substitute for the Play upload key.
+
+## Original project documentation
+
+The original README follows for implementation details; historical install URLs and package IDs there describe the **old** app, not Trail 2.
+
+---
+
 # Trail
 
 Personal native Android map: OpenStreetMap street tiles, blue location dot, foreground GPS following, pinch zoom, and recenter. Dragging pauses following. No account, API key, or Google Play Services required.
