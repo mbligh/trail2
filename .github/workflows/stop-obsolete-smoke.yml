@@ -1,0 +1,19 @@
+name: Stop obsolete migration validation runs
+on:
+  push:
+    branches: [codex/maplibre-migration]
+    paths: ['.github/workflows/stop-obsolete-smoke.yml']
+permissions:
+  actions: write
+jobs:
+  stop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Stop the two superseded checks blocked waiting for an emulator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run cancel 40507953599 || true
+          gh run cancel 40509133705 || true
