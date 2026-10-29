@@ -20,3 +20,5 @@ The experiment's `preBuild` now invokes the same `tools/prepare_maps` source as 
 The test screen opens near Oldwick at zoom 12.5 using Bright; tapping the top banner switches to the bundled Natural Earth style. Both styles are offline-only. An Android instrumentation test verifies real z0 tile data, confirms offline-only routing and waits for map-engine style/tile requests. CI starts an Android 35 emulator with Wi-Fi and mobile data disabled, runs the test, and attempts to collect a screenshot.
 
 This deliberately uses an isolated read-only adapter over the same generated assets, not Trail2's production mutable tile cache. It does **not** yet demonstrate PMTiles range interception, contours, satellite raster, shared persistent cache updates, or iOS rendering. The production app remains unchanged.
+
+The offline Android UI smoke test additionally captures a screenshot and checks that the central map viewport contains varied rendered pixel colors, guarding against a renderer that requests resources but displays a blank surface. The captured `compose-offline.png` is uploaded with the smoke artifacts.

@@ -38,11 +38,44 @@ class OfflineRenderTest {
                 resources.vectorTiles.get() >= 2)
 
             instrumentation.waitForIdleSync()
-            instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
-                val output = File(instrumentation.targetContext.getExternalFilesDir(null), "compose-offline.png")
-                output.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
-                bitmap.recycle()
+            // Native tile requests alone don't prove the GPU presented a map.
+            // Sample only the middle of the screenshot (outside the Compose
+            // control banner). A blank/black/white map has very few colors;
+            // a rendered Bright map contains roads, water, land and labels.
+            var distinctColors = 0
+            for (attempt in 1..12) {
+                val bitmap = instrumentation.uiAutomation.takeScreenshot()
+                if (bitmap == null) {
+                    Thread.sleep(500)
+                    continue
+                }
+                try {
+                    val colors = HashSet<Int>()
+                    val x0 = bitmap.width / 4
+                    val x1 = bitmap.width * 3 / 4
+                    val y0 = bitmap.height / 4
+                    val y1 = bitmap.height * 3 / 4
+                    val stepX = ((x1 - x0) / 50).coerceAtLeast(1)
+                    val stepY = ((y1 - y0) / 50).coerceAtLeast(1)
+                    for (y in y0 until y1 step stepY) {
+                        for (x in x0 until x1 step stepX) {
+                            colors.add(bitmap.getPixel(x, y) and 0x00ffffff)
+                        }
+                    }
+                    distinctColors = colors.size
+                    val output = File(
+                        instrumentation.targetContext.getExternalFilesDir(null), "compose-offline.png")
+                    output.outputStream().use {
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
+                if (distinctColors >= 16) break
+                Thread.sleep(1_000)
             }
+            assertTrue("MapLibre Compose surface is blank ($distinctColors distinct colors)",
+                distinctColors >= 16)
         }
     }
 }
