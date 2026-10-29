@@ -44,7 +44,9 @@ class MainActivity : ComponentActivity(), LocationListener {
     private lateinit var map: TrailMap
     private lateinit var mapConfig: MapConfiguration
     private val enabledOverlays = mutableSetOf<String>()
-    private lateinit var recenter: android.widget.ImageButton
+    private val followingState = mutableStateOf(true)
+    private val recordingState = mutableStateOf(false)
+    private val pinControlEnabled = mutableStateOf(false)
     private lateinit var manager: LocationManager
     private val trailExecutor = Executors.newSingleThreadExecutor()
     private lateinit var trailRepository: TrailRepository
@@ -52,8 +54,6 @@ class MainActivity : ComponentActivity(), LocationListener {
     private var refreshingTrails = false
     private var destroyed = false
     private var trailsVisible = true
-    private lateinit var recordButton: android.widget.ImageButton
-    private lateinit var pinGesture: PinHoldGesture
     private var pinDraft: Bundle? = null
     private var pinEditor: android.widget.EditText? = null
     private var pinDialog: android.app.AlertDialog? = null
@@ -112,52 +112,6 @@ class MainActivity : ComponentActivity(), LocationListener {
         }
         val mapFrame = android.widget.FrameLayout(this)
         mapFrame.addView(map, android.widget.FrameLayout.LayoutParams(-1, -1))
-        recordButton = android.widget.ImageButton(this).apply {
-            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.WHITE) }
-            elevation = dp(6).toFloat()
-            scaleType = android.widget.ImageView.ScaleType.CENTER
-            setOnClickListener { toggleRecording() }
-        }
-        mapFrame.addView(recordButton, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.BOTTOM or Gravity.END).apply { setMargins(dp(16), dp(16), dp(16), dp(16)) })
-        val flagButton = android.widget.ImageButton(this).apply {
-            contentDescription = "Share current location"
-            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.WHITE) }
-            elevation = dp(6).toFloat()
-            scaleType = android.widget.ImageView.ScaleType.CENTER
-            setImageResource(R.drawable.ic_report_flag)
-            setOnClickListener { shareCurrentLocation() }
-        }
-        mapFrame.addView(flagButton, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(16), dp(16), dp(16), dp(16)) })
-        val pinButton = android.widget.ImageButton(this).apply {
-            contentDescription = "Add pin to recorded track; hold for one second to add text"
-            background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(Color.WHITE)
-            }
-            elevation = dp(6).toFloat()
-            scaleType = android.widget.ImageView.ScaleType.CENTER
-            setImageResource(R.drawable.ic_track_pin)
-            setOnClickListener { addRecordingPin() }
-        }
-        pinGesture = PinHoldGesture(pinButton) { addRecordingPin(withText = true) }
-        mapFrame.addView(pinButton, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.TOP or Gravity.START).apply {
-            setMargins(dp(16), dp(16), dp(16), dp(16))
-        })
-        recenter = android.widget.ImageButton(this).apply {
-            contentDescription = "Recenter and follow GPS"
-            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.WHITE) }
-            elevation = dp(6).toFloat()
-            scaleType = android.widget.ImageView.ScaleType.CENTER
-            setImageResource(R.drawable.ic_recenter)
-            setOnClickListener {
-                following = true
-                if (!hasPermission()) requestLocationPermission()
-                else if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER) && !manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                current?.let { map.controller.setCenter(LatLng(it.latitude, it.longitude)) }
-                refreshStatus()
-            }
-        }
-        mapFrame.addView(recenter, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.TOP or Gravity.END).apply { setMargins(dp(12), dp(12), dp(12), dp(12)) })
         // Preserve a single native instance of MapLibre and each control across recompositions.
         root.setContent {
             TrailScreen(
@@ -182,7 +136,26 @@ class MainActivity : ComponentActivity(), LocationListener {
                 },
                 onLayerToggled = ::toggleMapLayer,
                 onMenuAction = ::performMenuAction,
-                map = { AndroidView(factory = { mapFrame }, modifier = Modifier.fillMaxSize()) }
+                map = { AndroidView(factory = { mapFrame }, modifier = Modifier.fillMaxSize()) },
+                recording = recordingState.value,
+                following = followingState.value,
+                pinEnabled = pinControlEnabled.value,
+                onRecord = ::toggleRecording,
+                onReport = ::shareCurrentLocation,
+                onPin = { addRecordingPin() },
+                onPinWithText = { addRecordingPin(withText = true) },
+                onRecenter = ::recenterOnGps,
+                reportIcon = { Image(painterResource(R.drawable.ic_report_flag), null, Modifier.size(28.dp)) },
+                pinIcon = { Image(painterResource(R.drawable.ic_track_pin), null, Modifier.size(24.dp)) },
+                recenterIcon = {
+                    Image(
+                        painterResource(R.drawable.ic_recenter), null, Modifier.size(28.dp),
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                            if (followingState.value) androidx.compose.ui.graphics.Color(0xff1565c0)
+                            else androidx.compose.ui.graphics.Color.DarkGray
+                        )
+                    )
+                }
             )
         }
         showAttribution()
@@ -439,6 +412,17 @@ class MainActivity : ComponentActivity(), LocationListener {
         reportEditor = null
     }
 
+    private fun recenterOnGps() {
+        following = true
+        followingState.value = true
+        if (!hasPermission()) requestLocationPermission()
+        else if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER) &&
+            !manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        current?.let { map.controller.setCenter(LatLng(it.latitude, it.longitude)) }
+        refreshStatus()
+    }
+
     private fun toggleRecording() {
         if (RecordingService.running) {
             lastRecordedPoint = null
@@ -586,11 +570,7 @@ class MainActivity : ComponentActivity(), LocationListener {
 
     private fun updateRecording() {
         val running = RecordingService.running
-        recordButton.contentDescription = if (running) "Stop recording" else "Start recording"
-        recordButton.setImageDrawable(android.graphics.drawable.GradientDrawable().apply {
-            shape = if (running) android.graphics.drawable.GradientDrawable.RECTANGLE else android.graphics.drawable.GradientDrawable.OVAL
-            setColor(Color.RED); setSize(dp(24), dp(24)); if (running) cornerRadius = dp(3).toFloat()
-        })
+        recordingState.value = running
         val file = latestRecording()
         if (file != null && (file.name != displayedTrack || file.length() != displayedLength)) {
             displayedTrack = file.name; displayedLength = file.length()
@@ -657,7 +637,7 @@ class MainActivity : ComponentActivity(), LocationListener {
     private fun hasPermission() = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     private fun requestLocationPermission() = requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1)
     private fun refreshStatus() {
-        recenter.imageTintList = android.content.res.ColorStateList.valueOf(if (following) Color.rgb(21, 101, 192) else Color.DKGRAY)
+        followingState.value = following
         statusText.value = when {
             !hasPermission() -> "Location permission needed — tap Recenter"
             current == null -> "Waiting for location — check that Location is enabled"
@@ -724,9 +704,9 @@ class MainActivity : ComponentActivity(), LocationListener {
     override fun onStart() { super.onStart(); map.onStart() }
     override fun onStop() { map.onStop(); super.onStop() }
     override fun onLowMemory() { super.onLowMemory(); map.onLowMemory() }
-    override fun onResume() { super.onResume(); active = true; phoneHeading.start(); map.onResume(); startLocation(); recordingHandler.removeCallbacks(recordingTick); recordingHandler.post(recordingTick) }
+    override fun onResume() { super.onResume(); active = true; pinControlEnabled.value = true; phoneHeading.start(); map.onResume(); startLocation(); recordingHandler.removeCallbacks(recordingTick); recordingHandler.post(recordingTick) }
     override fun onPause() {
-        pinGesture.cancel()
+        pinControlEnabled.value = false
         recentLocations.clear()
         active = false
         phoneHeading.stop()

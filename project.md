@@ -219,3 +219,10 @@ screenshots/logs. Update version metadata on app releases and keep this document
 
 - Keep the original `app/src/main/res/drawable/basemap_menu.xml` folded-map/location-pin artwork after converting the basemap selector to Compose. The Android host supplies the drawable as a 40 dp Compose `Image` inside the shared 48 dp control via a platform-agnostic composable slot.
 - Do not replace existing artwork with placeholder Compose Canvas drawings during migration. An eventual iOS host can supply an equivalent vector asset without changing the shared selector or menu behavior.
+
+## Compose migration, stage 4: four map corner controls
+
+- Move the recording, report flag, pin, and recenter buttons into the shared `TrailScreen` Compose map overlay. Their 37 dp circular surfaces, 16 dp edges (12 dp for recenter), 6 dp shadow, icon sizes, map stacking, and record red circle/square are preserved.
+- Android supplies unchanged vector resources `ic_report_flag`, `ic_track_pin`, `ic_recenter` through platform-neutral composable icon slots. Shared callbacks invoke the same Android recording, report, pin and location logic. Compose state tracks recording/following and explicitly disables in-progress pin gestures on activity pause.
+- Pin press uses a 1,000 ms pointer-input timeout and a separate accessibility long-click action, opens the annotation dialog while pressed and suppresses the following release; quick taps add plain pins, canceled drags add nothing. The prior `PinHoldGesture` helper is retained temporarily for backwards-compatibility tests but no longer installed by the Activity.
+- MapLibre remains native in `AndroidView`. Offline tile stores, GPS foreground service, GPX/KML outputs, local files, package ID and signing are unchanged. Next verify the long-press regression on emulator, then independently prototype MapLibre Compose offline resource provisioning before replacing the native renderer. iOS toolchain is not yet configured.

@@ -1,8 +1,22 @@
 package net.pocketmap.shared.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,7 +66,18 @@ fun TrailScreen(
     mapLayers: List<MapLayerChoice>,
     onLayerToggled: (String) -> Unit,
     onMenuAction: (TrailMenuAction) -> Unit,
-    map: @Composable () -> Unit
+    map: @Composable () -> Unit,
+    recording: Boolean,
+    following: Boolean,
+    pinEnabled: Boolean,
+    onRecord: () -> Unit,
+    onReport: () -> Unit,
+    onPin: () -> Unit,
+    onPinWithText: () -> Unit,
+    onRecenter: () -> Unit,
+    reportIcon: @Composable () -> Unit,
+    pinIcon: @Composable () -> Unit,
+    recenterIcon: @Composable () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(Color.White)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
@@ -82,8 +107,119 @@ fun TrailScreen(
             }
             TrailMenuControl(trailsVisible, mapLayers, onLayerToggled, onMenuAction)
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) { map() }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            map() // The native MapLibre view remains underneath the Compose overlay.
+            MapCornerControls(
+                recording = recording,
+                pinEnabled = pinEnabled,
+                onRecord = onRecord,
+                onReport = onReport,
+                onPin = onPin,
+                onPinWithText = onPinWithText,
+                onRecenter = onRecenter,
+                reportIcon = reportIcon,
+                pinIcon = pinIcon,
+                recenterIcon = recenterIcon
+            )
+        }
     }
+}
+
+
+/** Every control retains its 37 dp circular white background and native-era margins. */
+@Composable
+private fun BoxScope.MapCornerControls(
+    recording: Boolean,
+    pinEnabled: Boolean,
+    onRecord: () -> Unit,
+    onReport: () -> Unit,
+    onPin: () -> Unit,
+    onPinWithText: () -> Unit,
+    onRecenter: () -> Unit,
+    reportIcon: @Composable () -> Unit,
+    pinIcon: @Composable () -> Unit,
+    recenterIcon: @Composable () -> Unit
+) {
+    CornerButton("pin-control", "Add pin to recorded track; hold for one second to add text",
+        Modifier.align(Alignment.TopStart).padding(16.dp),
+        icon = pinIcon,
+        onClick = onPin,
+        onHold = onPinWithText,
+        enabled = pinEnabled
+    )
+    CornerButton("recenter-control", "Recenter and follow GPS",
+        Modifier.align(Alignment.TopEnd).padding(12.dp),
+        icon = recenterIcon,
+        onClick = onRecenter
+    )
+    CornerButton("report-control", "Share current location",
+        Modifier.align(Alignment.BottomStart).padding(16.dp),
+        icon = reportIcon,
+        onClick = onReport
+    )
+    CornerButton("record-control", if (recording) "Stop recording" else "Start recording",
+        Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        icon = {
+            Canvas(Modifier.size(24.dp)) {
+                if (recording) {
+                    drawRoundRect(Color.Red,
+                        cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()))
+                } else drawCircle(Color.Red)
+            }
+        },
+        onClick = onRecord
+    )
+}
+
+@Composable
+private fun CornerButton(
+    tag: String,
+    description: String,
+    modifier: Modifier,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    onHold: (() -> Unit)? = null,
+    enabled: Boolean = true
+) {
+    // The pin deliberately uses a full second, not the system's shorter long-press timeout.
+    // The timer triggers before release. A canceled/moved gesture never saves a plain pin.
+    val gestures = if (onHold == null) {
+        Modifier.clickable(onClick = onClick)
+    } else {
+        Modifier.pointerInput(enabled, onClick, onHold) {
+            if (enabled) awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                down.consume()
+                val released = withTimeoutOrNull(1_000L) {
+                    waitForUpOrCancellation()?.let { it.consume(); true } ?: false
+                }
+                when (released) {
+                    true -> onClick()
+                    false -> Unit // Canceled or dragged out of the button.
+                    null -> {
+                        onHold()
+                        // Never synthesize a second tap when the finger finally lifts.
+                        waitForUpOrCancellation()?.consume()
+                    }
+                }
+            }
+        }
+    }
+    Box(
+        modifier.size(37.dp)
+            .shadow(6.dp, CircleShape)
+            .background(Color.White, CircleShape)
+            .then(gestures)
+            .semantics {
+                contentDescription = description
+                if (enabled) {
+                    onClick { onClick(); true }
+                    if (onHold != null) onLongClick { onHold(); true }
+                }
+            }
+            .testTag(tag),
+        contentAlignment = Alignment.Center
+    ) { icon() }
 }
 
 @Composable
