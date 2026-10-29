@@ -106,3 +106,7 @@ See [`project.md`](project.md) for requirements and architecture.
 ## Cross-platform preparation
 
 Shared Kotlin algorithms now live in the `shared/` Kotlin Multiplatform module (Android/JVM targets, no iOS target yet). The Android app still uses the original native Activity, MapLibre renderer, GPS foreground service, and offline map archives. Run `./gradlew :shared:jvmTest testDebugUnitTest` for portable plus Android regression tests. See `project.md` for the staged Compose/iOS plan.
+
+## Compose migration
+
+The top-level layout and dynamic status header are implemented with shared Compose Multiplatform UI code in `shared/commonMain`. Native Android MapLibre and its controls are embedded through `AndroidView`, preserving existing offline maps, GPS services and map interactions. The project still builds Android only.

@@ -1,7 +1,14 @@
 package net.pocketmap
 
 import android.Manifest
-import android.app.Activity
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.ComposeView
+import net.pocketmap.shared.ui.TrailScreen
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -19,27 +26,27 @@ import android.widget.PopupMenu
 import java.util.concurrent.Executors
 import java.io.File
 
-class MainActivity : Activity(), LocationListener {
+class MainActivity : ComponentActivity(), LocationListener {
     private lateinit var basemaps: List<Basemap>
     private lateinit var selectedBasemap: Basemap
     private lateinit var basemapButton: android.widget.ImageButton
     private lateinit var attribution: TextView
     private lateinit var zoomLevel: TextView
+    private val statusText = mutableStateOf("Waiting for location…")
+    private val trailStatusText = mutableStateOf<String?>("Loading trails…")
+    private val recordingStatusText = mutableStateOf<String?>(null)
     private lateinit var map: TrailMap
     private lateinit var mapConfig: MapConfiguration
     private val enabledOverlays = mutableSetOf<String>()
-    private lateinit var status: TextView
     private lateinit var recenter: android.widget.ImageButton
     private lateinit var manager: LocationManager
     private val trailExecutor = Executors.newSingleThreadExecutor()
-    private lateinit var trailStatus: TextView
     private lateinit var trailRepository: TrailRepository
     private var trailDocument: TrailKml.Document? = null
     private var refreshingTrails = false
     private var destroyed = false
     private var trailsVisible = true
     private lateinit var recordButton: android.widget.ImageButton
-    private lateinit var recordStatus: TextView
     private lateinit var pinGesture: PinHoldGesture
     private var pinDraft: Bundle? = null
     private var pinEditor: android.widget.EditText? = null
@@ -70,7 +77,7 @@ class MainActivity : Activity(), LocationListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         manager = getSystemService(LOCATION_SERVICE) as LocationManager
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val root = ComposeView(this)
         root.setOnApplyWindowInsetsListener { view, insets ->
             if (android.os.Build.VERSION.SDK_INT >= 30) {
                 val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
@@ -80,23 +87,6 @@ class MainActivity : Activity(), LocationListener {
             }
             insets
         }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.TOP
-            setBackgroundColor(Color.WHITE)
-        }
-        val statusColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        header.addView(statusColumn, LinearLayout.LayoutParams(0, -2, 1f))
-        root.addView(header)
-        status = TextView(this).apply { setPadding(dp(12), dp(8), dp(12), dp(8)); text = "Waiting for location…" }
-        statusColumn.addView(status)
-        trailStatus = TextView(this).apply { setPadding(dp(12), 0, dp(12), dp(6)); text = "Loading trails…" }
-        statusColumn.addView(trailStatus)
-        recordStatus = TextView(this).apply {
-            setPadding(dp(12), 0, dp(12), dp(4))
-            visibility = android.view.View.GONE
-        }
-        statusColumn.addView(recordStatus)
         mapConfig = MapConfiguration(this)
         basemaps = mapConfig.basemaps
         val oldChoice = prefs.getString("basemap", "bright")
@@ -141,7 +131,6 @@ class MainActivity : Activity(), LocationListener {
                 }
             }
         }
-        header.addView(basemapButton, 0, LinearLayout.LayoutParams(dp(48), dp(48)))
         recordButton = android.widget.ImageButton(this).apply {
             background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.WHITE) }
             elevation = dp(6).toFloat()
@@ -173,7 +162,6 @@ class MainActivity : Activity(), LocationListener {
         mapFrame.addView(pinButton, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.TOP or Gravity.START).apply {
             setMargins(dp(16), dp(16), dp(16), dp(16))
         })
-        root.addView(mapFrame, LinearLayout.LayoutParams(-1, 0, 1f))
         recenter = android.widget.ImageButton(this).apply {
             contentDescription = "Recenter and follow GPS"
             background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.WHITE) }
@@ -189,10 +177,6 @@ class MainActivity : Activity(), LocationListener {
             }
         }
         mapFrame.addView(recenter, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.TOP or Gravity.END).apply { setMargins(dp(12), dp(12), dp(12), dp(12)) })
-        val headerActions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.TOP or Gravity.END
-        }
         val menuButton = Button(this).apply {
             text = "☰"
             textSize = 24f
@@ -283,9 +267,18 @@ class MainActivity : Activity(), LocationListener {
         }
         infoColumn.addView(attribution, LinearLayout.LayoutParams(dp(48), dp(24)))
         infoColumn.addView(zoomLevel, LinearLayout.LayoutParams(dp(48), dp(24)))
-        headerActions.addView(infoColumn, LinearLayout.LayoutParams(dp(48), dp(48)))
-        headerActions.addView(menuButton, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(headerActions, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.TOP or Gravity.END })
+        // Preserve a single native instance of MapLibre and each control across recompositions.
+        root.setContent {
+            TrailScreen(
+                status = statusText.value,
+                trailStatus = trailStatusText.value,
+                recordingStatus = recordingStatusText.value,
+                basemap = { AndroidView(factory = { basemapButton }, modifier = Modifier.size(48.dp)) },
+                info = { AndroidView(factory = { infoColumn }, modifier = Modifier.size(48.dp)) },
+                menu = { AndroidView(factory = { menuButton }, modifier = Modifier.size(48.dp)) },
+                map = { AndroidView(factory = { mapFrame }, modifier = Modifier.fillMaxSize()) }
+            )
+        }
         showAttribution()
         setContentView(root)
         @Suppress("DEPRECATION")
@@ -643,21 +636,21 @@ class MainActivity : Activity(), LocationListener {
             redrawMap()
         }
         redrawMap() // Also remove the live segment after a notification stop or stale fix.
-        recordStatus.text = if (running) if (recordedPointCount == 0) "● Recording • waiting for GPS" else "● Recording • $recordedPointCount points • every 30s" else ""
-        recordStatus.visibility = if (running) android.view.View.VISIBLE else android.view.View.GONE
-        recordStatus.setTextColor(if (running) Color.RED else Color.DKGRAY)
+        recordingStatusText.value = if (!running) null
+            else if (recordedPointCount == 0) "● Recording • waiting for GPS"
+            else "● Recording • $recordedPointCount points • every 30s"
     }
 
     private fun refreshTrails() {
         if (refreshingTrails || destroyed) return
         refreshingTrails = true
-        trailStatus.visibility = android.view.View.VISIBLE
-        trailStatus.text = if (trailDocument == null) "Loading trails…" else "Refreshing trails…"
+        
+        trailStatusText.value = if (trailDocument == null) "Loading trails…" else "Refreshing trails…"
         val needsCache = trailDocument == null
         trailExecutor.execute {
             if (needsCache) {
                 trailRepository.cached()?.let { cached -> runOnUiThread {
-                    if (!destroyed) { showTrails(cached); trailStatus.text = "${cached.name} • cached • refreshing…" }
+                    if (!destroyed) { showTrails(cached); trailStatusText.value = "${cached.name} • cached • refreshing…" }
                 } }
             }
             val result = runCatching { trailRepository.refresh() }
@@ -666,11 +659,11 @@ class MainActivity : Activity(), LocationListener {
                     refreshingTrails = false
                     result.fold(onSuccess = { document ->
                         showTrails(document)
-                        trailStatus.text = ""
-                        trailStatus.visibility = android.view.View.GONE
+                        trailStatusText.value = null
+                        
                     }, onFailure = {
-                        trailStatus.visibility = android.view.View.VISIBLE
-                        trailStatus.text = if (trailDocument != null) "${trailDocument!!.name} • cached • refresh failed"
+                        
+                        trailStatusText.value = if (trailDocument != null) "${trailDocument!!.name} • cached • refresh failed"
                                            else "Trails unavailable — check connection and map sharing"
                     })
                 }
@@ -700,7 +693,7 @@ class MainActivity : Activity(), LocationListener {
     private fun requestLocationPermission() = requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1)
     private fun refreshStatus() {
         recenter.imageTintList = android.content.res.ColorStateList.valueOf(if (following) Color.rgb(21, 101, 192) else Color.DKGRAY)
-        status.text = when {
+        statusText.value = when {
             !hasPermission() -> "Location permission needed — tap Recenter"
             current == null -> "Waiting for location — check that Location is enabled"
             following -> "Following GPS • accuracy ±${current!!.accuracy.toInt()} m"

@@ -199,3 +199,10 @@ screenshots/logs. Update version metadata on app releases and keep this document
 - The Linux JVM test target checks portable calculations, and Android tests still exercise integration and exports. CI runs both.
 - Next: migrate UI gradually to Compose Multiplatform, initially embedding the existing Android MapLibre view; independently prototype MapLibre Compose offline resource provisioning **before** changing `TileRepository` or the known-good renderer. Only then add an iOS target and Core Location adapter.
 - Preserve locked-screen GPS accuracy, offline Tewksbury maps, Android package/signing/updates, and the existing Play/APK publishing pipelines at every stage. No Android UI or behavior change is intended in this stage.
+
+## Compose migration, stage 2: native map inside shared UI
+
+- Add Compose Multiplatform 1.8.2 and matching Kotlin 2.1.20 compiler. The `TrailScreen` screen structure and its status, trail refresh and recording text are in `shared/commonMain`.
+- Android `MainActivity` becomes `ComponentActivity`, installs a root `ComposeView`, and uses observable Compose state for header text. Its existing MapLibre `TrailMap` and native basemap/attribution/menu controls use `AndroidView` slots, so their underlying lifecycle, menus, gestures, track pin long-hold, and map overlays remain unchanged.
+- Preserve existing manual system-bar insets and Android-specific background GPS recorder, camera, offline caches, signing and package identity. No iOS targets or tools are required.
+- Next: migrate native controls to Compose one at a time after native emulator screenshot and interaction regression checks; test MapLibre Compose custom offline resources separately before replacing the renderer.
