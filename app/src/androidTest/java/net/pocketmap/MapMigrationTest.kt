@@ -4,9 +4,6 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationManager
 import android.os.SystemClock
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import org.junit.Rule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -26,7 +23,6 @@ import java.io.IOException
 /** Exercises the real native renderer and local tile route, with all network blocked. */
 @RunWith(AndroidJUnit4::class)
 class MapMigrationTest {
-    @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     @Before fun grantLocationForUiTests() {
@@ -141,11 +137,13 @@ class MapMigrationTest {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 // Inject physical pointer events rather than pausing Compose's test clock.
                 // This verifies the real 1,000 ms hold even with emulator frame scheduling.
-                val bounds = compose.onNodeWithTag("pin-control").fetchSemanticsNode().boundsInWindow
-                val screenOffset = IntArray(2)
-                scenario.onActivity { it.window.decorView.getLocationOnScreen(screenOffset) }
-                val x = bounds.center.x + screenOffset[0]
-                val y = bounds.center.y + screenOffset[1]
+                instrumentation.waitForIdleSync()
+                val origin = IntArray(2)
+                scenario.onActivity { renderer(it).getLocationOnScreen(origin) }
+                val density = context.resources.displayMetrics.density
+                // Pin control is 37 dp across, inset 16 dp from the native map's top left.
+                val x = origin[0] + (16f + 37f / 2f) * density
+                val y = origin[1] + (16f + 37f / 2f) * density
                 var downTime = 0L
                 fun touch(action: Int) {
                     if (action == android.view.MotionEvent.ACTION_DOWN) downTime = SystemClock.uptimeMillis()
