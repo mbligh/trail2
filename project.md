@@ -228,3 +228,9 @@ screenshots/logs. Update version metadata on app releases and keep this document
 - MapLibre remains native in `AndroidView`. Offline tile stores, GPS foreground service, GPX/KML outputs, local files, package ID and signing are unchanged. Next verify the long-press regression on emulator, then independently prototype MapLibre Compose offline resource provisioning before replacing the native renderer. iOS toolchain is not yet configured.
 
 - Stage 4 smoke tests dispatch touch events directly to the app's activity window because a long press opens an Android dialog before ACTION_UP, transferring focus away from the Activity; global input injection then fails with a cross-window UID error. This remains an end-to-end Compose hit-test, not a mocked gesture.
+
+## APK update compatibility and versioning
+
+- The direct-download Pages APK uses the repository's stable `development-signing.jks` debug certificate, **not** Google Play's app-signing certificate. Android refuses an APK from one signing channel over an existing installation from the other. Users must update via the same channel used for installation. Before changing channels, export recordings/pins: uninstalling deletes the app's private data.
+- Pages builds set `TRAIL_VERSION_CODE` from the current commit's Unix timestamp divided by 60, yielding a monotonically nondecreasing code (> the earlier fixed `18`) without needing full Git history. The build continues to use the same package ID and development keystore, and a failed build must not replace a published APK.
+- Play AABs retain their existing per-run version-code allocation and signing/upload workflow. The direct APK's code is independent of Play's because the Android signing identities are deliberately different.

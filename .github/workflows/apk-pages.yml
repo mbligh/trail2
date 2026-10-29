@@ -71,6 +71,19 @@ jobs:
           key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
       - name: Validate offline tile selection
         run: python tools/test_offline_maps
+      # Commit time is deterministic across retries and increases with each new version.
+      # Minutes since the Unix epoch are comfortably above the old fixed code (18)
+      # while remaining below Android's maximum versionCode for centuries.
+      - name: Assign monotonically increasing sideload APK version
+        run: |
+          commit_time="$(git show -s --format=%ct HEAD)"
+          version_code="$((commit_time / 60))"
+          if [ "$version_code" -le 18 ]; then
+            echo "::error::Invalid APK version code: $version_code"
+            exit 1
+          fi
+          echo "TRAIL_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+          echo "Sideload APK versionCode=$version_code"
       - name: Test, lint, and build APK
         run: ./gradlew --no-daemon :shared:jvmTest testDebugUnitTest lintDebug assembleDebug
       - name: Verify complete bundled offline coverage

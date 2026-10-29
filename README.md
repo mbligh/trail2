@@ -115,3 +115,7 @@ The top-level layout and dynamic status header are implemented with shared Compo
 ### Shared header controls
 
 The basemap selector, map attribution/zoom readout, menu actions and Map layers submenu now use shared Compose components and platform-neutral callbacks. Map rendering and the four map corner buttons remain native Android while the migration proceeds incrementally.
+
+### Updating an installed Trail 2
+
+The [GitHub Pages APK](https://mbligh.github.io/trail2/Trail2.apk) is signed using the stable development signing certificate and now gets a nondecreasing version code from the commit timestamp. It can update previous downloads from the same page. Google Play signs distributed apps with a different certificate, so the APK **cannot** update a Trail 2 installation obtained from Play; update that installation through Play Store. Do not uninstall without first exporting saved recordings/pins, as uninstalling erases the app's private files.
