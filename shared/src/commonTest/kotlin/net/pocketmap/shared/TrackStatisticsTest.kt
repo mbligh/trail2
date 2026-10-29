@@ -34,6 +34,16 @@ class TrackStatisticsTest {
         assertTrue(stats.distanceMeters < 300.0)
     }
 
+    @Test fun eastWestDistanceUsesLongitudeDifference() {
+        val stats = TrackStatistics.summarize(listOf(
+            Fix(40.0, -74.0, 0L, null),
+            Fix(40.0, -73.999, 30_000L, null)
+        ))
+        // About 85 metres at latitude 40; a bad radians conversion is much larger.
+        assertTrue(stats.distanceMeters in 80.0..90.0)
+        assertEquals(30L, stats.elapsedSeconds)
+    }
+
     @Test fun rejectsStationaryAltitudeSpike() {
         val heights = listOf(100.0, 103.0, 99.0, 102.0, 100.0, 145.0, 100.0, 101.0)
         val stats = TrackStatistics.summarize(heights.mapIndexed { i, h -> Fix(40.0, -74.0, i * 30_000L, h) })

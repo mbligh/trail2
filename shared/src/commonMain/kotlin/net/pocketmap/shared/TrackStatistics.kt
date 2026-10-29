@@ -26,7 +26,7 @@ object TrackStatistics {
         val lat1 = (a.latitude * (PI / 180.0))
         val lat2 = (b.latitude * (PI / 180.0))
         val deltaLat = lat2 - lat1
-        val deltaLon = (b.longitude - a.longitude * (PI / 180.0))
+        val deltaLon = ((b.longitude - a.longitude) * (PI / 180.0))
         val h = kotlin.math.sin(deltaLat / 2).let { it * it } +
             kotlin.math.cos(lat1) * kotlin.math.cos(lat2) *
             kotlin.math.sin(deltaLon / 2).let { it * it }
