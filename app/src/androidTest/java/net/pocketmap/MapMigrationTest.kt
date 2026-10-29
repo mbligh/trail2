@@ -6,7 +6,6 @@ import android.location.LocationManager
 import android.os.SystemClock
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performTouchInput
 import org.junit.Rule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -140,14 +139,28 @@ class MapMigrationTest {
         RecordingService.latestGpsFix = gps()
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                // A real down event must open the editor at one second, *before* up.
-                compose.onNodeWithTag("pin-control").performTouchInput { down(center) }
+                // Inject physical pointer events rather than pausing Compose's test clock.
+                // This verifies the real 1,000 ms hold even with emulator frame scheduling.
+                val bounds = compose.onNodeWithTag("pin-control").fetchSemanticsNode().boundsInWindow
+                val screenOffset = IntArray(2)
+                scenario.onActivity { it.window.decorView.getLocationOnScreen(screenOffset) }
+                val x = bounds.center.x + screenOffset[0]
+                val y = bounds.center.y + screenOffset[1]
+                var downTime = 0L
+                fun touch(action: Int) {
+                    if (action == android.view.MotionEvent.ACTION_DOWN) downTime = SystemClock.uptimeMillis()
+                    val event = android.view.MotionEvent.obtain(
+                        downTime, SystemClock.uptimeMillis(), action, x, y, 0
+                    )
+                    try { instrumentation.sendPointerSync(event) } finally { event.recycle() }
+                }
+                touch(android.view.MotionEvent.ACTION_DOWN)
                 Thread.sleep(1_200)
                 scenario.onActivity {
                     assertTrue("Hold must open before release", dialog(it)?.isShowing == true)
                     assertTrue(RecordedPins.read(track).isEmpty())
                 }
-                compose.onNodeWithTag("pin-control").performTouchInput { up() }
+                touch(android.view.MotionEvent.ACTION_UP)
                 scenario.onActivity {
                     assertTrue("Release must not save another pin", RecordedPins.read(track).isEmpty())
                     editor(it).setText("Broken gate")
@@ -160,7 +173,8 @@ class MapMigrationTest {
                 instrumentation.waitForIdleSync()
                 assertEquals("Broken gate", RecordedPins.read(track).single().text)
                 // A following short touch must still create a plain pin.
-                compose.onNodeWithTag("pin-control").performTouchInput { down(center); up() }
+                touch(android.view.MotionEvent.ACTION_DOWN)
+                touch(android.view.MotionEvent.ACTION_UP)
                 instrumentation.waitForIdleSync()
                 assertEquals(2, RecordedPins.read(track).size)
                 assertEquals("", RecordedPins.read(track).last().text)
