@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "net.pocketmap.composeprobe"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "net.pocketmap.composeprobe"
         minSdk = 26
