@@ -1,7 +1,7 @@
 name: MapLibre native smoke tests
 on:
   push:
-    branches: [main, codex/maplibre-migration]
+    branches: [main, codex/maplibre-migration, codex/pin-text]
     paths: ['app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', '.github/workflows/map-smoke.yml']
   workflow_dispatch:
 permissions:

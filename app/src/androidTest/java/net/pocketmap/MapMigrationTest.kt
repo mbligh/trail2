@@ -116,6 +116,84 @@ class MapMigrationTest {
         assertEquals(40.691,selected.latitude,0.000001)
     }
 
+    @Test fun pinHoldOpensBeforeReleaseRestoresDraftAndSavesCapturedLocationWithText() {
+        val directory = java.io.File(context.filesDir, "recordings").apply { mkdirs() }
+        val track = java.io.File(directory, "pin-text-${System.nanoTime()}.csv").apply { writeText("40.69,-74.78,1000,,4\n") }
+        val prefs = context.getSharedPreferences("map", Context.MODE_PRIVATE)
+        val oldTrack = prefs.getString("recorded_track", null)
+        prefs.edit().putString("recorded_track", track.name).putFloat("lat", 40.69f).putFloat("lon", -74.78f).commit()
+        fun fix(lat: Double) = Location(LocationManager.GPS_PROVIDER).apply {
+            latitude = lat; longitude = -74.78; accuracy = 4f
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(); time = System.currentTimeMillis()
+        }
+        fun dialog(activity: MainActivity) = MainActivity::class.java.getDeclaredField("pinDialog").apply { isAccessible = true }.get(activity) as android.app.AlertDialog?
+        fun editor(activity: MainActivity) = MainActivity::class.java.getDeclaredField("pinEditor").apply { isAccessible = true }.get(activity) as android.widget.EditText
+        fun button(activity: MainActivity): android.view.View {
+            fun find(view: android.view.View): android.view.View? {
+                if (view.contentDescription?.toString()?.startsWith("Add pin to recorded track") == true) return view
+                if (view is android.view.ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i))?.let { return it }
+                return null
+            }
+            return find(activity.window.decorView)!!
+        }
+        var down = 0L
+        fun touch(view: android.view.View, action: Int) {
+            if (action == android.view.MotionEvent.ACTION_DOWN) down = SystemClock.uptimeMillis()
+            val event = android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, view.width / 2f, view.height / 2f, 0)
+            try { view.dispatchTouchEvent(event) } finally { event.recycle() }
+        }
+        val text = "Gate, broken & <blocked>\nUse the eastern path 🌲"
+        RecordingService.running = true
+        RecordingService.latestGpsFix = fix(40.69)
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.setBoolean(activity, false)
+                    renderer(activity).setCenter(LatLng(40.69, -74.78))
+                    touch(button(activity), android.view.MotionEvent.ACTION_DOWN)
+                }
+                Thread.sleep(1_200)
+                scenario.onActivity { activity ->
+                    assertTrue("Text dialog must open before finger release", dialog(activity)?.isShowing == true)
+                    assertTrue(RecordedPins.read(track).isEmpty())
+                    touch(button(activity), android.view.MotionEvent.ACTION_UP)
+                    assertTrue("Release must not create a second plain pin", RecordedPins.read(track).isEmpty())
+                    editor(activity).setText(text)
+                }
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    assertTrue(dialog(activity)?.isShowing == true)
+                    assertEquals(text, editor(activity).text.toString())
+                    RecordingService.latestGpsFix = fix(40.691) // Walking while typing must not move the pin.
+                    dialog(activity)!!.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+                }
+                val pin = RecordedPins.read(track).single()
+                assertEquals(text, pin.text)
+                assertEquals(40.69, pin.latitude, 0.000001)
+                await(scenario, "annotated pin reaches native rendered features") { map ->
+                    native(map)?.queryRenderedFeatures(android.graphics.RectF(0f, 0f, map.width.toFloat(), map.height.toFloat()), "trail-recording-pins")?.any { it.getStringProperty("name") == "Pin\n$text" } == true
+                }
+                // Cancelling a held pin saves nothing; a following short tap still saves a plain pin.
+                scenario.onActivity { touch(button(it), android.view.MotionEvent.ACTION_DOWN) }
+                Thread.sleep(1_200)
+                scenario.onActivity { activity ->
+                    assertTrue(dialog(activity)?.isShowing == true)
+                    touch(button(activity), android.view.MotionEvent.ACTION_UP)
+                    dialog(activity)!!.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
+                    assertEquals(1, RecordedPins.read(track).size)
+                    touch(button(activity), android.view.MotionEvent.ACTION_DOWN)
+                    touch(button(activity), android.view.MotionEvent.ACTION_UP)
+                    assertEquals(2, RecordedPins.read(track).size)
+                    assertEquals("", RecordedPins.read(track).last().text)
+                }
+            }
+        } finally {
+            RecordingService.running = false; RecordingService.latestGpsFix = null
+            prefs.edit().putString("recorded_track", oldTrack).commit()
+            java.io.File(directory, track.nameWithoutExtension + ".pins").delete(); track.delete()
+        }
+    }
+
     @Test fun offlineOnlyArchiveKeepsZoomLimitsAcrossSwitches() {
         TileRepository(context).use { repo ->
             val definition = JSONObject("""{"type":"vector","archive":"maps/tewksbury-streets.mbtiles"}""")

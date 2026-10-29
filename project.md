@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-27 for the four-hour recording limit (2.0.2).
+Updated 2026-10-29 for text attached to recording pins (2.0.3).
 
 ## Product and identity
 
@@ -134,7 +134,20 @@ and medical artwork (including tint/scale/anchors). Cache the last validated doc
 retain it on refresh failure. Parser/network safety limits remain unchanged. No local
 KML/KMZ import is added. Fresh install trail refresh needs a connection.
 
-RecordedTrack/RecordedPins storage and KML/GPX exports are unchanged. Blue saved path
+Tap the top-left blue pin to save an unannotated pin immediately. Hold it for one
+second to open a multiline text dialog **while the finger is still down**, with
+standard long-press haptic feedback; release must not add a second pin. Moving out,
+cancelling, pausing or detaching the button cancels a pending hold. Preserve native
+click/long-click accessibility actions. Cancel leaves no pin; Save permits blank text.
+Capture the recent GPS fix and recording file when the dialog opens, not after typing.
+Keep the existing accuracy warning and explicit Save anyway for poor/unknown/fallback
+locations. Preserve the draft, location and target track across activity recreation.
+Tap a saved pin to read its text; persist it offline and export it as KML description
+and GPX waypoint desc, with XML escaping. Legacy pins need no migration: add an optional
+sixth Base64 UTF-8 field to the existing .pins sidecar, retaining the five original fields
+and track CSV format. Corrupt optional text must not discard valid pin coordinates.
+
+RecordedTrack storage and KML/GPX track geometry are unchanged. Blue saved path
 and pins remain visible after stop/reopen. Recording control changes circle to stop
 square, and Stop offers Share KML. Menu retains both saved KML and GPX exports.
 KML preserves the existing accuracy-colored segments; GPX retains coordinates/time/
