@@ -205,7 +205,7 @@ class MapMigrationTest {
         val copied = java.io.File(context.cacheDir, "bridge-seed-${System.nanoTime()}.mbtiles")
         try {
             context.assets.open("maps/tewksbury-streets.mbtiles").use { source ->
-                copied.outputStream().use(source::copyTo)
+                copied.outputStream().use { target -> source.copyTo(target) }
             }
             val database = android.database.sqlite.SQLiteDatabase.openDatabase(
                 copied.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)

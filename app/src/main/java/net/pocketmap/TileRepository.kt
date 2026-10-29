@@ -124,7 +124,7 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         val parsed = url.toHttpUrlOrNull() ?: return null
         if (parsed.host != "trail.tiles.invalid") return null
         val parts = parsed.pathSegments
-        if (parts.size != 5 || parts[0].isNotEmpty()) return null
+        if (parts.size != 5 || parts[0].isEmpty()) return null
         val store = synchronized(this) { stores[parts[1]] } ?: return null
         val z = parts[2].toIntOrNull() ?: return null
         val x = parts[3].toIntOrNull() ?: return null
