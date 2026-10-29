@@ -753,7 +753,7 @@ class MainActivity : ComponentActivity(), LocationListener {
     override fun onProviderDisabled(provider: String) { current = null; redrawMap(); startLocation() }
     @Deprecated("Legacy callback")
     override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) { }
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1) startLocation()
     }
