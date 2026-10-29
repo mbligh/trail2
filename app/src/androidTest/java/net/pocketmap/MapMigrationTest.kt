@@ -137,16 +137,21 @@ class MapMigrationTest {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 // Inject physical pointer events rather than pausing Compose's test clock.
                 // This verifies the real 1,000 ms hold even with emulator frame scheduling.
-                instrumentation.waitForIdleSync()
-                val origin = IntArray(2)
-                scenario.onActivity { renderer(it).getLocationOnScreen(origin) }
                 val density = context.resources.displayMetrics.density
-                // Pin control is 37 dp across, inset 16 dp from the native map's top left.
-                val x = origin[0] + (16f + 37f / 2f) * density
-                val y = origin[1] + (16f + 37f / 2f) * density
+                var x = 0f
+                var y = 0f
                 var downTime = 0L
                 fun touch(action: Int) {
-                    if (action == android.view.MotionEvent.ACTION_DOWN) downTime = SystemClock.uptimeMillis()
+                    if (action == android.view.MotionEvent.ACTION_DOWN) {
+                        // Trail status may disappear or reappear after Activity recreation.
+                        // Recompute the Compose button's position before each new press.
+                        instrumentation.waitForIdleSync()
+                        val origin = IntArray(2)
+                        scenario.onActivity { renderer(it).getLocationOnScreen(origin) }
+                        x = origin[0] + (16f + 37f / 2f) * density
+                        y = origin[1] + (16f + 37f / 2f) * density
+                        downTime = SystemClock.uptimeMillis()
+                    }
                     val event = android.view.MotionEvent.obtain(
                         downTime, SystemClock.uptimeMillis(), action, x, y, 0
                     )
