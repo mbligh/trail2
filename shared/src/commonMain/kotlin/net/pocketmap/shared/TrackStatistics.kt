@@ -76,11 +76,13 @@ object TrackStatistics {
             val previous = run[i - 1]
             val next = run[i + 1]
             val height = heights[i]
-            if (kotlin.math.abs(previous.altitude!! - next.altitude!!) < 5.0 &&
-                kotlin.math.abs(height - previous.altitude) > 12.0 &&
-                kotlin.math.abs(height - next.altitude) > 12.0 &&
+            val prevAltitude = previous.altitude!!
+            val nextAltitude = next.altitude!!
+            if (kotlin.math.abs(prevAltitude - nextAltitude) < 5.0 &&
+                kotlin.math.abs(height - prevAltitude) > 12.0 &&
+                kotlin.math.abs(height - nextAltitude) > 12.0 &&
                 distanceMeters(previous, next) < 20.0) {
-                heights[i] = (previous.altitude + next.altitude) / 2.0
+                heights[i] = (prevAltitude + nextAltitude) / 2.0
             }
         }
         var minimum = heights.first()
