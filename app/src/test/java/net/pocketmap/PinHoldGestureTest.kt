@@ -34,39 +34,39 @@ class PinHoldGestureTest {
         val event = MotionEvent.obtain(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), action, x, 50f, 0)
         try { button.dispatchTouchEvent(event) } finally { event.recycle() }
     }
-    private fun wait(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
+    private fun advance(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
 
     @Test fun opensAtOneSecondWhileStillHeldAndReleaseDoesNotAddAnotherPin() {
         touch(MotionEvent.ACTION_DOWN)
-        wait(999)
+        advance(999)
         assertEquals(0, holds)
-        wait(1)
+        advance(1)
         assertEquals(1, holds)
         assertEquals(0, clicks)
-        wait(2_000)
+        advance(2_000)
         touch(MotionEvent.ACTION_UP)
         assertEquals(1, holds)
         assertEquals(0, clicks)
     }
     @Test fun ordinaryTapSavesOnceWithoutOpeningText() {
         touch(MotionEvent.ACTION_DOWN)
-        wait(200)
+        advance(200)
         touch(MotionEvent.ACTION_UP)
-        wait(2_000)
+        advance(2_000)
         assertEquals(1, clicks)
         assertEquals(0, holds)
     }
     @Test fun draggingAwayOrCancellingCannotCreateAPinOrOpenText() {
         for (action in listOf(MotionEvent.ACTION_MOVE, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN)) {
             touch(MotionEvent.ACTION_DOWN)
-            wait(500)
+            advance(500)
             touch(action, 300f)
-            wait(1_000)
+            advance(1_000)
             touch(MotionEvent.ACTION_UP)
         }
         touch(MotionEvent.ACTION_DOWN)
         gesture.cancel() // Activity pause/lock or view detach cancels the pending hold.
-        wait(1_000)
+        advance(1_000)
         touch(MotionEvent.ACTION_UP)
         assertEquals(0, clicks)
         assertEquals(0, holds)
