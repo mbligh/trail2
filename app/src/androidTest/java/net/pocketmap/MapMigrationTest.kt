@@ -162,6 +162,8 @@ class MapMigrationTest {
                 }
                 scenario.recreate()
                 scenario.onActivity { activity ->
+                    MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.setBoolean(activity, false)
+                    renderer(activity).setCenter(LatLng(40.69, -74.78))
                     assertTrue(dialog(activity)?.isShowing == true)
                     assertEquals(text, editor(activity).text.toString())
                     RecordingService.latestGpsFix = fix(40.691) // Walking while typing must not move the pin.
@@ -174,7 +176,10 @@ class MapMigrationTest {
                     native(map)?.queryRenderedFeatures(android.graphics.RectF(0f, 0f, map.width.toFloat(), map.height.toFloat()), "trail-recording-pins")?.any { it.getStringProperty("name") == "Pin\n$text" } == true
                 }
                 // Cancelling a held pin saves nothing; a following short tap still saves a plain pin.
-                scenario.onActivity { touch(button(it), android.view.MotionEvent.ACTION_DOWN) }
+                scenario.onActivity {
+                    RecordingService.latestGpsFix = fix(40.69)
+                    touch(button(it), android.view.MotionEvent.ACTION_DOWN)
+                }
                 Thread.sleep(1_200)
                 scenario.onActivity { activity ->
                     assertTrue(dialog(activity)?.isShowing == true)
