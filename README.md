@@ -55,6 +55,13 @@ while the map is paused or the screen is locked; its notification offers Stop.
 Recording stops automatically after four hours, retaining saved tracks and pins.
 The limit includes time waiting for GPS and time with the screen locked; reopening
 the map does not reset it. Start a new recording to get another four hours.
+Stop shows distance, elapsed time (between first and last recorded GPS fixes),
+estimated moving time, cumulative ascent and descent. GPX includes track-level
+`desc` and namespaced `extensions`; KML includes document-level `description`
+and `ExtendedData` with the same metre/second values. Both keep existing points,
+pins and accuracy-coded segments. Elevation gain/loss uses an 8 m hysteresis and
+filters isolated stationary spikes; GPS altitude is approximate, not terrain-corrected.
+
 Process termination or reboot stops recording, retaining saved points. No automatic
 resumption is added. The blue saved path, display-only live connector, recording
 pins and existing KML/GPX formats remain. Reports capture a fixed coordinate with

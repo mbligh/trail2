@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-27 for the four-hour recording limit (2.0.2).
+Updated 2026-10-29 for trip statistics and exports (2.0.3).
 
 ## Product and identity
 
@@ -134,7 +134,17 @@ and medical artwork (including tint/scale/anchors). Cache the last validated doc
 retain it on refresh failure. Parser/network safety limits remain unchanged. No local
 KML/KMZ import is added. Fresh install trail refresh needs a connection.
 
-RecordedTrack/RecordedPins storage and KML/GPX exports are unchanged. Blue saved path
+RecordedTrack/RecordedPins CSV storage remains unchanged. Shared trip summaries are
+calculated from saved fixes: distance is summed between successive valid points with
+gaps up to 90 seconds, elapsed time spans first-to-last saved fix (not service
+start/stop), and moving time estimates intervals with at least 0.5 m/s motion.
+Ascent/descent sums separate climbs using an 8 m hysteresis, with isolated stationary
+altitude spikes suppressed; values are GPS estimates rather than DEM-corrected.
+Long GPS outages and missing altitudes cannot create fictitious distance/ascent.
+GPX track descriptions and namespaced extensions and KML document descriptions and
+ExtendedData publish the same distance (metres), elapsed/moving (seconds), and
+ascent/descent (metres). Display conversions use miles/feet for US locale and
+kilometres/metres elsewhere. Stop-recording dialog shows all five values. Blue saved path
 and pins remain visible after stop/reopen. Recording control changes circle to stop
 square, and Stop offers Share KML. Menu retains both saved KML and GPX exports.
 KML preserves the existing accuracy-colored segments; GPX retains coordinates/time/

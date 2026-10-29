@@ -476,8 +476,16 @@ class MainActivity : Activity(), LocationListener {
             lastRecordedPoint = null
             redrawMap()
             stopService(Intent(this, RecordingService::class.java))
+            val points = latestRecording()?.let { RecordedTrack.read(it) } ?: emptyList()
+            val stats = RecordedTrack.summarize(points)
+            val imperial = resources.configuration.locales[0].country.equals("US", ignoreCase = true)
+            val message = if (points.size < 2) {
+                "Your track is saved on this phone. Not enough GPS fixes for trip statistics."
+            } else {
+                "Your track is saved on this phone.\n\n" + RecordedTrack.displaySummary(stats, imperial)
+            }
             android.app.AlertDialog.Builder(this).setTitle("Recording saved")
-                .setMessage("Your track is saved on this phone.")
+                .setMessage(message)
                 .setPositiveButton("Share KML") { _, _ -> latestRecording()?.let { shareRecording(it, false) } }
                 .setNegativeButton("Done", null).show()
             return
