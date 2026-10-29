@@ -27,6 +27,7 @@ android {
 dependencies {
     implementation("androidx.activity:activity-compose:1.12.2")
     implementation("androidx.compose.foundation:foundation-layout:1.12.1")
+    implementation("androidx.compose.foundation:foundation:1.12.1")
     implementation("org.maplibre.compose:maplibre-compose:0.20.0")
     runtimeOnly("org.maplibre.compose:maplibre-compose-runtime-opengl-android:0.20.0")
     androidTestImplementation("androidx.test:runner:1.6.2")
