@@ -176,6 +176,7 @@ class MapMigrationTest {
                 instrumentation.waitForIdleSync()
                 assertEquals("Broken gate", RecordedPins.read(track).single().text)
                 // A following short touch must still create a plain pin.
+                RecordingService.latestGpsFix = gps() // Do not reuse a stale fix after recreation.
                 touch(android.view.MotionEvent.ACTION_DOWN)
                 touch(android.view.MotionEvent.ACTION_UP)
                 instrumentation.waitForIdleSync()
