@@ -12,6 +12,7 @@ kotlin {
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
+            implementation(compose.material)
             implementation(compose.ui)
         }
         commonTest.dependencies { implementation(kotlin("test")) }

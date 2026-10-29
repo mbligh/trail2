@@ -110,3 +110,8 @@ Shared Kotlin algorithms now live in the `shared/` Kotlin Multiplatform module (
 ## Compose migration
 
 The top-level layout and dynamic status header are implemented with shared Compose Multiplatform UI code in `shared/commonMain`. Native Android MapLibre and its controls are embedded through `AndroidView`, preserving existing offline maps, GPS services and map interactions. The project still builds Android only.
+
+
+### Shared header controls
+
+The basemap selector, map attribution/zoom readout, menu actions and Map layers submenu now use shared Compose components and platform-neutral callbacks. Map rendering and the four map corner buttons remain native Android while the migration proceeds incrementally.

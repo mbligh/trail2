@@ -6,10 +6,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.ComposeView
 import net.pocketmap.shared.ui.TrailScreen
+import net.pocketmap.shared.ui.MapChoice
+import net.pocketmap.shared.ui.MapLayerChoice
+import net.pocketmap.shared.ui.TrailMenuAction
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -20,19 +22,18 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.PopupMenu
 import java.util.concurrent.Executors
 import java.io.File
 
 class MainActivity : ComponentActivity(), LocationListener {
     private lateinit var basemaps: List<Basemap>
     private lateinit var selectedBasemap: Basemap
-    private lateinit var basemapButton: android.widget.ImageButton
-    private lateinit var attribution: TextView
-    private lateinit var zoomLevel: TextView
+    private val selectedBasemapName = mutableStateOf("bright")
+    private val zoomLabel = mutableStateOf("")
+    private val layerSelections = mutableStateOf<Set<String>>(emptySet())
+    private val trailsVisibleState = mutableStateOf(true)
     private val statusText = mutableStateOf("Waiting for location…")
     private val trailStatusText = mutableStateOf<String?>("Loading trails…")
     private val recordingStatusText = mutableStateOf<String?>(null)
@@ -93,8 +94,10 @@ class MainActivity : ComponentActivity(), LocationListener {
         val oldChoice = prefs.getString("basemap", "bright")
         val choice = if (!prefs.getBoolean("maplibre_migrated", false) && oldChoice == "openstreetmap") "bright" else oldChoice
         selectedBasemap = basemaps.find { it.name == choice } ?: basemaps.first()
+        selectedBasemapName.value = selectedBasemap.name
         prefs.edit().putBoolean("maplibre_migrated", true).putString("basemap", selectedBasemap.name).apply()
         mapConfig.overlays.filter { prefs.getBoolean("overlay_${it.id}", it.defaultVisible) }.forEach { enabledOverlays.add(it.id) }
+        layerSelections.value = enabledOverlays.toSet()
         map = TrailMap(this, mapConfig, selectedBasemap,
             LatLng(prefs.getFloat("lat", 40.692f).toDouble(), prefs.getFloat("lon", -74.771f).toDouble()),
             prefs.getFloat("zoom", 17f).toDouble(), savedInstanceState?.getBundle("maplibre")).apply {
@@ -105,33 +108,6 @@ class MainActivity : ComponentActivity(), LocationListener {
         }
         val mapFrame = android.widget.FrameLayout(this)
         mapFrame.addView(map, android.widget.FrameLayout.LayoutParams(-1, -1))
-        basemapButton = android.widget.ImageButton(this).apply {
-            contentDescription = "Choose basemap: ${selectedBasemap.name}"
-            setImageResource(R.drawable.basemap_menu)
-            background = android.graphics.drawable.ColorDrawable(Color.WHITE)
-            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-            setOnClickListener { anchor ->
-                PopupMenu(this@MainActivity, anchor).apply {
-                    basemaps.forEachIndexed { index, basemap ->
-                        menu.add(0, index, index, basemap.label).apply {
-                            isCheckable = true
-                            isChecked = basemap.name == selectedBasemap.name
-                        }
-                    }
-                    setOnMenuItemClickListener { item ->
-                        selectedBasemap = basemaps[item.itemId]
-                        map.setBasemap(selectedBasemap)
-                        prefs.edit().putString("basemap", selectedBasemap.name).apply()
-                        basemapButton.contentDescription = "Choose basemap: ${selectedBasemap.name}"
-                        showAttribution()
-                        redrawMap()
-                        true
-                    }
-                    show()
-                }
-            }
-        }
         recordButton = android.widget.ImageButton(this).apply {
             background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.WHITE) }
             elevation = dp(6).toFloat()
@@ -178,105 +154,23 @@ class MainActivity : ComponentActivity(), LocationListener {
             }
         }
         mapFrame.addView(recenter, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.TOP or Gravity.END).apply { setMargins(dp(12), dp(12), dp(12), dp(12)) })
-        val menuButton = Button(this).apply {
-            text = "☰"
-            textSize = 24f
-            minWidth = dp(48)
-            minHeight = dp(48)
-            setPadding(0, 0, 0, 0)
-            contentDescription = "Menu"
-            setOnClickListener { button ->
-                PopupMenu(this@MainActivity, button).apply {
-                    menu.add(0, 1, 0, "Refresh trails")
-                    menu.add(0, 2, 1, "Zoom to trails")
-                    menu.add(0, 3, 2, if (trailsVisible) "Hide trails" else "Show trails")
-                    menu.add(0, 6, 3, "Legend")
-                    menu.add(0, 4, 4, "Share recorded KML…")
-                    menu.add(0, 5, 5, "Share recorded GPX…")
-                    if (mapConfig.overlays.isNotEmpty()) {
-                        val layers = menu.addSubMenu("Map layers")
-                        mapConfig.overlays.forEachIndexed { index, overlay ->
-                            layers.add(0, 100 + index, index, overlay.name).apply {
-                                isCheckable = true; isChecked = overlay.id in enabledOverlays
-                            }
-                        }
-                    }
-                    setOnMenuItemClickListener { item ->
-                        if (item.itemId >= 100) {
-                            val overlay = mapConfig.overlays[item.itemId - 100]
-                            if (!enabledOverlays.add(overlay.id)) enabledOverlays.remove(overlay.id)
-                            prefs.edit().putBoolean("overlay_${overlay.id}", overlay.id in enabledOverlays).apply()
-                            map.setOverlays(enabledOverlays.toSet())
-                            return@setOnMenuItemClickListener true
-                        }
-                        when (item.itemId) {
-                            4 -> chooseRecordedTrack(false)
-                            5 -> chooseRecordedTrack(true)
-                            1 -> refreshTrails()
-                            2 -> trailDocument?.let { document ->
-                                val points = document.features.flatMap { it.points }.map { LatLng(it.latitude, it.longitude) }
-                                following = false
-                                trailsVisible = true
-                                map.setTrailsVisible(true)
-                                map.zoomTo(points, dp(40))
-                                refreshStatus()
-                            }
-                            3 -> { trailsVisible = !trailsVisible; map.setTrailsVisible(trailsVisible); redrawMap() }
-                            6 -> showLegend()
-                        }
-                        true
-                    }
-                    show()
-                }
-            }
-        }
-        attribution = TextView(this).apply {
-            gravity = Gravity.CENTER
-            textSize = 16f
-            includeFontPadding = false
-            setTextColor(Color.DKGRAY)
-            text = "ⓘ"
-            setOnClickListener {
-                val credits = TextView(this@MainActivity).apply {
-                    setPadding(dp(20), dp(16), dp(20), dp(16))
-                    text = android.text.Html.fromHtml(
-                        selectedBasemap.attribution + (selectedBasemap.attributionUrl?.let { "<br><br><a href=\"$it\">Source and licence details</a>" } ?: "") +
-                        if (selectedBasemap.name == "opentopomap") "<br><br><a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap · ODbL</a><br><a href=\"https://creativecommons.org/licenses/by-sa/3.0/\">Map style · CC BY-SA 3.0</a>" else "",
-                        android.text.Html.FROM_HTML_MODE_LEGACY)
-                    movementMethod = android.text.method.LinkMovementMethod.getInstance()
-                }
-                android.app.AlertDialog.Builder(this@MainActivity).setTitle("Map credits").setView(credits).setPositiveButton("Done", null).show()
-            }
-        }
-
-        zoomLevel = TextView(this).apply {
-            gravity = Gravity.CENTER
-            textSize = 12f
-            includeFontPadding = false
-            setTextColor(Color.DKGRAY)
-        }
-        val infoColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            minimumWidth = dp(48)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(12).toFloat()
-            }
-            contentDescription = "Map attribution, licences, and zoom level"
-            setOnClickListener { attribution.performClick() }
-        }
-        infoColumn.addView(attribution, LinearLayout.LayoutParams(dp(48), dp(24)))
-        infoColumn.addView(zoomLevel, LinearLayout.LayoutParams(dp(48), dp(24)))
         // Preserve a single native instance of MapLibre and each control across recompositions.
         root.setContent {
             TrailScreen(
                 status = statusText.value,
                 trailStatus = trailStatusText.value,
                 recordingStatus = recordingStatusText.value,
-                basemap = { AndroidView(factory = { basemapButton }, modifier = Modifier.size(48.dp)) },
-                info = { AndroidView(factory = { infoColumn }, modifier = Modifier.size(48.dp)) },
-                menu = { AndroidView(factory = { menuButton }, modifier = Modifier.size(48.dp)) },
+                basemaps = basemaps.map { MapChoice(it.name, it.label) },
+                selectedBasemap = selectedBasemapName.value,
+                onBasemapSelected = ::selectBasemap,
+                zoomLabel = zoomLabel.value,
+                onMapCredits = ::showMapCredits,
+                trailsVisible = trailsVisibleState.value,
+                mapLayers = mapConfig.overlays.map {
+                    MapLayerChoice(it.id, it.name, it.id in layerSelections.value)
+                },
+                onLayerToggled = ::toggleMapLayer,
+                onMenuAction = ::performMenuAction,
                 map = { AndroidView(factory = { mapFrame }, modifier = Modifier.fillMaxSize()) }
             )
         }
@@ -338,8 +232,67 @@ class MainActivity : ComponentActivity(), LocationListener {
     }
 
     private fun showAttribution() {
-        attribution.text = "ⓘ"
-        zoomLevel.text = formatZoom(map.zoomLevelDouble)
+        zoomLabel.value = formatZoom(map.zoomLevelDouble)
+    }
+
+    private fun selectBasemap(id: String) {
+        val choice = basemaps.find { it.name == id } ?: return
+        if (choice.name == selectedBasemap.name) return
+        selectedBasemap = choice
+        selectedBasemapName.value = choice.name
+        map.setBasemap(choice)
+        prefs.edit().putString("basemap", choice.name).apply()
+        showAttribution()
+        redrawMap()
+    }
+
+    private fun toggleMapLayer(id: String) {
+        val overlay = mapConfig.overlays.find { it.id == id } ?: return
+        if (!enabledOverlays.add(overlay.id)) enabledOverlays.remove(overlay.id)
+        layerSelections.value = enabledOverlays.toSet()
+        prefs.edit().putBoolean("overlay_${overlay.id}", overlay.id in enabledOverlays).apply()
+        map.setOverlays(enabledOverlays.toSet())
+    }
+
+    private fun performMenuAction(action: TrailMenuAction) {
+        when (action) {
+            TrailMenuAction.REFRESH_TRAILS -> refreshTrails()
+            TrailMenuAction.ZOOM_TO_TRAILS -> trailDocument?.let { document ->
+                val points = document.features.flatMap { it.points }.map { LatLng(it.latitude, it.longitude) }
+                following = false
+                trailsVisible = true
+                trailsVisibleState.value = true
+                map.setTrailsVisible(true)
+                map.zoomTo(points, dp(40))
+                refreshStatus()
+            }
+            TrailMenuAction.TOGGLE_TRAILS -> {
+                trailsVisible = !trailsVisible
+                trailsVisibleState.value = trailsVisible
+                map.setTrailsVisible(trailsVisible)
+                redrawMap()
+            }
+            TrailMenuAction.LEGEND -> showLegend()
+            TrailMenuAction.SHARE_KML -> chooseRecordedTrack(false)
+            TrailMenuAction.SHARE_GPX -> chooseRecordedTrack(true)
+        }
+    }
+
+    private fun showMapCredits() {
+        val credits = TextView(this).apply {
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+            text = android.text.Html.fromHtml(
+                selectedBasemap.attribution +
+                    (selectedBasemap.attributionUrl?.let { "<br><br><a href=\"$it\">Source and licence details</a>" } ?: "") +
+                    if (selectedBasemap.name == "opentopomap")
+                        "<br><br><a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap · ODbL</a>" +
+                        "<br><a href=\"https://creativecommons.org/licenses/by-sa/3.0/\">Map style · CC BY-SA 3.0</a>"
+                    else "",
+                android.text.Html.FROM_HTML_MODE_LEGACY)
+            movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
+        android.app.AlertDialog.Builder(this).setTitle("Map credits").setView(credits)
+            .setPositiveButton("Done", null).show()
     }
 
     private fun formatZoom(zoom: Double): String = if (zoom % 1.0 == 0.0) zoom.toInt().toString() else String.format(java.util.Locale.US, "%.1f", zoom)

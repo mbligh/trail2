@@ -206,3 +206,11 @@ screenshots/logs. Update version metadata on app releases and keep this document
 - Android `MainActivity` becomes `ComponentActivity`, installs a root `ComposeView`, and uses observable Compose state for header text. Its existing MapLibre `TrailMap` and native basemap/attribution/menu controls use `AndroidView` slots, so their underlying lifecycle, menus, gestures, track pin long-hold, and map overlays remain unchanged.
 - Preserve existing manual system-bar insets and Android-specific background GPS recorder, camera, offline caches, signing and package identity. No iOS targets or tools are required.
 - Next: migrate native controls to Compose one at a time after native emulator screenshot and interaction regression checks; test MapLibre Compose custom offline resources separately before replacing the renderer.
+
+
+## Compose migration, stage 3: shared header controls
+
+- All header controls (basemap chooser, attribution/zoom readout, and the main menu including the Map layers submenu) are now real Compose Multiplatform UI in `shared/commonMain`. The shared composable exposes platform-independent choices, layer state and menu action callbacks; Android binds them to its existing MapLibre and repository functions.
+- The Compose dropdowns replace Android `PopupMenu`. Selecting basemaps and layers persists to the same existing preferences. Zoom-to-trails forces the same visible-trails state in the Compose header. The Map credits dialog still uses Android's HTML-enabled `AlertDialog` to preserve clickable licence links.
+- The map is still hosted in one `AndroidView`, and all four overlay buttons (including the one-second long-press pin gesture) remain native and unmodified. The existing camera, share, GPS, MapLibre lifecycle and offline caches stay unchanged.
+- Next: move map corner controls to shared Compose one at a time, preserving the hold-before-release gesture; then prototype MapLibre Compose offline resource loading separately before switching renderer. No iOS target or toolchain configured yet.
