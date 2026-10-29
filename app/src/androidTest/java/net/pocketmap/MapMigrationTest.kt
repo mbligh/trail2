@@ -135,8 +135,8 @@ class MapMigrationTest {
         RecordingService.latestGpsFix = gps()
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                // Inject physical pointer events rather than pausing Compose's test clock.
-                // This verifies the real 1,000 ms hold even with emulator frame scheduling.
+                // Dispatch real-time pointer events directly to the Activity decor view.
+                // This verifies the 1,000 ms hold without test-clock timing tricks.
                 val density = context.resources.displayMetrics.density
                 var x = 0f
                 var y = 0f
@@ -146,16 +146,25 @@ class MapMigrationTest {
                         // Trail status may disappear or reappear after Activity recreation.
                         // Recompute the Compose button's position before each new press.
                         instrumentation.waitForIdleSync()
-                        val origin = IntArray(2)
-                        scenario.onActivity { renderer(it).getLocationOnScreen(origin) }
-                        x = origin[0] + (16f + 37f / 2f) * density
-                        y = origin[1] + (16f + 37f / 2f) * density
+                        scenario.onActivity { activity ->
+                            val mapOrigin = IntArray(2)
+                            val decorOrigin = IntArray(2)
+                            renderer(activity).getLocationOnScreen(mapOrigin)
+                            activity.window.decorView.getLocationOnScreen(decorOrigin)
+                            x = mapOrigin[0] - decorOrigin[0] + (16f + 37f / 2f) * density
+                            y = mapOrigin[1] - decorOrigin[1] + (16f + 37f / 2f) * density
+                        }
                         downTime = SystemClock.uptimeMillis()
                     }
                     val event = android.view.MotionEvent.obtain(
                         downTime, SystemClock.uptimeMillis(), action, x, y, 0
                     )
-                    try { instrumentation.sendPointerSync(event) } finally { event.recycle() }
+                    try {
+                        // Target the app's own window, not the globally focused window.
+                        // During hold, an AlertDialog becomes focused while the finger is
+                        // down; global injection can then target another UID/window.
+                        scenario.onActivity { activity -> activity.window.decorView.dispatchTouchEvent(event) }
+                    } finally { event.recycle() }
                 }
                 touch(android.view.MotionEvent.ACTION_DOWN)
                 Thread.sleep(1_200)
