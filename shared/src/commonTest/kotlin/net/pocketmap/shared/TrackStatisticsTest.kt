@@ -17,7 +17,7 @@ class TrackStatisticsTest {
         })
         assertEquals(91.44, stats.ascentMeters, 0.001)
         assertEquals(91.44, stats.descentMeters, 0.001)
-        assertEquals(240, stats.elapsedSeconds)
+        assertEquals(240L, stats.elapsedSeconds)
         assertTrue(stats.distanceMeters > 0.0)
     }
 
@@ -30,7 +30,7 @@ class TrackStatisticsTest {
         ))
         assertEquals(25.0, stats.ascentMeters, 0.001)
         assertEquals(0.0, stats.descentMeters, 0.001)
-        assertEquals(210, stats.elapsedSeconds)
+        assertEquals(210L, stats.elapsedSeconds)
         assertTrue(stats.distanceMeters < 300.0)
     }
 
