@@ -11,6 +11,7 @@ android {
     compileSdk = 37
     defaultConfig {
         applicationId = "net.pocketmap.composeprobe"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -28,8 +29,27 @@ dependencies {
     implementation("androidx.compose.foundation:foundation-layout:1.12.1")
     implementation("org.maplibre.compose:maplibre-compose:0.20.0")
     runtimeOnly("org.maplibre.compose:maplibre-compose-runtime-opengl-android:0.20.0")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
+
+// Generate exactly the same offline resources as the production app,
+// but inside this isolated project's own build folder.
+val rootRepo = rootProject.projectDir.resolve("../..").canonicalFile
+val generatedMaps = layout.buildDirectory.dir("generated/offlineMapAssets")
+val prepareOfflineProbeMaps by tasks.registering(Exec::class) {
+    inputs.files(rootRepo.resolve("offline-maps.json"), rootRepo.resolve("basemaps.json"),
+        rootRepo.resolve("tools/prepare_maps"))
+    outputs.dir(generatedMaps)
+    workingDir = rootRepo
+    commandLine("python3", rootRepo.resolve("tools/prepare_maps").absolutePath,
+        "--output", generatedMaps.get().asFile.absolutePath)
+}
+android.sourceSets.getByName("main").assets.srcDir(generatedMaps)
+tasks.named("preBuild").configure { dependsOn(prepareOfflineProbeMaps) }
+android.androidResources.noCompress += listOf("mbtiles", "pmtiles")

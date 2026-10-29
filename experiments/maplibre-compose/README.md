@@ -12,3 +12,11 @@ Build from the repository root with Gradle 9.4.1: `gradle -p experiments/maplibr
 - A successful build proves API compatibility with the experiment's toolchain, **not** the render runtime, offline-cache correctness, or iOS compatibility.
 - Separately, Trail2's production `TileRepository.loadOfflineResource` provides bytes from real bundled MBTiles and persistent caches. The native emulator test verifies that bridge.
 - Next connect the MapLibre Compose provider to that adapter and test actual Tewksbury vector tiles, sprites/glyphs, source/layer ordering, PMTiles ranges, and style switches, then add emulator rendering tests. Do not replace the production map until those work offline.
+
+## Real Tewksbury offline prototype
+
+The experiment's `preBuild` now invokes the same `tools/prepare_maps` source as production and bundles **real Tewksbury MBTiles** for OpenFreeMap vector streets and Natural Earth raster, along with the actual Bright style, fonts and sprites. `OfflineProbeResources` reads SQLite's TMS tile rows, inflates gzipped vector tiles, and serves real data through `MapResourceProvider`. No `INTERNET` permission is requested.
+
+The test screen opens near Oldwick at zoom 12.5 using Bright; tapping the top banner switches to the bundled Natural Earth style. Both styles are offline-only. An Android instrumentation test verifies real z0 tile data, confirms offline-only routing and waits for map-engine style/tile requests. CI starts an Android 35 emulator with Wi-Fi and mobile data disabled, runs the test, and attempts to collect a screenshot.
+
+This deliberately uses an isolated read-only adapter over the same generated assets, not Trail2's production mutable tile cache. It does **not** yet demonstrate PMTiles range interception, contours, satellite raster, shared persistent cache updates, or iOS rendering. The production app remains unchanged.

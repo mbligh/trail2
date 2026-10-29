@@ -247,3 +247,9 @@ screenshots/logs. Update version metadata on app releases and keep this document
 - `experiments/maplibre-compose/` is a standalone Android project pinned to MapLibre Compose 0.20.0, Kotlin 2.4.20, and a separate test application ID. It does not participate in the normal Trail2 APK/AAB/Play releases or alter the root Gradle graph.
 - Its `MapResourceProvider` serves a synthetic offline raster style and tile without network requests, to compile/probe the current MapLibre Compose runtime API. A separate Actions workflow builds the experimental APK; successful compilation alone does not validate renderer functionality.
 - Real offline Tewksbury MBTiles data remains available via the separately tested production `TileRepository.loadOfflineResource` bridge. After the probe builds, connect the two and test genuine vector styling/fonts/PMTiles and emulator rendering before switching production.
+
+## Stage 5b: real offline MapLibre Compose rendering
+
+- Isolated Compose probe now bundles exactly the production-generated Bright style, sprite/fonts, OpenMapTiles Tewksbury MBTiles vector tiles, and Natural Earth MBTiles raster. Its read-only Android `OfflineProbeResources` serves the actual data through MapLibre Compose's `MapResourceProvider` without network access.
+- The separate instrumentation workflow launches an Android emulator offline, checks vector/raster archive bytes and verifies renderer-initiated style/vector resource loads. The probe UI switches between bundled Bright and Natural Earth.
+- This does not alter Trail2's production SDK, source sets, Play distribution, GPS recorder, user files, or offline runtime caches. PMTiles support/contours, online fallback/caching and iOS remain future parity checks.

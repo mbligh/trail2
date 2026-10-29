@@ -1,67 +1,75 @@
 package net.pocketmap.composeprobe
 
-import android.graphics.Bitmap
-import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.map.DefaultMapRuntime
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.resource.MapResourceLoad
 import org.maplibre.compose.resource.MapResourceProvider
 import org.maplibre.compose.style.BaseStyle
-import java.io.ByteArrayOutputStream
+import org.maplibre.spatialk.geojson.Position
 
 /**
- * Isolated toolchain/API probe. Nothing here is referenced by the real Trail2 app.
- * Uses a synthetic offline raster; production tiles will come from TileRepository.
+ * Not a Trail2 release: a real, bundled, entirely offline MapLibre Compose
+ * rendering experiment using the same Tewksbury MBTiles/bright style/fonts.
  */
 class ProbeActivity : ComponentActivity() {
+    private lateinit var assets: OfflineProbeResources
+    private var selected by mutableStateOf("bright")
+
+    internal val offlineResources get() = assets
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        assets = OfflineProbeResources(applicationContext)
         val provider = MapResourceProvider(
-            accepts = { it.url.startsWith("https://trail.tiles.invalid/") },
+            accepts = { assets.accepts(it.url) },
             load = { request ->
-                when {
-                    request.url == "https://trail.tiles.invalid/style.json" ->
-                        MapResourceLoad.Bytes(STYLE.encodeToByteArray())
-                    request.url.matches(Regex("https://trail\\.tiles\\.invalid/tiles/[0-9]+/[0-9]+/[0-9]+\\.png")) ->
-                        MapResourceLoad.Bytes(createTile())
-                    else -> MapResourceLoad.NoContent()
-                }
+                val data = assets.load(request.url)
+                if (data == null) MapResourceLoad.NoContent()
+                else MapResourceLoad.Bytes(data)
             }
         )
         DefaultMapRuntime.configure { resourceProvider = provider }
         setContent {
             val state = rememberMapState(
-                baseStyle = BaseStyle.Uri("https://trail.tiles.invalid/style.json")
+                baseStyle = BaseStyle.Uri(OfflineProbeResources.HOST + "style-$selected.json"),
+                initialCameraPosition = CameraPosition(
+                    center = Position(latitude = 40.692, longitude = -74.771),
+                    zoom = 12.5
+                )
             )
-            MaplibreMap(state = state, modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize()) {
+                MaplibreMap(state = state, modifier = Modifier.fillMaxSize())
+                BasicText(
+                    if (selected == "bright") "Bright (offline) • tap for Natural Earth"
+                    else "Natural Earth (offline) • tap for Bright",
+                    modifier = Modifier.align(Alignment.TopCenter)
+                        .clickable { selected = if (selected == "bright") "earth" else "bright" }
+                        .padding(12.dp)
+                )
+            }
         }
     }
 
-    private fun createTile(): ByteArray {
-        val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
-        return try {
-            bitmap.eraseColor(Color.rgb(195, 224, 201))
-            ByteArrayOutputStream().use { output ->
-                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                output.toByteArray()
-            }
-        } finally { bitmap.recycle() }
-    }
-
-    companion object {
-        private val STYLE = """
-            {
-              "version":8,
-              "sources":{"offline":{"type":"raster","tiles":["https://trail.tiles.invalid/tiles/{z}/{x}/{y}.png"],
-                "tileSize":256,"minzoom":0,"maxzoom":2}},
-              "layers":[{"id":"offline-raster","type":"raster","source":"offline"}]
-            }
-        """.trimIndent()
+    override fun onDestroy() {
+        super.onDestroy()
+        // Map rendering closes before the activity is destroyed; keep databases
+        // alive for in-flight callbacks until this point.
+        assets.close()
     }
 }
