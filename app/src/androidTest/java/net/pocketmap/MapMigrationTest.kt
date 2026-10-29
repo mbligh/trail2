@@ -200,6 +200,46 @@ class MapMigrationTest {
         }
     }
 
+    @Test fun composeOfflineBridgeReadsExistingMbtilesWithoutNetwork() {
+        // Use the exact bundled MBTiles seed instead of synthetic mock tiles.
+        val copied = java.io.File(context.cacheDir, "bridge-seed-${System.nanoTime()}.mbtiles")
+        try {
+            context.assets.open("maps/tewksbury-streets.mbtiles").use { source ->
+                copied.outputStream().use(source::copyTo)
+            }
+            val database = android.database.sqlite.SQLiteDatabase.openDatabase(
+                copied.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
+            val coords = database.rawQuery(
+                "SELECT zoom_level,tile_column,tile_row,tile_data FROM tiles LIMIT 1", null).use { rows ->
+                assertTrue("Bundled Tewksbury archive must contain tiles", rows.moveToFirst())
+                val z = rows.getInt(0)
+                val x = rows.getInt(1)
+                val tms = rows.getLong(2)
+                Triple(z, x, ((1L shl z) - 1L - tms).toInt())
+            }
+            database.close()
+            TileRepository(context).use { repository ->
+                val source = repository.styleSource(
+                    "offline-bridge-test",
+                    JSONObject("""{"type":"vector","archive":"maps/tewksbury-streets.mbtiles"}""")
+                )
+                val template = source.getJSONArray("tiles").getString(0)
+                val url = template.replace("{z}", coords.first.toString())
+                    .replace("{x}", coords.second.toString())
+                    .replace("{y}", coords.third.toString())
+                assertTrue(repository.acceptsOfflineResource(url))
+                val bytes = repository.loadOfflineResource(url)
+                assertNotNull("Provider should read bundled bytes without network", bytes)
+                assertTrue(bytes!!.isNotEmpty())
+                // An unknown route is a cache miss, not an implicit network request.
+                assertNull(repository.loadOfflineResource("https://trail.tiles.invalid/absent/0/0/0"))
+                assertFalse(repository.acceptsOfflineResource("https://tile.openstreetmap.org/0/0/0.png"))
+                assertNull(repository.loadOfflineResource("https://tile.openstreetmap.org/0/0/0.png"))
+                assertNull(repository.loadOfflineResource("https://trail.tiles.invalid/invalid/99/0/0"))
+            }
+        } finally { copied.delete() }
+    }
+
     @Test fun offlineOnlyArchiveKeepsZoomLimitsAcrossSwitches() {
         TileRepository(context).use { repo ->
             val definition = JSONObject("""{"type":"vector","archive":"maps/tewksbury-streets.mbtiles"}""")

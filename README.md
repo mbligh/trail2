@@ -119,3 +119,7 @@ The basemap selector, map attribution/zoom readout, menu actions and Map layers 
 ### Updating an installed Trail 2
 
 The [GitHub Pages APK](https://mbligh.github.io/trail2/Trail2.apk) is signed using the stable development signing certificate and now gets a nondecreasing version code from the commit timestamp. It can update previous downloads from the same page. Google Play signs distributed apps with a different certificate, so the APK **cannot** update a Trail 2 installation obtained from Play; update that installation through Play Store. Do not uninstall without first exporting saved recordings/pins, as uninstalling erases the app's private files.
+
+### MapLibre Compose feasibility
+
+Before switching renderers, the Android `TileRepository` now exposes a blocking, offline-only resource reader intended for a future MapLibre Compose `MapResourceProvider`. It reuses the existing bundled glyph/tiles and persistent MBTiles caches, and deliberately does not fall back to the network for missing offline resources. The production MapLibre renderer and release configuration remain unchanged. See `project.md` for the staged experiment and remaining PMTiles/renderer questions.

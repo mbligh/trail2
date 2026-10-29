@@ -6,6 +6,7 @@ import android.util.Log
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -98,6 +99,42 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         }
         source.remove("archive"); source.remove("cacheVersion"); source.remove("cacheIdentity"); source.remove("vector_layers")
         return source
+    }
+
+    /**
+     * Offline resource bridge for a future MapLibre Compose MapResourceProvider.
+     *
+     * The provider should accept only URLs returned by [acceptsOfflineResource],
+     * then return the bytes (or NoContent for null). Deliberately does not use
+     * OkHttp's remote fallback: a missing tile must not silently use the network.
+     * Invoke from a background dispatcher; SQLite and asset reads are blocking.
+     *
+     * Style sources must first be installed through [styleSource], which gives
+     * each tile archive its cache-isolated synthetic URL.
+     */
+    fun acceptsOfflineResource(url: String): Boolean =
+        url.startsWith("https://trail.tiles.invalid/") ||
+            resources.optString(url).isNotBlank()
+
+    fun loadOfflineResource(url: String): ByteArray? {
+        if (closed || !acceptsOfflineResource(url)) return null
+        resources.optString(url).takeIf { it.isNotBlank() }?.let { asset ->
+            return context.assets.open(asset).use { it.readBytes() }
+        }
+        val parsed = url.toHttpUrlOrNull() ?: return null
+        if (parsed.host != "trail.tiles.invalid") return null
+        val parts = parsed.pathSegments
+        if (parts.size != 5 || parts[0].isNotEmpty()) return null
+        val store = synchronized(this) { stores[parts[1]] } ?: return null
+        val z = parts[2].toIntOrNull() ?: return null
+        val x = parts[3].toIntOrNull() ?: return null
+        val y = parts[4].toIntOrNull() ?: return null
+        if (z !in 0..30 || x < 0 || y < 0 ||
+            x.toLong() >= (1L shl z) || y.toLong() >= (1L shl z)) return null
+        val seed = synchronized(this) {
+            if (closed) null else store.seed?.let { MbTilesCache.read(it, z, x, y) }
+        }
+        return (seed ?: store.cache.get(z, x, y))?.let(::uncompressed)
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
