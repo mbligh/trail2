@@ -50,6 +50,8 @@ val prepareOfflineProbeMaps by tasks.registering(Exec::class) {
     commandLine("python3", rootRepo.resolve("tools/prepare_maps").absolutePath,
         "--output", generatedMaps.get().asFile.absolutePath)
 }
-android.sourceSets.getByName("main").assets.srcDir(generatedMaps)
+android.sourceSets.getByName("main").assets.srcDir(generatedMaps.get().asFile)
 tasks.named("preBuild").configure { dependsOn(prepareOfflineProbeMaps) }
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach { dependsOn(prepareOfflineProbeMaps) }
 android.androidResources.noCompress += listOf("mbtiles", "pmtiles")
