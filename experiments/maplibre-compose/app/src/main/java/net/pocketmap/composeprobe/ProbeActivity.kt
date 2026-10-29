@@ -28,18 +28,18 @@ import org.maplibre.spatialk.geojson.Position
  * rendering experiment using the same Tewksbury MBTiles/bright style/fonts.
  */
 class ProbeActivity : ComponentActivity() {
-    private lateinit var assets: OfflineProbeResources
+    private lateinit var offline: OfflineProbeResources
     private var selected by mutableStateOf("bright")
 
-    internal val offlineResources get() = assets
+    internal val offlineResources get() = offline
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        assets = OfflineProbeResources(applicationContext)
+        offline = OfflineProbeResources(applicationContext)
         val provider = MapResourceProvider(
-            accepts = { assets.accepts(it.url) },
+            accepts = { offline.accepts(it.url) },
             load = { request ->
-                val data = assets.load(request.url)
+                val data = offline.load(request.url)
                 if (data == null) MapResourceLoad.NoContent()
                 else MapResourceLoad.Bytes(data)
             }
@@ -70,6 +70,6 @@ class ProbeActivity : ComponentActivity() {
         super.onDestroy()
         // Map rendering closes before the activity is destroyed; keep databases
         // alive for in-flight callbacks until this point.
-        assets.close()
+        offline.close()
     }
 }
