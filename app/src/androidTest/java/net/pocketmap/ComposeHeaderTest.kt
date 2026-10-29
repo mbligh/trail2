@@ -7,15 +7,22 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
+import androidx.test.rule.GrantPermissionRule
 import org.junit.Test
 
 /** Exercise the shared Compose header while MapLibre remains a native view. */
 class ComposeHeaderTest {
-    @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+    @get:Rule(order = 0) val permissions = GrantPermissionRule.grant(
+        android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        android.Manifest.permission.ACCESS_FINE_LOCATION,
+        android.Manifest.permission.POST_NOTIFICATIONS
+    )
+    @get:Rule(order = 1) val rule = createAndroidComposeRule<MainActivity>()
 
     @Test fun basemapSelectionAndLayerMenuPersistInExistingPreferences() {
         val prefs = rule.activity.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
-        val originallyEnabled = prefs.getBoolean("overlay_contours", true)
+        val fallback = MapConfiguration(rule.activity).overlays.first { it.id == "contours" }.defaultVisible
+        val originallyEnabled = prefs.getBoolean("overlay_contours", fallback)
 
         rule.onNodeWithTag("basemap-control").performClick()
         rule.onNodeWithTag("basemap-hybrid").performClick()
