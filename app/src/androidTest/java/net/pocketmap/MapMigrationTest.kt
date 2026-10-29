@@ -169,6 +169,8 @@ class MapMigrationTest {
                     RecordingService.latestGpsFix = fix(40.691) // Walking while typing must not move the pin.
                     dialog(activity)!!.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
                 }
+                // AlertDialog posts its button callback to the UI queue after performClick returns.
+                instrumentation.waitForIdleSync()
                 val pin = RecordedPins.read(track).single()
                 assertEquals(text, pin.text)
                 assertEquals(40.69, pin.latitude, 0.000001)
@@ -186,6 +188,9 @@ class MapMigrationTest {
                     touch(button(activity), android.view.MotionEvent.ACTION_UP)
                     dialog(activity)!!.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
                     assertEquals(1, RecordedPins.read(track).size)
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
                     touch(button(activity), android.view.MotionEvent.ACTION_DOWN)
                     touch(button(activity), android.view.MotionEvent.ACTION_UP)
                     assertEquals(2, RecordedPins.read(track).size)
