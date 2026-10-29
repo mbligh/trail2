@@ -163,7 +163,7 @@ object RecordedTrack {
         append("<trail:movingSeconds>${stats.movingSeconds}</trail:movingSeconds>")
         append("<trail:ascentMeters>${stats.ascentMeters}</trail:ascentMeters>")
         append("<trail:descentMeters>${stats.descentMeters}</trail:descentMeters>")
-        append("</extensions><trkseg>\\n")
+        append("</extensions><trkseg>\n")
         points.forEachIndexed { index, p ->
             if (index > 0 && p.time - points[index - 1].time > 90_000) append("</trkseg><trkseg>\n")
             append("<trkpt lat=\"${p.latitude}\" lon=\"${p.longitude}\">")
