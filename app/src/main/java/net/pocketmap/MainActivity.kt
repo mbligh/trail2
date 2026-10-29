@@ -3,6 +3,10 @@ package net.pocketmap
 import android.Manifest
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
@@ -163,6 +167,13 @@ class MainActivity : ComponentActivity(), LocationListener {
                 basemaps = basemaps.map { MapChoice(it.name, it.label) },
                 selectedBasemap = selectedBasemapName.value,
                 onBasemapSelected = ::selectBasemap,
+                basemapIcon = {
+                    Image(
+                        painter = painterResource(R.drawable.basemap_menu),
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp).testTag("basemap-artwork")
+                    )
+                },
                 zoomLabel = zoomLabel.value,
                 onMapCredits = ::showMapCredits,
                 trailsVisible = trailsVisibleState.value,

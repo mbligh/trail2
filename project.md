@@ -214,3 +214,8 @@ screenshots/logs. Update version metadata on app releases and keep this document
 - The Compose dropdowns replace Android `PopupMenu`. Selecting basemaps and layers persists to the same existing preferences. Zoom-to-trails forces the same visible-trails state in the Compose header. The Map credits dialog still uses Android's HTML-enabled `AlertDialog` to preserve clickable licence links.
 - The map is still hosted in one `AndroidView`, and all four overlay buttons (including the one-second long-press pin gesture) remain native and unmodified. The existing camera, share, GPS, MapLibre lifecycle and offline caches stay unchanged.
 - Android instrumentation now verifies shared Compose basemap selection, layer persistence, submenu re-selection, and trail visibility labels. Next: move map corner controls to shared Compose one at a time, preserving the hold-before-release gesture; then prototype MapLibre Compose offline resource loading separately before switching renderer. No iOS target or toolchain configured yet.
+
+## Compose basemap icon parity
+
+- Keep the original `app/src/main/res/drawable/basemap_menu.xml` folded-map/location-pin artwork after converting the basemap selector to Compose. The Android host supplies the drawable as a 40 dp Compose `Image` inside the shared 48 dp control via a platform-agnostic composable slot.
+- Do not replace existing artwork with placeholder Compose Canvas drawings during migration. An eventual iOS host can supply an equivalent vector asset without changing the shared selector or menu behavior.

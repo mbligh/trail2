@@ -1,6 +1,5 @@
 package net.pocketmap.shared.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -22,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,6 +45,7 @@ fun TrailScreen(
     basemaps: List<MapChoice>,
     selectedBasemap: String,
     onBasemapSelected: (String) -> Unit,
+    basemapIcon: @Composable () -> Unit,
     zoomLabel: String,
     onMapCredits: () -> Unit,
     trailsVisible: Boolean,
@@ -57,7 +56,7 @@ fun TrailScreen(
 ) {
     Column(Modifier.fillMaxSize().background(Color.White)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            BasemapControl(basemaps, selectedBasemap, onBasemapSelected)
+            BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon)
             Column(Modifier.weight(1f)) {
                 BasicText(status,
                     Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
@@ -91,7 +90,8 @@ fun TrailScreen(
 private fun BasemapControl(
     basemaps: List<MapChoice>,
     selected: String,
-    onSelected: (String) -> Unit
+    onSelected: (String) -> Unit,
+    icon: @Composable () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -101,17 +101,9 @@ private fun BasemapControl(
                 .testTag("basemap-control"),
             contentAlignment = Alignment.Center
         ) {
-            // A small vector map/layer symbol avoids Android-specific drawable resources.
-            Canvas(Modifier.size(30.dp)) {
-                val w = size.width
-                val h = size.height
-                drawRect(Color(0xff84b4dc), topLeft = Offset(w * 0.12f, h * 0.14f),
-                    size = androidx.compose.ui.geometry.Size(w * 0.76f, h * 0.70f))
-                drawLine(Color.White, Offset(w * 0.38f, h * 0.15f), Offset(w * 0.38f, h * 0.82f), 2f)
-                drawLine(Color.White, Offset(w * 0.64f, h * 0.15f), Offset(w * 0.64f, h * 0.82f), 2f)
-                drawLine(Color(0xff39874c), Offset(w * 0.18f, h * 0.55f),
-                    Offset(w * 0.80f, h * 0.30f), 3f)
-            }
+            // The host supplies its original artwork (Android: R.drawable.basemap_menu).
+            // The shared control owns the hit target and dropdown, not its artwork.
+            icon()
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             basemaps.forEach { choice ->

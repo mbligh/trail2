@@ -23,6 +23,8 @@ class ComposeHeaderTest {
         val fallback = MapConfiguration(rule.activity).overlays.first { it.id == "contours" }.defaultVisible
         val originallyEnabled = prefs.getBoolean("overlay_contours", fallback)
 
+        // Keep the original basemap_menu.xml icon instead of the temporary Compose sketch.
+        rule.onNodeWithTag("basemap-artwork", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("basemap-control").performClick()
         rule.onNodeWithTag("basemap-hybrid").performClick()
         rule.runOnIdle { assertEquals("hybrid", prefs.getString("basemap", "")) }
