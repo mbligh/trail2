@@ -102,3 +102,7 @@ private signing secrets and automatic internal-track upload when
 Signing secrets are never stored in Git. Failed builds retain the previous download.
 
 See [`project.md`](project.md) for requirements and architecture.
+
+## Cross-platform preparation
+
+Shared Kotlin algorithms now live in the `shared/` Kotlin Multiplatform module (Android/JVM targets, no iOS target yet). The Android app still uses the original native Activity, MapLibre renderer, GPS foreground service, and offline map archives. Run `./gradlew :shared:jvmTest testDebugUnitTest` for portable plus Android regression tests. See `project.md` for the staged Compose/iOS plan.

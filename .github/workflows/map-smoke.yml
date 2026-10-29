@@ -2,7 +2,7 @@ name: MapLibre native smoke tests
 on:
   push:
     branches: [main, codex/maplibre-migration]
-    paths: ['app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', '.github/workflows/map-smoke.yml']
+    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', '.github/workflows/map-smoke.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
       - name: Build and verify
         run: |
           sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
-          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+          ./gradlew --no-daemon :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
           python tools/test_offline_maps
       - name: Install emulator
         run: |

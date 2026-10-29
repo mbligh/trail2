@@ -190,3 +190,12 @@ ENABLE_TRAIL2_PLAY_UPLOAD=true and separate app setup. Never commit credentials.
 Failures must not replace the last successful distribution. Native emulator smoke tests
 exercise offline rendering/style changes, cache persistence and GPS selection, saving
 screenshots/logs. Update version metadata on app releases and keep this document current.
+
+## Cross-platform migration (stage 1: Android remains the only app target)
+
+- Introduce `shared/` as a Kotlin Multiplatform module with Android and JVM targets, no iOS toolchain or Apple account required. The Android app depends on this module directly.
+- `TrackStatistics` in `commonMain` owns the existing GPS-fix distance, movement, ascent/descent and gap logic. `RecordedTrack.Point` implements its platform-neutral `Sample` contract; `RecordedTrack.Summary` and existing GPX/KML/UI API remain unchanged for compatibility.
+- `HeadingMath` is now `commonMain` and has no JVM-only math calls. Platform-specific sensors, recording service, storage, map SDK, camera and sharing remain Android-only.
+- The Linux JVM test target checks portable calculations, and Android tests still exercise integration and exports. CI runs both.
+- Next: migrate UI gradually to Compose Multiplatform, initially embedding the existing Android MapLibre view; independently prototype MapLibre Compose offline resource provisioning **before** changing `TileRepository` or the known-good renderer. Only then add an iOS target and Core Location adapter.
+- Preserve locked-screen GPS accuracy, offline Tewksbury maps, Android package/signing/updates, and the existing Play/APK publishing pipelines at every stage. No Android UI or behavior change is intended in this stage.

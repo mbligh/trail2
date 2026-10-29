@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'shared/**'
       - 'basemaps.json'
       - 'offline-maps.json'
       - 'maps/**'
@@ -20,6 +21,7 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'shared/**'
       - 'basemaps.json'
       - 'offline-maps.json'
       - 'maps/**'
@@ -70,7 +72,7 @@ jobs:
       - name: Validate offline tile selection
         run: python tools/test_offline_maps
       - name: Test, lint, and build APK
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+        run: ./gradlew --no-daemon :shared:jvmTest testDebugUnitTest lintDebug assembleDebug
       - name: Verify complete bundled offline coverage
         run: python tools/test_offline_maps
       - name: Prepare download site

@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'shared/**'
       - 'basemaps.json'
       - 'offline-maps.json'
       - 'maps/**'
@@ -91,7 +92,7 @@ jobs:
       - name: Validate offline tile selection
         run: python tools/test_offline_maps
       - name: Test, lint, and build release bundle
-        run: ./gradlew --no-daemon testReleaseUnitTest lintRelease bundleRelease
+        run: ./gradlew --no-daemon :shared:jvmTest testReleaseUnitTest lintRelease bundleRelease
       - name: Verify complete bundled offline coverage
         run: python tools/test_offline_maps
       - name: Verify bundle signature
