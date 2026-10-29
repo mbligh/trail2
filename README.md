@@ -49,6 +49,9 @@ Recording uses the existing **GPS-only location foreground service**, requesting
 fixes every five seconds and saving approximately every 30 seconds. Its recent
 accuracy filtering is unchanged, including while the screen is locked. Pins prefer
 the recorder's recent GPS fix and warn before saving a poor/unknown/network fix.
+Tap the top-left blue pin to save a pin, or hold it for one second to open a text
+dialog without releasing. Save attaches the text to that location; Cancel saves
+nothing. Tap the saved pin to read it. Text is retained offline and in KML/GPX exports.
 
 Starting a recording requires precise location and enabled GPS. Recording continues
 while the map is paused or the screen is locked; its notification offers Stop.

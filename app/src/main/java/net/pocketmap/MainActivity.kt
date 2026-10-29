@@ -40,6 +40,10 @@ class MainActivity : Activity(), LocationListener {
     private var trailsVisible = true
     private lateinit var recordButton: android.widget.ImageButton
     private lateinit var recordStatus: TextView
+    private lateinit var pinGesture: PinHoldGesture
+    private var pinDraft: Bundle? = null
+    private var pinEditor: android.widget.EditText? = null
+    private var pinDialog: android.app.AlertDialog? = null
     private var lastRecordedPoint: RecordedTrack.Point? = null
     private val recordingHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var displayedTrack = ""
@@ -155,7 +159,7 @@ class MainActivity : Activity(), LocationListener {
         }
         mapFrame.addView(flagButton, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(16), dp(16), dp(16), dp(16)) })
         val pinButton = android.widget.ImageButton(this).apply {
-            contentDescription = "Add pin to recorded track"
+            contentDescription = "Add pin to recorded track; hold for one second to add text"
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
                 setColor(Color.WHITE)
@@ -165,6 +169,7 @@ class MainActivity : Activity(), LocationListener {
             setImageResource(R.drawable.ic_track_pin)
             setOnClickListener { addRecordingPin() }
         }
+        pinGesture = PinHoldGesture(pinButton) { addRecordingPin(withText = true) }
         mapFrame.addView(pinButton, android.widget.FrameLayout.LayoutParams(dp(37), dp(37), Gravity.TOP or Gravity.START).apply {
             setMargins(dp(16), dp(16), dp(16), dp(16))
         })
@@ -300,6 +305,7 @@ class MainActivity : Activity(), LocationListener {
             cameraPhoto = it.getString("cameraPhoto")
         }
         if (reportText != null && cameraPhoto == null) showReport()
+        savedInstanceState?.getBundle("pinDraft")?.let { showPinText(it) }
     }
 
     private fun showLegend() {
@@ -455,6 +461,10 @@ class MainActivity : Activity(), LocationListener {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        pinDraft?.let { draft ->
+            draft.putString("text", pinEditor?.text?.toString().orEmpty())
+            outState.putBundle("pinDraft", draft)
+        }
         reportEditor?.let { reportText = it.text.toString() }
         outState.putString("reportText", reportText)
         outState.putInt("reportAccuracy", reportAccuracy)
@@ -533,7 +543,8 @@ class MainActivity : Activity(), LocationListener {
             startActivity(Intent.createChooser(intent, if (gpx) "Share GPX track" else "Share KML track"))
         } catch (_: Exception) { android.widget.Toast.makeText(this, "Could not share this track", android.widget.Toast.LENGTH_LONG).show() }
     }
-    private fun addRecordingPin() {
+    private fun addRecordingPin(withText: Boolean = false) {
+        if (pinDialog?.isShowing == true) return
         if (!RecordingService.running) {
             android.widget.Toast.makeText(this, "Start recording before adding a pin", android.widget.Toast.LENGTH_SHORT).show()
             return
@@ -547,27 +558,65 @@ class MainActivity : Activity(), LocationListener {
             android.widget.Toast.makeText(this, "Waiting for a recent location fix", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        if (gps == null || !fix.hasAccuracy() || fix.accuracy > 25f) {
-            val source = if (gps == null) "No recent GPS fix; using ${fix.provider ?: "unknown"}" else "GPS accuracy is poor"
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Low-accuracy pin")
-                .setMessage("$source (±${if (fix.hasAccuracy()) "${fix.accuracy.toInt()} m" else "unknown"}). Save anyway?")
-                .setNegativeButton("Wait", null)
-                .setPositiveButton("Save anyway") { _, _ -> saveRecordingPin(fix) }
-                .show()
-            return
-        }
-        saveRecordingPin(fix)
-    }
-
-    private fun saveRecordingPin(fix: Location) {
         val file = latestRecording()
         if (file == null) {
             android.widget.Toast.makeText(this, "Recording file is not ready yet", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+        val warning = if (gps == null || !fix.hasAccuracy() || fix.accuracy > 25f) {
+            val source = if (gps == null) "No recent GPS fix; using ${fix.provider ?: "unknown"}" else "GPS accuracy is poor"
+            "$source (±${if (fix.hasAccuracy()) "${fix.accuracy.toInt()} m" else "unknown"})."
+        } else null
+        if (withText) {
+            showPinText(Bundle().apply {
+                putString("track", file.name)
+                putParcelable("fix", fix)
+                putString("warning", warning)
+            })
+        } else if (warning != null) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Low-accuracy pin")
+                .setMessage("$warning Save anyway?")
+                .setNegativeButton("Wait", null)
+                .setPositiveButton("Save anyway") { _, _ -> saveRecordingPin(file, fix) }
+                .show()
+        } else saveRecordingPin(file, fix)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showPinText(draft: Bundle) {
+        val trackName = draft.getString("track") ?: return
+        val fix = draft.getParcelable<Location>("fix") ?: return
+        val file = File(File(filesDir, "recordings"), File(trackName).name)
+        if (!file.exists() || pinDialog?.isShowing == true) return
+        pinDraft = draft
+        val editor = android.widget.EditText(this).apply {
+            hint = "Text for this pin"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 3; maxLines = 8; gravity = Gravity.TOP
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            setText(draft.getString("text", ""))
+            setSelection(text.length)
+        }
+        pinEditor = editor
+        val warning = draft.getString("warning")
+        pinDialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Pin text")
+            .setMessage(warning?.let { "$it Save this location anyway?" })
+            .setView(editor)
+            .setPositiveButton(if (warning == null) "Save pin" else "Save anyway") { _, _ -> saveRecordingPin(file, fix, editor.text.toString().trim()) }
+            .setNegativeButton("Cancel", null)
+            .create().apply {
+                setOnDismissListener { pinDraft = null; pinEditor = null; pinDialog = null }
+                window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+                editor.requestFocus()
+                show()
+            }
+    }
+
+    private fun saveRecordingPin(file: File, fix: Location, text: String = "") {
         try {
-            RecordedPins.append(file, fix)
+            RecordedPins.append(file, fix, text)
             // Force the recording overlay to be rebuilt so the new pin appears immediately.
             displayedLength = -1L
             updateRecording()
@@ -719,6 +768,7 @@ class MainActivity : Activity(), LocationListener {
     override fun onLowMemory() { super.onLowMemory(); map.onLowMemory() }
     override fun onResume() { super.onResume(); active = true; phoneHeading.start(); map.onResume(); startLocation(); recordingHandler.removeCallbacks(recordingTick); recordingHandler.post(recordingTick) }
     override fun onPause() {
+        pinGesture.cancel()
         recentLocations.clear()
         active = false
         phoneHeading.stop()
@@ -728,5 +778,5 @@ class MainActivity : Activity(), LocationListener {
         map.onPause()
         super.onPause()
     }
-    override fun onDestroy() { destroyed = true; trailExecutor.shutdownNow(); map.onDestroy(); super.onDestroy() }
+    override fun onDestroy() { destroyed = true; pinDialog?.dismiss(); trailExecutor.shutdownNow(); map.onDestroy(); super.onDestroy() }
 }

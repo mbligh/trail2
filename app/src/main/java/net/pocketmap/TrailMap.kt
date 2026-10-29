@@ -121,7 +121,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         addTrailImages(style)
         style.getSourceAs<GeoJsonSource>("trail-features")?.setGeoJson(trailData())
         style.getSourceAs<GeoJsonSource>("trail-track")?.setGeoJson(recordingData())
-        style.getSourceAs<GeoJsonSource>("trail-pins")?.setGeoJson(collection(pins.map { pin -> feature("Point", JSONArray().put(pin.longitude).put(pin.latitude), JSONObject().put("name", "Pin")) }).toString())
+        style.getSourceAs<GeoJsonSource>("trail-pins")?.setGeoJson(collection(pins.map { pin -> feature("Point", JSONArray().put(pin.longitude).put(pin.latitude), JSONObject().put("name", if (pin.text.isBlank()) "Pin" else "Pin\n${pin.text}")) }).toString())
     }
     private fun trailData(): String {
         val features = if (!trailsVisible) emptyList() else trails?.features?.map { f ->
@@ -205,7 +205,12 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
                 val hit = map.queryRenderedFeatures(RectF(pixel.x-radius, pixel.y-radius, pixel.x+radius, pixel.y+radius), "trail-points", "trail-lines", "trail-polygon-outline", "trail-polygon-fill", "trail-recording-pins", "trail-recording").firstOrNull()
                 val name = hit?.getStringProperty("name")
                 if (!name.isNullOrBlank()) {
-                    val label = TextView(context).apply { text = name; setTextColor(Color.BLACK); setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE) }
+                    val label = TextView(context).apply {
+                        text = name; maxWidth = dp(280); maxLines = 12
+                        movementMethod = android.text.method.ScrollingMovementMethod()
+                        isVerticalScrollBarEnabled = true
+                        setTextColor(Color.BLACK); setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE)
+                    }
                     val screen = IntArray(2); getLocationOnScreen(screen)
                     popup = PopupWindow(label, LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, true).apply {
                         elevation = dp(6).toFloat(); setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.WHITE))
