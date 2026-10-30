@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Only the isolated probe can fetch uncached NJ contour byte ranges. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="Trail MapLibre Compose probe" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <application android:name=".ProbeApplication" android:label="Trail MapLibre Compose probe" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".ProbeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

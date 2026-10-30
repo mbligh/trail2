@@ -66,18 +66,19 @@ class OfflineRenderTest {
     @Test fun sampleContoursRenderThroughMapLibreWhileOffline() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        val resources = (context.applicationContext as ProbeApplication).offlineResources
+        val initialContours = resources.sampleContourTiles.get()
+        val initialStyles = resources.styleLoads.get()
         val intent = android.content.Intent(context, ProbeActivity::class.java)
             .putExtra("style", "sample-contours")
         ActivityScenario.launch<ProbeActivity>(intent).use { scenario ->
-            lateinit var resources: OfflineProbeResources
-            scenario.onActivity { resources = it.offlineResources }
             val deadline = System.currentTimeMillis() + 60_000
             while (System.currentTimeMillis() < deadline &&
-                resources.sampleContourTiles.get() < 2) Thread.sleep(500)
+                resources.sampleContourTiles.get() < initialContours + 2) Thread.sleep(500)
             assertTrue("MapLibre did not load PMTiles sample contour tiles",
-                resources.sampleContourTiles.get() >= 2)
+                resources.sampleContourTiles.get() >= initialContours + 2)
             assertTrue("MapLibre did not load the contour style",
-                resources.styleLoads.get() >= 1)
+                resources.styleLoads.get() > initialStyles)
             instrumentation.waitForIdleSync()
             val image = instrumentation.uiAutomation.takeScreenshot()
             assertNotNull("Missing PMTiles rendered screenshot", image)

@@ -16,11 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.maplibre.compose.camera.CameraPosition
-import org.maplibre.compose.map.DefaultMapRuntime
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
-import org.maplibre.compose.resource.MapResourceLoad
-import org.maplibre.compose.resource.MapResourceProvider
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.spatialk.geojson.Position
 
@@ -29,10 +26,10 @@ import org.maplibre.spatialk.geojson.Position
  * rendering experiment using the same Tewksbury MBTiles/bright style/fonts.
  */
 class ProbeActivity : ComponentActivity() {
-    private lateinit var offline: OfflineProbeResources
     private var selected by mutableStateOf("bright")
 
-    internal val offlineResources get() = offline
+    internal val offlineResources get() =
+        (application as ProbeApplication).offlineResources
     internal fun showStyle(style: String) {
         require(style in STYLES)
         selected = style
@@ -40,17 +37,7 @@ class ProbeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        offline = OfflineProbeResources(applicationContext)
         intent.getStringExtra("style")?.takeIf { it in STYLES }?.let { selected = it }
-        val provider = MapResourceProvider(
-            accepts = { offline.accepts(it.url) },
-            load = { request ->
-                val data = offline.load(request.url)
-                if (data == null) MapResourceLoad.NoContent()
-                else MapResourceLoad.Bytes(data)
-            }
-        )
-        DefaultMapRuntime.configure { resourceProvider = provider }
         setContent {
             // Recreate the map state on style changes: changing an initial
             // argument to rememberMapState alone does not switch the style.
@@ -81,10 +68,4 @@ class ProbeActivity : ComponentActivity() {
         private val STYLES = listOf("bright", "earth", "sample-contours", "nj-contours")
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        // Map rendering closes before the activity is destroyed; keep databases
-        // alive for in-flight callbacks until this point.
-        offline.close()
-    }
 }
