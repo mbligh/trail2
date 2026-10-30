@@ -39,7 +39,7 @@ fun TrailMapContent(trails: String, recording: String, pins: String, artwork: Li
         val spec = item.jsonObject
         val id = spec.getValue("id").jsonPrimitive.content
         Layer(id, spec.getValue("type").jsonPrimitive.content,
-            source = if (id == "trail-recording") track else features) {
+            source = features) {
             spec["filter"]?.let { root("filter", it) }
             spec["layout"]?.jsonObject?.forEach { (k, v) -> layout(k, v) }
             spec["paint"]?.jsonObject?.forEach { (k, v) -> paint(k, v) }
@@ -55,6 +55,10 @@ fun TrailMapContent(trails: String, recording: String, pins: String, artwork: Li
                 layout("icon-allow-overlap", JsonPrimitive(true))
             }
         }
+    }
+    Layer("trail-recording", "line", source = track) {
+        layout("line-cap", JsonPrimitive("round")); layout("line-join", JsonPrimitive("round"))
+        paint("line-color", JsonPrimitive("#1565c0")); paint("line-width", JsonPrimitive(4))
     }
     artwork.firstOrNull { it.key == "trail-pin" }?.let { pin ->
         Layer("trail-recording-pins", "symbol", source = savedPins) {
@@ -95,6 +99,5 @@ fun PositionOverlay(state: MapState, position: Position?, heading: Float?, conne
 private const val LAYERS = """[
 {"id":"trail-polygon-fill","type":"fill","filter":["==",["geometry-type"],"Polygon"],"paint":{"fill-color":["get","fillColor"],"fill-opacity":["get","fillOpacity"]}},
 {"id":"trail-polygon-outline","type":"line","filter":["==",["geometry-type"],"Polygon"],"paint":{"line-color":["get","lineColor"],"line-opacity":["get","lineOpacity"],"line-width":2}},
-{"id":"trail-lines","type":"line","filter":["==",["geometry-type"],"LineString"],"layout":{"line-cap":"round","line-join":"round"},"paint":{"line-color":["get","lineColor"],"line-opacity":["get","lineOpacity"],"line-width":["get","width"]}},
-{"id":"trail-recording","type":"line","layout":{"line-cap":"round","line-join":"round"},"paint":{"line-color":"#1565c0","line-width":4}}
+{"id":"trail-lines","type":"line","filter":["==",["geometry-type"],"LineString"],"layout":{"line-cap":"round","line-join":"round"},"paint":{"line-color":["get","lineColor"],"line-opacity":["get","lineOpacity"],"line-width":["get","width"]}}
 ]"""

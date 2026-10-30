@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity(), LocationListener {
         }
         val mapFrame = android.widget.FrameLayout(this)
         mapFrame.addView(map, android.widget.FrameLayout.LayoutParams(-1, -1))
-        // Preserve a single native instance of MapLibre and each control across recompositions.
+        // Preserve one map controller and its Compose runtime across screen recompositions.
         root.setContent {
             // Keep the entire shared screen inside the system bars/cutout. Insets
             // belong to Compose here; View padding is not the Compose layout contract.

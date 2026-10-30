@@ -41,10 +41,10 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     internal val tiles get() = mapResources.tiles
     private val runtime = createMapRuntime { resourceProvider = mapResources.provider }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val compose = ComposeView(context)
+    private val compose = ComposeView(context).apply { id = R.id.trail_map_compose }
     internal var mapState: MapState? = null
         private set
-    private var basemap by mutableStateOf(initial)
+    private var selectedBasemap by mutableStateOf(initial)
     private var enabled by mutableStateOf(emptySet<String>())
     private var initialCenter = saved?.takeIf { it.containsKey("latitude") }?.let { LatLng(it.getDouble("latitude"), it.getDouble("longitude")) } ?: center
     private var initialZoom = saved?.getDouble("zoom", zoom) ?: zoom
@@ -76,7 +76,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         initialZoom = zoom
         mapState?.let { it.setCameraPosition(it.cameraPosition.copy(zoom = (zoom - 1.0).coerceIn(2.0, 18.0))) }
     }
-    fun setBasemap(value: Basemap) { basemap = value }
+    fun setBasemap(value: Basemap) { selectedBasemap = value }
     fun setOverlays(ids: Set<String>) { enabled = ids.toSet() }
     fun zoomTo(points: List<LatLng>, padding: Int) {
         if (points.isEmpty()) return
@@ -169,8 +169,8 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         artwork = listOf(pinImage())
         addView(compose, LayoutParams(-1, -1))
         compose.setContent {
-            val style = remember(basemap, enabled) {
-                try { BaseStyle.Json(mapResources.style(config.style(basemap, enabled, tiles))) }
+            val style = remember(selectedBasemap, enabled) {
+                try { BaseStyle.Json(mapResources.style(config.style(selectedBasemap, enabled, tiles))) }
                 catch (error: Exception) { onError(error.message ?: "Unable to load map"); BaseStyle.Empty }
             }
             val state = rememberMapState(runtime = runtime, baseStyle = style,

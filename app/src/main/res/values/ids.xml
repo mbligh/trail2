@@ -1,0 +1,4 @@
+<resources>
+    <!-- A distinct, stable save-state owner for the nested map composition. -->
+    <item name="trail_map_compose" type="id" />
+</resources>
