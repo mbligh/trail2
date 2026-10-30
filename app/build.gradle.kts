@@ -46,7 +46,7 @@ val bundleBasemaps by tasks.registering(Sync::class) {
     from(rootProject.file("basemaps.json"))
     into(layout.buildDirectory.dir("generated/basemapAssets"))
 }
-android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/basemapAssets"))
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/basemapAssets").get().asFile)
 val prepareMaps by tasks.registering(Exec::class) {
     inputs.files(rootProject.file("offline-maps.json"), rootProject.file("basemaps.json"), rootProject.file("tools/prepare_maps"))
     inputs.dir(rootProject.file("maps"))
@@ -54,7 +54,7 @@ val prepareMaps by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir)
     commandLine("python3", "tools/prepare_maps", "--output", layout.buildDirectory.dir("generated/mapAssets").get().asFile.absolutePath)
 }
-android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/mapAssets"))
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/mapAssets").get().asFile)
 android.androidResources.noCompress += listOf("mbtiles", "pmtiles")
 tasks.named("preBuild").configure { dependsOn(bundleBasemaps, prepareMaps) }
 

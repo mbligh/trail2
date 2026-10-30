@@ -39,6 +39,7 @@ class CameraParityTest {
             scenario.onActivity { it.showStyle("bright") }
             scenario.recreate()
             assertCamera(desired)
+            awaitResources("camera viewport after recreation") { var ready = false; scenario.onActivity { ready = it.mapReady }; ready }
 
             // Dispatch real one-finger input through the Activity/Compose hit-test.
             val down = SystemClock.uptimeMillis()
