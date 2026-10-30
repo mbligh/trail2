@@ -52,11 +52,13 @@ internal class ComposeMapResources(private val context: Context) : Closeable {
         return json.toString()
     }
 
-    @Synchronized private fun archiveResource(url: String): ByteArray? {
+    private fun archiveResource(url: String): ByteArray? {
         if (closed) return null
         val path = Uri.parse(url).pathSegments
         if (path.size < 2) return null
-        val archive = archives[path[0]] ?: return null
+        // Never hold the style-registration lock across a remote range request.
+        // Switching layers must remain responsive while contours are downloading.
+        val archive = synchronized(this) { if (closed) null else archives[path[0]] } ?: return null
         val reader = archive.reader
         if (path.size == 2 && path[1] == "source.json") {
             return JSONObject().put("tilejson", "3.0.0").put("minzoom", reader.minZoom)
@@ -84,7 +86,7 @@ internal class ComposeMapResources(private val context: Context) : Closeable {
 
     @Synchronized override fun close() {
         closed = true
-        archives.values.forEach { it.file?.close() }
+        archives.values.forEach { archive -> archive.file?.let { file -> synchronized(file) { file.close() } } }
         archives.clear()
         tiles.close()
     }
