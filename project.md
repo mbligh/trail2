@@ -288,3 +288,22 @@ The standalone Compose probe now supports PMTiles v3 byte-range decoding and per
   for diagnosis. This remains an isolated Android prototype; production Trail2 and
   its user data are unchanged. Satellite/hybrid imagery, production cache format
   interoperability, camera/gesture/user-overlay parity and iOS remain to validate.
+
+## Stage 5f: satellite/hybrid maps and raster-cache interoperability
+
+- The isolated Compose app adds the real configured NJ 2020 satellite source and
+  the production-generated hybrid style (imagery plus vector roads/trails/labels).
+  It compiles the existing production `MbTilesCache.kt` verbatim through a generated
+  source task, without changing the production module/toolchain or user files.
+- The raster adapter uses the same source identity, cache version, filename hash,
+  standard MBTiles schema and TMS row convention as `TileRepository`. Instrumentation
+  writes cache data with the production class and reads it via the Compose adapter,
+  then verifies the reverse path after close/reopen and cache-version invalidation.
+  Bad image responses must not poison the cache. Online reads are size-bounded.
+- Separate real-source warm/cold emulator invocations cover satellite and hybrid
+  rendering, bundled hybrid label resources, saved style after recreation, and disk
+  replay with zero HTTP attempts or uncached tile requests. Only the viewed Oldwick
+  area is cached; no bulk satellite download is introduced.
+- Production renderer replacement still requires PMTiles cache-format interoperability,
+  camera/gesture and app overlay parity, then toolchain integration. Shared Compose
+  UI/core already exist; iOS targets and platform adapters have not been added yet.

@@ -44,6 +44,11 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
         )
     }
     private val remotePmtiles by lazy { PmtilesArchive(remoteRange::read) }
+    private val satelliteDelegate = lazy {
+        RasterProbeSource(context.filesDir, "nj-orthos", sources.getJSONObject("nj-orthos"),
+            allowNetwork = { allowRemoteNetwork })
+    }
+    internal val satellite get() = satelliteDelegate.value
     private val contourOverlay by lazy {
         val raw = JSONObject(readAssetText("basemaps.json")).getJSONArray("overlays")
         (0 until raw.length()).map { raw.getJSONObject(it) }
@@ -53,7 +58,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
         "openmaptiles" to "maps/tewksbury-streets.mbtiles",
         "ne2_shaded" to "maps/tewksbury-earth.mbtiles"
     )
-    private val route = Regex("^tile/(openmaptiles|ne2_shaded|sample-contours|nj-contours)/(\\d+)/(\\d+)/(\\d+)$")
+    private val route = Regex("^tile/(openmaptiles|ne2_shaded|nj-orthos|sample-contours|nj-contours)/(\\d+)/(\\d+)/(\\d+)$")
     private val assetPaths: Set<String> = manifests.getJSONObject("resources").keys().asSequence().toSet()
 
     private fun readAssetText(path: String) = context.assets.open(path).bufferedReader().use { it.readText() }
@@ -72,7 +77,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             styleLoads.incrementAndGet()
             return style("bright")
         }
-        if (path in setOf("style-earth.json", "style-sample-contours.json", "style-nj-contours.json")) {
+        if (path in setOf("style-earth.json", "style-satellite.json", "style-hybrid.json", "style-sample-contours.json", "style-nj-contours.json")) {
             styleLoads.incrementAndGet()
             return style(path.removePrefix("style-").removeSuffix(".json"))
         }
@@ -82,6 +87,9 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             val x = match.groupValues[3].toLongOrNull() ?: return null
             val y = match.groupValues[4].toLongOrNull() ?: return null
             if (z !in 0..22 || x < 0 || y < 0 || x >= (1L shl z) || y >= (1L shl z)) return null
+            if (source == "nj-orthos") {
+                return satellite.load(z, x.toInt(), y.toInt())?.also { rasterTiles.incrementAndGet() }
+            }
             if (source == "sample-contours" || source == "nj-contours") {
                 val bytes = runCatching {
                     if (source == "sample-contours") samplePmtiles.get(z, x.toInt(), y.toInt())
@@ -165,13 +173,20 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
                 .put("type", "raster")))
         }.toString().encodeToByteArray()
 
-        val result = JSONObject(readAssetText("styles/bright.json"))
+        if (name == "satellite") return JSONObject().apply {
+            put("version", 8)
+            put("sources", JSONObject().put("nj-orthos", satellite.styleSource()))
+            put("layers", JSONArray().put(JSONObject().put("id", "satellite")
+                .put("source", "nj-orthos").put("type", "raster")))
+        }.toString().encodeToByteArray()
+
+        val result = JSONObject(readAssetText(if (name == "hybrid") "styles/hybrid.json" else "styles/bright.json"))
         val styleSources = result.getJSONObject("sources")
         val ids = styleSources.keys().asSequence().toList()
         ids.forEach { id ->
             // A fully offline style must have a local source for *every* source.
-            require(id in archiveFor) { "Bright references unbundled source $id" }
-            styleSources.put(id, offlineSource(id))
+            require(id in archiveFor || id == "nj-orthos") { "Style references unknown source $id" }
+            styleSources.put(id, if (id == "nj-orthos") satellite.styleSource() else offlineSource(id))
         }
         if (name == "sample-contours" || name == "nj-contours") {
             val synthetic = name == "sample-contours"
@@ -218,5 +233,6 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
         databases.clear()
         sampleFile?.close()
         sampleFile = null
+        if (satelliteDelegate.isInitialized()) satellite.close()
     }
 }

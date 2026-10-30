@@ -59,3 +59,21 @@ network-toggle failure cannot silently make replay pass through HTTP. Both phase
 save screenshots and instrumentation output in `ComposeProbeSmoke`. This validates
 only the viewed Oldwick region, not statewide coverage. Live data availability is
 an explicit CI dependency; no synthetic fallback hides a real-source failure.
+
+## Satellite/hybrid rendering and the production raster-cache format
+
+The probe cycles through NJ satellite and the exact generated hybrid style as well
+as the earlier styles. `RasterProbeSource` uses the same cache identity/hash as
+Trail2 and compiles the **existing** production `MbTilesCache` class through a
+Gradle generated-source task. All files live in the probe's private sandbox.
+The offline interop test verifies production-written tiles through the adapter,
+adapter-written tiles through a reopened production cache, TMS coordinates,
+cache-version isolation, and rejection of non-image responses.
+
+After contour checks, CI warms real NJ imagery online, restarts with networking
+disabled, and renders satellite → hybrid from the persisted MBTiles. The offline
+provider forbids HTTP fallback and the test requires zero attempted requests and
+zero missing cache tiles. Hybrid rendering also exercises the production vector
+roads/labels and bundled glyphs. Screenshots cover online, offline and activity
+recreation. Only the test viewport is warmed; this does not preload satellite for
+all of Tewksbury or change production releases.
