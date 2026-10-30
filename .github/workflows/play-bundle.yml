@@ -10,6 +10,7 @@ on:
       - 'maps/**'
       - 'tools/prepare_maps'
       - 'tools/test_offline_maps'
+      - 'tools/check_native_alignment'
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'gradle/**'
@@ -99,6 +100,8 @@ jobs:
         run: ./gradlew --no-daemon :shared:jvmTest testReleaseUnitTest lintRelease bundleRelease
       - name: Verify complete bundled offline coverage
         run: python tools/test_offline_maps
+      - name: Verify 16 KiB native alignment
+        run: python tools/check_native_alignment app/build/outputs/bundle/release/app-release.aab
       - name: Verify bundle signature
         run: |
           jarsigner -verify app/build/outputs/bundle/release/app-release.aab > .private-signing/verification.txt

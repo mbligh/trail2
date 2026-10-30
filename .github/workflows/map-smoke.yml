@@ -2,7 +2,7 @@ name: MapLibre Compose production smoke tests
 on:
   push:
     branches: [main, codex/maplibre-migration]
-    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', '.github/workflows/map-smoke.yml']
+    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', 'tools/check_native_alignment', '.github/workflows/map-smoke.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,6 +39,7 @@ jobs:
           fi
           ./gradlew --no-daemon :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
           python tools/test_offline_maps
+          python tools/check_native_alignment app/build/outputs/apk/debug/app-debug.apk
       - name: Install emulator
         run: |
           sudo chmod 666 /dev/kvm

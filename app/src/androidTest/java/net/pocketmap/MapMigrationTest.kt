@@ -77,14 +77,39 @@ class MapMigrationTest {
                 features.any { it.properties?.containsKey("class") == true }
             }
             val document = TrailKml.Document("Test trails", listOf(TrailKml.Feature("Offline test trail", "LineString", listOf(TrailKml.Coordinate(40.688,-74.782),TrailKml.Coordinate(40.692,-74.778)), emptyList(), TrailKml.Style())))
+            val icons = listOf("1763", "1899", "1205", "503").mapIndexed { index, icon ->
+                TrailKml.Feature("Original icon $icon", "Point", listOf(
+                    TrailKml.Coordinate(40.69, -74.784 + index * 0.002)), emptyList(),
+                    TrailKml.Style(iconId = icon, iconColor = 0xff009d57.toInt()))
+            }
+            val completeDocument = document.copy(features = document.features + icons)
+            val pin = RecordedPins.Pin(40.691, -74.78, 1000, null, 4f, "Broken gate")
             val points = listOf(RecordedTrack.Point(40.688,-74.782,1000,null,4f),RecordedTrack.Point(40.692,-74.778,31_000,null,3f))
-            scenario.onActivity { renderer(it).apply { showTrails(document,true); showRecording(points,emptyList()) } }
+            scenario.onActivity { renderer(it).apply { showTrails(completeDocument,true); showRecording(points,listOf(pin)) } }
             awaitRendered(scenario, "trails and recording", setOf("trail-lines", "trail-recording")) { it.size >= 2 }
+            fun assertArtwork() {
+                awaitRendered(scenario, "original icons and annotated pin") { features ->
+                    val names = features.mapNotNull { it.properties?.get("name")?.toString()?.trim('"') }
+                    icons.all { it.name in names } && names.any { it.contains("Broken gate") }
+                }
+            }
+            assertArtwork()
             val config = MapConfiguration(context)
             for (choice in listOf("hybrid", "bright")) {
                 scenario.onActivity { renderer(it).setBasemap(config.basemaps.first { b -> b.name == choice }) }
                 awaitRendered(scenario, "$choice restores trails and recording", setOf("trail-lines", "trail-recording")) { it.size >= 2 }
+                assertArtwork()
             }
+            scenario.onActivity { renderer(it).apply {
+                val state = mapState!!
+                state.click(state.screenLocationFromPosition(org.maplibre.spatialk.geojson.Position(pin.longitude, pin.latitude))!!)
+            } }
+            await(scenario, "annotated pin tap label") { map ->
+                val popup = TrailMap::class.java.getDeclaredField("popup").apply { isAccessible = true }.get(map) as android.widget.PopupWindow?
+                popup?.isShowing == true && (popup.contentView as android.widget.TextView).text.contains("Broken gate")
+            }
+            scenario.onActivity { renderer(it).onPause() } // Dismiss label before screenshot.
+
             assertEquals(emptyList<String>(), errors)
             awaitRendered(scenario, "Bright streets restored for screenshot") { features ->
                 features.any { it.properties?.containsKey("class") == true }

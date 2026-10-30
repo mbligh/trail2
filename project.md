@@ -37,7 +37,7 @@ as possible. Underlying tile appearance may change. Retain:
 
 ## Maps, layers, offline coverage
 
-Use MapLibre Native Android 13.7.1. Follow the mapping repository's MapLibre demo:
+Use MapLibre Compose 0.20.0 with its native OpenGL runtime. Follow the mapping repository's MapLibre demo:
 OpenFreeMap **Bright**, POI/business labels removed; NJ 2020 satellite hybrid retains
 vector lines/labels with white text halos. Keep standalone satellite, OSM raster and
 OpenTopoMap choices. Bright is default; migrate the previous OSM street default to
@@ -176,7 +176,7 @@ AGP 9.2.0, Kotlin 2.4.20, Compose Multiplatform 1.12.1, Gradle 9.4.1. MapLibre a
 alignment in the APK/bundle. No WebView or browser UI.
 
 - MainActivity: existing controls, report/share flow, foreground location selection.
-- TrailMap: native rendering/lifecycle, styles, runtime GeoJSON, heading/dot/connector.
+- TrailMap: Android controller/runtime, styles and artwork; shared Compose layers draw trails, recording, pins and live position.
 - MapConfiguration: JSON map and layer definitions; no provider-specific UI logic.
 - TileRepository/MbTilesCache/RangeCache: offline seeds, persistent caches, online fallback.
 - TrailRepository/TrailKml, RecordingService/RecordedTrack/RecordedPins, PhoneHeading,
@@ -404,7 +404,7 @@ Bright/satellite/hybrid, a plain pin and a one-second annotated pin, a short wal
 with the screen locked for a minute or two, then stop summary and GPX/KML sharing.
 The emulator checks do not establish real GNSS reception or physical touch behavior.
 
-The production renderer is still MapLibre Android SDK 13.7.1. Shared Compose UI and
+At the stage 6a baseline, the production renderer was MapLibre Android SDK 13.7.1. Shared Compose UI and
 core algorithms are already in place; the newer Compose renderer remains isolated.
 After the phone baseline passes, integrate that renderer and its resource provider
 with the production host, retaining recording service, package/signing, files and
