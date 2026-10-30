@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stages 5g–5i and 6a; production version 2.0.7. Compose renderer phone testing is the next gate.
+Updated 2026-10-30 through stages 5g–5i and 6b; production version 2.0.7. Compose renderer phone testing is the next gate.
 
 ## Product and identity
 
@@ -171,7 +171,7 @@ Existing scoped URI providers and permission grants remain unchanged.
 
 ## Architecture and distribution
 
-Native Kotlin Activity/UI, Android 8+/API 26 minimum, compile 37 / target 36, JDK 17,
+Android Kotlin Activity with shared Compose UI/map layers, Android 8+/API 26 minimum, compile 37 / target 36, JDK 17,
 AGP 9.2.0, Kotlin 2.4.20, Compose Multiplatform 1.12.1, Gradle 9.4.1. MapLibre adds native libraries; validate 16 KiB
 alignment in the APK/bundle. No WebView or browser UI.
 
@@ -486,7 +486,32 @@ labels. Default renderer ornaments are omitted because the existing shared heade
 already owns credits/zoom/controls. A local PMTiles provider-route test runs with
 HTTP disabled, in addition to the actual-source decoder/cache prototype checks.
 
-Validation is in progress. Next gate: install 2.0.7 through Play and verify map
+Validated production code at `51c7b72e9790f8684921b33ad7b7f91fa40a4b35`:
+
+- All thirteen production instrumentation tests passed, followed by the focused
+  gesture/cutout and landscape tests (fifteen checks in total):
+  https://github.com/mbligh/trail2/actions/runs/41051012435
+- Actual bundled street rendering, original icons/annotated pins, successful tap
+  labels, style restoration, independent trail hiding, camera/follow restoration,
+  drag/zoom, local PMTiles provider routing, cache persistence and GPS selection
+  were exercised. The recording pin hold-before-release/recreation check also passed.
+- The bundled-map screenshot and all three system-bar/cutout configurations were
+  visually reviewed. The header/controls remain in the safe area; renderer-default
+  ornaments are absent. Focused bounds screenshots may precede tile loading;
+  bundled streets/artwork are verified in the separate offline rendering test.
+- Shared JVM tests, Android unit tests, lint, offline coverage, native ELF 16 KiB
+  alignment and APK ZIP alignment passed. APK publishing and signed Play internal
+  upload succeeded:
+  https://github.com/mbligh/trail2/actions/runs/41051012821
+  https://github.com/mbligh/trail2/actions/runs/41051012482
+- All twelve isolated renderer checks passed using the promoted production archive
+  decoder, including live-source warm-up and cold offline replay for NJ contours
+  and satellite/hybrid maps:
+  https://github.com/mbligh/trail2/actions/runs/41048839193
+  An earlier run was obscured by an emulator Pixel Launcher ANR dialog; the
+  completed rerun passed without changing the rendering assertions.
+
+Stage 6b implementation and automated validation are complete. Next gate: install 2.0.7 through Play and verify map
 appearance, basemap/layer changes, taps on trails/pins, dragging/recenter/zoom,
 offline maps, a short recording including screen lock, and export/share behavior.
 No iOS targets/adapters are configured yet.
