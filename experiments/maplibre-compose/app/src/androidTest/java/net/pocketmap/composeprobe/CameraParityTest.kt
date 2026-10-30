@@ -81,6 +81,7 @@ class CameraParityTest {
                 scenario.onActivity { ready = it.following && kotlin.math.abs(it.mapState.cameraPosition.center.latitude - fix.latitude) < 0.000001 }
                 ready
             }
+            awaitResources("rendered viewport before zoom gesture") { var ready = false; scenario.onActivity { ready = it.mapReady }; ready }
             scenario.onActivity {
                 assertEquals(0.0, it.mapState.cameraPosition.bearing, 0.0001)
                 assertEquals(0.0, it.mapState.cameraPosition.pitch, 0.0001)
