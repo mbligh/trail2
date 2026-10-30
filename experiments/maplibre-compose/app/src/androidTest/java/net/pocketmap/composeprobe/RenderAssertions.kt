@@ -55,12 +55,17 @@ internal object RenderAssertions {
                     }
                     // Gradle can uninstall the app after connected tests. Preserve
                     // assertion frames in shell-owned storage before that happens.
-                    val command = "mkdir -p /data/local/tmp/compose-probe-smoke && cp '" +
-                        output.absolutePath + "' '/data/local/tmp/compose-probe-smoke/$filename'"
-                    val descriptor = instrumentation.uiAutomation.executeShellCommand(command)
-                    val diagnostic = android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)
-                        .bufferedReader().use { it.readText() }
-                    assertTrue("Cannot preserve $filename: $diagnostic", diagnostic.isBlank())
+                    val target = "/data/local/tmp/compose-probe-smoke/$filename"
+                    // UiAutomation doesn't interpret shell operators or quoting.
+                    for (command in listOf("mkdir -p /data/local/tmp/compose-probe-smoke",
+                        "cp ${output.absolutePath} $target")) {
+                        android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                            instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
+                    }
+                    val savedSize = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                        instrumentation.uiAutomation.executeShellCommand("stat -c %s $target"))
+                        .bufferedReader().use { it.readText().trim().toLongOrNull() }
+                    assertTrue("Cannot preserve $filename", savedSize == output.length())
                 } finally { bitmap.recycle() }
                 if (count >= minimum) return
             }

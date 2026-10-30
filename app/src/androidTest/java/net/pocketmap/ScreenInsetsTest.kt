@@ -51,9 +51,16 @@ class ScreenInsetsTest {
         }
         rule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
-            "mkdir -p /data/local/tmp/trail-insets && screencap -p /data/local/tmp/trail-insets/insets-${width}x${height}-${safe.top}-${safe.bottom}.png"
-        )).use { it.readBytes() }
+        val screenshot = "/data/local/tmp/trail-insets/insets-${width}x${height}-${safe.top}-${safe.bottom}.png"
+        // UiAutomation executes a program directly, not a shell command chain.
+        for (command in listOf("mkdir -p /data/local/tmp/trail-insets", "screencap -p $screenshot")) {
+            ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
+                .use { it.readBytes() }
+        }
+        val screenshotSize = ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand("stat -c %s $screenshot"))
+            .bufferedReader().use { it.readText().trim().toLongOrNull() }
+        assertTrue("Missing inset regression screenshot", screenshotSize != null && screenshotSize > 0)
         val tags = listOf("basemap-control", "map-credits", "trail-menu", "pin-control",
             "recenter-control", "report-control", "record-control", "map-surface")
         for (tag in tags) {
