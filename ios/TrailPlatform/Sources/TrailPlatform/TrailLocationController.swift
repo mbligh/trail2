@@ -117,6 +117,7 @@ import UIKit
         // Preserve any already-written points and surface disk errors to the UI.
         // A failed stop keeps its recovery pointer; never silently discard it.
         if recorder.recording != nil { _ = try? recorder.stop() }
+        recorder.haltAfterStorageFailure()
         disableBackgroundRecording()
         manager.stopUpdatingLocation()
         message = "Recording stopped: \(error.localizedDescription)"
@@ -126,11 +127,13 @@ import UIKit
     public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
             if recorder.recording != nil { _ = try? recorder.stop() }
+            recorder.haltAfterStorageFailure()
             disableBackgroundRecording()
             latestFix = nil; heading = nil
         }
         if recorder.recording != nil && manager.accuracyAuthorization != .fullAccuracy {
             _ = try? recorder.stop()
+            recorder.haltAfterStorageFailure()
             disableBackgroundRecording()
             message = "Recording stopped: precise location is disabled"
             onChange?()

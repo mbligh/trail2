@@ -90,8 +90,14 @@ public struct RecordingSampler {
 
     @discardableResult public func stop(at date: Date = Date()) throws -> RecordingSession {
         let stopped = try store.stop(at: date)
+        haltAfterStorageFailure()
+        return stopped
+    }
+
+    /// Stop acquisition even if final metadata cannot be written. Keep the disk
+    /// recovery pointer untouched so an I/O failure never discards saved points.
+    func haltAfterStorageFailure() {
         recording = nil; latestFix = nil; deadline = nil
         sampler = RecordingSampler()
-        return stopped
     }
 }

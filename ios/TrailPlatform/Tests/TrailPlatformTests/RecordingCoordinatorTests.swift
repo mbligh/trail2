@@ -37,4 +37,25 @@ final class RecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(try store.pins(in: session).first?.text, "gate")
         XCTAssertThrowsError(try recorder.addPin())
     }
+
+    @MainActor func testWriteFailureHaltsAcquisitionWithoutDiscardingRecovery() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try RecordingStore(directory: root)
+        let recorder = RecordingCoordinator(store: store)
+        try recorder.start()
+        let session = try XCTUnwrap(recorder.recording)
+        let metadata = store.trackURL(session).deletingPathExtension().appendingPathExtension("json")
+        try FileManager.default.removeItem(at: metadata)
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try recorder.stop())
+        recorder.haltAfterStorageFailure()
+        XCTAssertNil(recorder.recording)
+        // Repair only the injected filesystem failure; the active pointer and
+        // track created before it must still be recoverable.
+        try FileManager.default.removeItem(at: metadata)
+        try JSONEncoder().encode(session).write(to: metadata, options: .atomic)
+        XCTAssertEqual(try store.activeSession(), session)
+        XCTAssertThrowsError(try recorder.start())
+    }
 }

@@ -30,7 +30,8 @@ final class RecordingStoreTests: XCTestCase {
         let store = try RecordingStore(directory: root)
         let session = try store.begin()
         let track = store.trackURL(session)
-        try "40.1,-74.2,1000,,5.0\n40.2,-74.3,31000,90.0,\nbroken\n40.3,".write(to: track, atomically: true, encoding: .utf8)
+        try "40.1,-74.2,1000,,5.0\n40.2,-74.3,31000,90.0,\nbroken\n40.3,-74.4,999".write(to: track, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try store.points(in: session).count, 2)
         let fix = RecordedFix(latitude: 40.4, longitude: -74.5, time: 61000)
         try store.append(fix)
         let points = try store.points(in: session)
@@ -57,5 +58,18 @@ final class RecordingStoreTests: XCTestCase {
             XCTAssertThrowsError(try store.append(fix))
         }
         XCTAssertTrue(try store.points(in: session).isEmpty)
+    }
+
+    @MainActor func testInterruptedStopDoesNotResurrectRecording() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try RecordingStore(directory: root)
+        let session = try store.begin()
+        let stopped = RecordingSession(id: session.id, startedAt: session.startedAt, stoppedAt: Date())
+        let metadata = store.trackURL(session).deletingPathExtension().appendingPathExtension("json")
+        try JSONEncoder().encode(stopped).write(to: metadata, options: .atomic)
+        XCTAssertNil(try RecordingStore(directory: root).activeSession())
+        XCTAssertEqual(try store.sessions(), [stopped])
+        XCTAssertNoThrow(try store.begin())
     }
 }

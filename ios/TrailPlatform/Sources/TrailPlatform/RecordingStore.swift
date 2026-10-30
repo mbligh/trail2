@@ -79,6 +79,14 @@ public enum RecordingStoreError: Error { case invalidFix, alreadyRecording, noAc
         guard session.stoppedAt == nil, files.fileExists(atPath: trackURL(session).path) else {
             throw RecordingStoreError.corruptSession
         }
+        // Stop commits metadata before removing its pointer. If the process dies
+        // between those writes, the completed recording must not become active.
+        let metadata = try decoder.decode(RecordingSession.self, from: Data(contentsOf: metadataURL(session)))
+        guard metadata.id == session.id else { throw RecordingStoreError.corruptSession }
+        if metadata.stoppedAt != nil {
+            try? files.removeItem(at: activeURL)
+            return nil
+        }
         return session
     }
 
@@ -127,20 +135,39 @@ public enum RecordingStoreError: Error { case invalidFix, alreadyRecording, noAc
         let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
         let length = try handle.seekToEnd()
-        // A process can die halfway through a write. Separate an incomplete tail
-        // from the next fix instead of merging both into one corrupt CSV row.
-        var separator = ""
+        // Discard an interrupted final write, even if its partial timestamp would
+        // happen to parse. A saved row always ends in a newline.
         if length > 0 {
             try handle.seek(toOffset: length - 1)
-            if try handle.read(upToCount: 1) != Data([10]) { separator = "\n" }
+            if try handle.read(upToCount: 1) != Data([10]) {
+                var cursor = length
+                var completeLength: UInt64 = 0
+                while cursor > 0 {
+                    let start = cursor > 4096 ? cursor - 4096 : 0
+                    try handle.seek(toOffset: start)
+                    let block = try handle.read(upToCount: Int(cursor - start)) ?? Data()
+                    if let last = block.lastIndex(of: 10) {
+                        completeLength = start + UInt64(last - block.startIndex) + 1
+                        break
+                    }
+                    cursor = start
+                }
+                try handle.truncate(atOffset: completeLength)
+            }
             try handle.seekToEnd()
         }
-        try handle.write(contentsOf: Data((separator + line + "\n").utf8))
+        try handle.write(contentsOf: Data((line + "\n").utf8))
         try handle.synchronize()
     }
 
+    private func completeLines(_ contents: String) -> [Substring] {
+        var lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
+        if !contents.hasSuffix("\n"), !lines.isEmpty { lines.removeLast() }
+        return lines
+    }
+
     public func points(in session: RecordingSession) throws -> [RecordedFix] {
-        try String(contentsOf: trackURL(session), encoding: .utf8).split(separator: "\n").compactMap {
+        try completeLines(String(contentsOf: trackURL(session), encoding: .utf8)).compactMap {
             RecordedFix(fields: $0.split(separator: ",", omittingEmptySubsequences: false))
         }
     }
@@ -148,7 +175,7 @@ public enum RecordingStoreError: Error { case invalidFix, alreadyRecording, noAc
     public func pins(in session: RecordingSession) throws -> [RecordedPin] {
         let url = pinsURL(session)
         guard files.fileExists(atPath: url.path) else { return [] }
-        return try String(contentsOf: url, encoding: .utf8).split(separator: "\n").compactMap { line in
+        return try completeLines(String(contentsOf: url, encoding: .utf8)).compactMap { line in
             let fields = line.split(separator: ",", maxSplits: 5, omittingEmptySubsequences: false)
             guard let fix = RecordedFix(fields: fields) else { return nil }
             let text = fields.count > 5

@@ -693,3 +693,16 @@ three other corner icons, blue/gray recenter state, menus and the one-second pin
 interaction. The iOS adapters stay separate from Android location/storage.
 Native GNSS and actual locked-screen iOS behavior have not been established by
 the simulator; Apple signing/TestFlight remain unconfigured.
+
+
+### iOS interrupted-write recovery review
+
+A new recovery check found that an incomplete final CSV timestamp can still be a
+valid number. Readers now ignore unterminated rows, and the next append truncates
+that incomplete tail rather than turning it into a saved fix. The same rule
+applies to pin sidecars. Completed session metadata wins over a stale active
+pointer after an interrupted stop. On a storage failure the location controller
+clears its in-memory acquisition state even if it cannot finalize metadata,
+retaining files and their recovery pointer. Tests inject an interrupted stop and
+a metadata-write failure as well as a parseable partial timestamp. Validation is
+pending the next native package run.
