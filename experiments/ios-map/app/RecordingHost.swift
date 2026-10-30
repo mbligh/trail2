@@ -11,6 +11,7 @@ import UIKit
     private var displayed: RecordingSession?
 
     private var testFix: RecordedFix?
+    private var offlineResources: OfflineResources?
 
     init(testing: Bool = false) {
         do {
@@ -23,7 +24,16 @@ import UIKit
         catch { fatalError("Cannot open recording storage: \(error)") }
         location = TrailLocationController(store: store)
         super.init()
-        model = IosRecordingHost(actions: self)
+        let style: String
+        if testing {
+            style = "{\"version\":8,\"sources\":{},\"layers\":[{\"id\":\"background\",\"type\":\"background\",\"paint\":{\"background-color\":\"#ffffff\"}}]}"
+        } else {
+            let resources = OfflineResources()
+            offlineResources = resources
+            do { style = try resources.style() }
+            catch { fatalError("Cannot prepare offline map style: \(error)") }
+        }
+        model = IosRecordingHost(actions: self, resources: offlineResources, styleJson: style)
         controller = model.viewController()
         location.onChange = { [weak self] in self?.refresh() }
         refresh()
@@ -104,6 +114,11 @@ import UIKit
     }
 
     func perform(action: String) {
+        if action.hasPrefix("offlineRenderPass:") {
+            print("IOS_OFFLINE_RENDER_PASS:" + action.dropFirst("offlineRenderPass:".count))
+            fflush(stdout)
+            return
+        }
         do {
             switch action {
             case "record":
@@ -132,7 +147,7 @@ import UIKit
                 controller.present(share, animated: true)
             case "SHARE_GPX": try shareRecording(format: "gpx")
             case "SHARE_KML": try shareRecording(format: "kml")
-            case "credits": alert("Map", "MapLibre Compose / Metal. This integration host uses a blank offline canvas.")
+            case "credits": alert("Map", "MapLibre Compose / Metal. © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors · Natural Earth. Bundled Tewksbury street map; other iOS basemaps and layers are not connected yet.")
             case "recenter": location.startForegroundUpdates()
             default:
                 if action.hasPrefix("label:") { alert("Pin", String(action.dropFirst(6))) }

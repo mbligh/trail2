@@ -2,7 +2,7 @@ name: iOS shared framework and Metal simulator smoke test
 on:
   push:
     branches: [main]
-    paths: ['shared/**', 'ios/**', 'experiments/ios-map/**', '*.gradle.kts', 'gradle.properties', 'gradle/**', 'gradlew*', '.github/workflows/ios-smoke.yml']
+    paths: ['shared/**', 'ios/**', 'experiments/ios-map/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', '*.gradle.kts', 'gradle.properties', 'gradle/**', 'gradlew*', '.github/workflows/ios-smoke.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,7 +10,29 @@ concurrency:
   group: trail-ios-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install shapely==2.1.2
+      - uses: actions/cache@v5
+        with:
+          path: .map-downloads
+          key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
+      - name: Build the same Tewksbury seed bundle as Android
+        run: |
+          python tools/test_offline_maps
+          python tools/prepare_maps --output experiments/ios-map/build/mapAssets
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Trail-iOS-map-assets
+          path: experiments/ios-map/build/mapAssets/
   ios:
+    needs: assets
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -39,16 +61,27 @@ jobs:
         with:
           path: ~/.konan
           key: trail-konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('build.gradle.kts', 'shared/build.gradle.kts', 'experiments/ios-map/build.gradle.kts') }}
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: trail-ios-gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('*.gradle.kts', 'gradle/**', 'shared/**', 'experiments/ios-map/**/*.kt') }}
+          restore-keys: trail-ios-gradle-${{ runner.os }}-${{ runner.arch }}-
       - name: Link shared iPhone framework
-        run: ./gradlew --no-daemon :shared:linkDebugFrameworkIosArm64
+        run: ./gradlew --no-daemon --build-cache :shared:linkDebugFrameworkIosArm64
       - name: Link shared simulator framework
-        run: ./gradlew --no-daemon :shared:linkDebugFrameworkIosSimulatorArm64
+        run: ./gradlew --no-daemon --build-cache :shared:linkDebugFrameworkIosSimulatorArm64
       - name: Run shared tests on iOS
-        run: ./gradlew --no-daemon :shared:iosSimulatorArm64Test
+        run: ./gradlew --no-daemon --build-cache :shared:iosSimulatorArm64Test
       - name: Link Metal simulator probe
-        run: ./gradlew --no-daemon :iosProbe:linkDebugFrameworkIosSimulatorArm64
+        run: ./gradlew --no-daemon --build-cache :iosProbe:linkDebugFrameworkIosSimulatorArm64
       - name: Link Metal iPhone probe
-        run: ./gradlew --no-daemon :iosProbe:linkDebugFrameworkIosArm64
+        run: ./gradlew --no-daemon --build-cache :iosProbe:linkDebugFrameworkIosArm64
+      - uses: actions/download-artifact@v6
+        with:
+          name: Trail-iOS-map-assets
+          path: experiments/ios-map/build/mapAssets/
       - name: Build simulator and unsigned device probes without Apple credentials
         run: |
           bash experiments/ios-map/build_probe_app simulator
@@ -62,6 +95,7 @@ jobs:
           python -m pip install Pillow==11.3.0
           python experiments/ios-map/smoke_simulator.py
           python experiments/ios-map/platform_simulator.py
+          python experiments/ios-map/offline_simulator.py
       - uses: actions/upload-artifact@v6
         if: always()
         with:

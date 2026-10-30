@@ -653,3 +653,23 @@ platform self-test launches. The write phase uses a dedicated fixture directory
 and saves a track plus Unicode pin; a fresh process must reopen those files,
 obtain shared statistics, generate valid GPX/KML and draw the saved track. No
 location permission or real GPS is used by that fixture. Validation is pending.
+
+
+## iOS bundled maps, stage 7d
+
+Native MBTiles/TMS/gzip tests passed in run `41139195955`; existing bundle routing
+and its iOS SDK typecheck passed in `41139470785`. `OfflineMapBundle` consumes
+the same resolved sources, resource URL manifest and immutable seeds generated
+for Android. It rewrites vector/raster tile URLs to an iOS-local route, reads
+fonts/sprites locally, and has no network fallback. Asset paths cannot escape the
+bundle. Tests exercise standard archives, URL encoding and invalid/missing routes.
+
+The integration host now obtains Bright from that bundle through a dedicated
+resource-reader bridge on a worker dispatcher. The native reader is immutable
+and its SQLite handles serialize reads. An Ubuntu job prepares the exact same
+Tewksbury boundary tiles and dependencies; both app bundles include that output.
+The simulator must query real rendered basemap features after the first launch
+and after a cold relaunch, with screenshots and local-tile evidence. Synthetic
+recording self-tests still use their independent white canvas. Validation is
+pending; satellite/PMTiles runtime caching, trail refresh/import, original icon
+artwork and complete iOS application packaging remain later work.

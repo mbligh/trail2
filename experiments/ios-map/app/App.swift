@@ -12,7 +12,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ) -> Bool {
         let window = UIWindow(frame: UIScreen.main.bounds)
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--platform-host") || arguments.contains("--platform-self-test") {
+        if arguments.contains("--platform-host") || arguments.contains("--platform-self-test") || arguments.contains("--offline-map-test") {
             let testing = arguments.contains("--platform-self-test")
             let host = RecordingHost(testing: testing)
             recordingHost = host
