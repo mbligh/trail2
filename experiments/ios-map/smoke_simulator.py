@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Boot the unsigned fixture app and require real red/green/blue Metal output."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import time
@@ -15,7 +16,7 @@ def run(*args, **kwargs):
     return subprocess.run(args, check=True, timeout=180, **kwargs)
 
 
-devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json']))
+devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], timeout=60))
 phones = [device for runtime, values in devices['devices'].items() if '.iOS-' in runtime
           for device in values if 'iPhone' in device['name'] and device.get('isAvailable')]
 if not phones:
@@ -35,7 +36,9 @@ try:
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         # A screenshot of SpringBoard after an app crash must never count as a pass.
-        run('xcrun', 'simctl', 'spawn', identifier, 'kill', '-0', str(pid))
+        # Simulator applications share the macOS process namespace. The iOS
+        # runtime does not ship a kill utility; check the host process directly.
+        os.kill(pid, 0)
         screenshot = OUTPUT / 'ios-metal.png'
         run('xcrun', 'simctl', 'io', identifier, 'screenshot', str(screenshot))
         image = Image.open(screenshot).convert('RGB')

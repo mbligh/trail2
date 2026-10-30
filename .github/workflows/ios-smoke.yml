@@ -53,6 +53,10 @@ jobs:
         run: |
           bash experiments/ios-map/build_probe_app simulator
           bash experiments/ios-map/build_probe_app device
+      - name: Package app bundles with executable permissions
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent experiments/ios-map/build/TrailIosProbe.app experiments/ios-map/build/TrailIosProbe-simulator.zip
+          ditto -c -k --sequesterRsrc --keepParent experiments/ios-map/build/TrailIosProbe-device.app experiments/ios-map/build/TrailIosProbe-device-unsigned.zip
       - name: Verify real Metal rendering in the simulator
         run: |
           python -m pip install Pillow==11.3.0
@@ -66,12 +70,12 @@ jobs:
             shared/build/bin/iosSimulatorArm64/debugFramework/
             shared/build/reports/tests/
             shared/build/test-results/
-            experiments/ios-map/build/TrailIosProbe.app/
-            experiments/ios-map/build/TrailIosProbe-device.app/
+            experiments/ios-map/build/TrailIosProbe-simulator.zip
+            experiments/ios-map/build/TrailIosProbe-device-unsigned.zip
             experiments/ios-map/build/smoke/
           if-no-files-found: warn
       - uses: actions/cache/save@v5
-        if: always() && steps.konan.outputs.cache-hit != 'true'
+        if: always() && !cancelled() && steps.konan.outputs.cache-hit != 'true'
         with:
           path: ~/.konan
           key: ${{ steps.konan.outputs.cache-primary-key }}

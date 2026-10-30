@@ -27,5 +27,5 @@ iOS app host, platform services and Apple signing setup in a later stage.
 
 The `iOS shared framework and Metal simulator smoke test` workflow runs the same
 commands on a macOS ARM64 runner and retains screenshots, pixel counts, logs,
-frameworks and the simulator application. Its pixel assertions test actual GPU
+frameworks and zipped app bundles. The inner ZIP files preserve executable permissions. Its pixel assertions test actual GPU
 output rather than accepting an empty map surface as a successful build.
