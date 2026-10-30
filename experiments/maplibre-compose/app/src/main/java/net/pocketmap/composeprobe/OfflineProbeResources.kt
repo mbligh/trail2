@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.Closeable
+import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPInputStream
 
@@ -25,15 +26,32 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
     val rasterTiles = AtomicInteger()
     val glyphLoads = AtomicInteger()
     val spriteLoads = AtomicInteger()
+    val sampleContourTiles = AtomicInteger()
+    val remoteContourTiles = AtomicInteger()
 
     private val sources = JSONObject(readAssetText("resolved-sources.json"))
     private val manifests = JSONObject(readAssetText("offline-manifest.json"))
     private val databases = mutableMapOf<String, SQLiteDatabase>()
+    private var sampleFile: RandomAccessFile? = null
+    private val samplePmtiles by lazy { PmtilesArchive(::localPmtilesRange) }
+    private val remoteRange by lazy {
+        PmtilesRangeSource(
+            java.io.File(context.filesDir, "probe-pmtiles-ranges"),
+            "https://mapping.mbligh.org/contours.pmtiles",
+            "nj-contours-v1"
+        )
+    }
+    private val remotePmtiles by lazy { PmtilesArchive(remoteRange::read) }
+    private val contourOverlay by lazy {
+        val raw = JSONObject(readAssetText("basemaps.json")).getJSONArray("overlays")
+        (0 until raw.length()).map { raw.getJSONObject(it) }
+            .first { it.getString("id") == "contours" }
+    }
     private val archiveFor = mapOf(
         "openmaptiles" to "maps/tewksbury-streets.mbtiles",
         "ne2_shaded" to "maps/tewksbury-earth.mbtiles"
     )
-    private val route = Regex("^tile/(openmaptiles|ne2_shaded)/(\\d+)/(\\d+)/(\\d+)$")
+    private val route = Regex("^tile/(openmaptiles|ne2_shaded|sample-contours|nj-contours)/(\\d+)/(\\d+)/(\\d+)$")
     private val assetPaths: Set<String> = manifests.getJSONObject("resources").keys().asSequence().toSet()
 
     private fun readAssetText(path: String) = context.assets.open(path).bufferedReader().use { it.readText() }
@@ -52,9 +70,9 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             styleLoads.incrementAndGet()
             return style("bright")
         }
-        if (path == "style-earth.json") {
+        if (path in setOf("style-earth.json", "style-sample-contours.json", "style-nj-contours.json")) {
             styleLoads.incrementAndGet()
-            return style("earth")
+            return style(path.removePrefix("style-").removeSuffix(".json"))
         }
         route.matchEntire(path)?.let { match ->
             val source = match.groupValues[1]
@@ -62,6 +80,17 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             val x = match.groupValues[3].toLongOrNull() ?: return null
             val y = match.groupValues[4].toLongOrNull() ?: return null
             if (z !in 0..22 || x < 0 || y < 0 || x >= (1L shl z) || y >= (1L shl z)) return null
+            if (source == "sample-contours" || source == "nj-contours") {
+                val bytes = runCatching {
+                    if (source == "sample-contours") samplePmtiles.get(z, x.toInt(), y.toInt())
+                    else remotePmtiles.get(z, x.toInt(), y.toInt())
+                }.getOrNull()
+                if (bytes != null) {
+                    if (source == "sample-contours") sampleContourTiles.incrementAndGet()
+                    else remoteContourTiles.incrementAndGet()
+                }
+                return bytes
+            }
             val db = database(source)
             val tms = (1L shl z) - 1 - y
             val data = db.rawQuery(
@@ -81,6 +110,26 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             return readAssetBytes(path)
         }
         return null
+    }
+
+    private fun localPmtilesRange(offset: Long, length: Int): ByteArray? {
+        val archive = "maps/contour-probe.pmtiles"
+        if (archive !in assetPaths) return null
+        val file = sampleFile ?: run {
+            val dest = java.io.File(context.filesDir, "sample-contours.pmtiles")
+            if (!dest.exists()) {
+                val tmp = java.io.File(dest.path + ".tmp")
+                try {
+                    context.assets.open(archive).use { input ->
+                        tmp.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    check(tmp.renameTo(dest)) { "Cannot stage PMTiles fixture" }
+                } finally { tmp.delete() }
+            }
+            RandomAccessFile(dest, "r").also { sampleFile = it }
+        }
+        if (offset < 0 || length < 0 || offset > file.length() - length) return null
+        return ByteArray(length).also { file.seek(offset); file.readFully(it) }
     }
 
     private fun database(source: String): SQLiteDatabase =
@@ -120,6 +169,20 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             require(id in archiveFor) { "Bright references unbundled source $id" }
             styleSources.put(id, offlineSource(id))
         }
+        if (name == "sample-contours" || name == "nj-contours") {
+            val synthetic = name == "sample-contours"
+            styleSources.put("nj-contours", JSONObject()
+                .put("type", "vector")
+                .put("minzoom", if (synthetic) 12 else 9)
+                .put("maxzoom", 16)
+                .put("tiles", JSONArray().put(HOST + "tile/" +
+                    (if (synthetic) "sample-contours" else "nj-contours") + "/{z}/{x}/{y}")))
+            val layers = result.getJSONArray("layers")
+            val overlayLayers = contourOverlay.getJSONArray("layers")
+            for (i in 0 until overlayLayers.length()) {
+                layers.put(JSONObject(overlayLayers.getJSONObject(i).toString()))
+            }
+        }
         result.put("glyphs", HOST + "fonts/{fontstack}/{range}.pbf")
         if (result.has("sprite")) result.put("sprite", HOST + "sprites/bright")
         return result.toString().encodeToByteArray()
@@ -149,5 +212,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
     @Synchronized override fun close() {
         databases.values.forEach { it.close() }
         databases.clear()
+        sampleFile?.close()
+        sampleFile = null
     }
 }

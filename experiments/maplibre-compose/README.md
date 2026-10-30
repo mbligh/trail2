@@ -22,3 +22,11 @@ The test screen opens near Oldwick at zoom 12.5 using Bright; tapping the top ba
 This deliberately uses an isolated read-only adapter over the same generated assets, not Trail2's production mutable tile cache. It does **not** yet demonstrate PMTiles range interception, contours, satellite raster, shared persistent cache updates, or iOS rendering. The production app remains unchanged.
 
 The offline Android UI smoke test additionally captures a screenshot and checks that the central map viewport contains varied rendered pixel colors, guarding against a renderer that requests resources but displays a blank surface. The captured `compose-offline.png` is uploaded with the smoke artifacts.
+
+
+## Stage 5c: PMTiles v3 and NJ contour compatibility
+
+- The isolated app now has a small PMTiles v3 reader (Hilbert IDs, gzip/no-compression directories, leaf directories, gzip/no-compression tile data) and an exact HTTP 206 byte-range reader with an on-disk 500/400 MiB cache. Network reads are only for the explicit NJ contour archive; already cached ranges remain available with no connection.
+- `tools/make_contour_fixture.py` generates a **synthetic** magenta contour vector tile archive around Oldwick, using the genuine PMTiles v3 layout and the same `contours` source layer and `elevation_ft` property expected by Trail2. It is not real NJ elevation data.
+- The probe exposes Bright, Natural Earth, synthetic PMTiles contours, and live NJ contours from `https://mapping.mbligh.org/contours.pmtiles`. The user can cycle via the top banner. The live option requires internet for uncached ranges; successful render of the synthetic archive is not proof of live NJ availability.
+- The separate probe requests Android INTERNET permission only to support remote-range experiments. This does not change production Trail2. The regular emulator smoke remains offline; separate checks cover PMTiles archive decoding, the cache across reopen, and the synthetic contour renderer.

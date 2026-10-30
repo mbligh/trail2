@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,10 +33,15 @@ class ProbeActivity : ComponentActivity() {
     private var selected by mutableStateOf("bright")
 
     internal val offlineResources get() = offline
+    internal fun showStyle(style: String) {
+        require(style in STYLES)
+        selected = style
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         offline = OfflineProbeResources(applicationContext)
+        intent.getStringExtra("style")?.takeIf { it in STYLES }?.let { selected = it }
         val provider = MapResourceProvider(
             accepts = { offline.accepts(it.url) },
             load = { request ->
@@ -46,24 +52,33 @@ class ProbeActivity : ComponentActivity() {
         )
         DefaultMapRuntime.configure { resourceProvider = provider }
         setContent {
-            val state = rememberMapState(
-                baseStyle = BaseStyle.Uri(OfflineProbeResources.HOST + "style-$selected.json"),
-                initialCameraPosition = CameraPosition(
-                    center = Position(latitude = 40.692, longitude = -74.771),
-                    zoom = 12.5
+            // Recreate the map state on style changes: changing an initial
+            // argument to rememberMapState alone does not switch the style.
+            key(selected) {
+                val state = rememberMapState(
+                    baseStyle = BaseStyle.Uri(OfflineProbeResources.HOST + "style-$selected.json"),
+                    initialCameraPosition = CameraPosition(
+                        center = Position(latitude = 40.692, longitude = -74.771),
+                        zoom = 12.5
+                    )
                 )
-            )
-            Box(Modifier.fillMaxSize()) {
-                MaplibreMap(state = state, modifier = Modifier.fillMaxSize())
-                BasicText(
-                    if (selected == "bright") "Bright (offline) • tap for Natural Earth"
-                    else "Natural Earth (offline) • tap for Bright",
-                    modifier = Modifier.align(Alignment.TopCenter)
-                        .clickable { selected = if (selected == "bright") "earth" else "bright" }
-                        .padding(12.dp)
-                )
+                Box(Modifier.fillMaxSize()) {
+                    MaplibreMap(state = state, modifier = Modifier.fillMaxSize())
+                    BasicText(
+                        selected + " • tap to switch (sample contours are synthetic)",
+                        modifier = Modifier.align(Alignment.TopCenter)
+                            .clickable {
+                                selected = STYLES[(STYLES.indexOf(selected) + 1) % STYLES.size]
+                            }
+                            .padding(12.dp)
+                    )
+                }
             }
         }
+    }
+
+    companion object {
+        private val STYLES = listOf("bright", "earth", "sample-contours", "nj-contours")
     }
 
     override fun onDestroy() {

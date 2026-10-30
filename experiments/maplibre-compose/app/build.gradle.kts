@@ -51,8 +51,17 @@ val prepareOfflineProbeMaps by tasks.registering(Exec::class) {
     commandLine("python3", rootRepo.resolve("tools/prepare_maps").absolutePath,
         "--output", generatedMaps.get().asFile.absolutePath)
 }
+val generateSamplePmtiles by tasks.registering(Exec::class) {
+    dependsOn(prepareOfflineProbeMaps)
+    inputs.file(rootRepo.resolve("experiments/maplibre-compose/tools/make_contour_fixture.py"))
+    outputs.file(generatedMaps.map { it.file("maps/contour-probe.pmtiles") })
+    workingDir = rootRepo
+    commandLine("python3",
+        rootRepo.resolve("experiments/maplibre-compose/tools/make_contour_fixture.py").absolutePath,
+        "--output", generatedMaps.get().file("maps/contour-probe.pmtiles").asFile.absolutePath)
+}
 android.sourceSets.getByName("main").assets.srcDir(generatedMaps.get().asFile)
-tasks.named("preBuild").configure { dependsOn(prepareOfflineProbeMaps) }
+tasks.named("preBuild").configure { dependsOn(generateSamplePmtiles) }
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(prepareOfflineProbeMaps) }
+    .configureEach { dependsOn(generateSamplePmtiles) }
 android.androidResources.noCompress += listOf("mbtiles", "pmtiles")

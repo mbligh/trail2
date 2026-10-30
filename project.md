@@ -253,3 +253,7 @@ screenshots/logs. Update version metadata on app releases and keep this document
 - Isolated Compose probe now bundles exactly the production-generated Bright style, sprite/fonts, OpenMapTiles Tewksbury MBTiles vector tiles, and Natural Earth MBTiles raster. Its read-only Android `OfflineProbeResources` serves the actual data through MapLibre Compose's `MapResourceProvider` without network access.
 - The separate instrumentation workflow launches an Android emulator offline, checks vector/raster archive bytes and verifies renderer-initiated style/vector resource loads. The probe UI switches between bundled Bright and Natural Earth.
 - This does not alter Trail2's production SDK, source sets, Play distribution, GPS recorder, user files, or offline runtime caches. PMTiles support/contours, online fallback/caching and iOS remain future parity checks.
+
+## Stage 5c: PMTiles and contour renderer experiment
+
+The standalone Compose probe now supports PMTiles v3 byte-range decoding and persisted HTTP 206 ranges, including a deterministic synthetic contour fixture and the same real NJ contour source URL configured in Trail2. A generated sample archive verifies PMTiles structure, MVT contour source-layer and render integration offline. The actual NJ dataset remains online-on-first-use and has not been claimed to be downloaded or fully offline; satellite source and production cache interoperability are separate parity steps. Production Trail2 remains unchanged.
