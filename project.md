@@ -576,3 +576,15 @@ then rerun the real Metal rendering gate. Do not mark the iOS probe validated or
 proceed to device distribution on the basis of successful compilation alone.
 Core Location, background recording, offline storage and the full iOS app host
 remain later work. Apple signing/TestFlight have not been configured.
+
+
+### iOS resource packaging recovery (2026-10-30)
+
+The replay workflow completed and captured a Kotlin MissingResourceException for
+MapLibre's `strings.commonMain.cvr`. The direct Swift host build linked the static
+framework but skipped Compose's Xcode resource sync. The probe packager now runs
+`:iosProbe:syncComposeResourcesForIos` with the selected platform/ARM64 and app
+output environment, and requires the MapLibre resource before signing either app.
+The rendering smoke test captures attached stdout/stderr and crash reports so
+future startup failures retain their original exception. Validation is pending
+the next macOS simulator run; Android remains at the tested 2.0.7 baseline.

@@ -2,6 +2,8 @@
 """Boot the unsigned fixture app and require real red/green/blue Metal output."""
 import json
 import os
+import re
+import shutil
 from pathlib import Path
 import subprocess
 import time
@@ -28,16 +30,33 @@ if phone['state'] != 'Booted':
 run('xcrun', 'simctl', 'bootstatus', identifier, '-b')
 run('xcrun', 'simctl', 'status_bar', identifier, 'override', '--time', '09:41')
 run('xcrun', 'simctl', 'install', identifier, str(ROOT / 'build/TrailIosProbe.app'))
-launch = run('xcrun', 'simctl', 'launch', '--terminate-running-process', identifier,
-             'net.pocketmap.iosprobe', stdout=subprocess.PIPE, text=True)
-pid = int(launch.stdout.rsplit(':', 1)[1].strip())
+console_path = OUTPUT / 'console.txt'
+console = console_path.open('w')
+launch = subprocess.Popen(
+    ['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console',
+     identifier, 'net.pocketmap.iosprobe'], stdout=console, stderr=subprocess.STDOUT)
 
 try:
+    # The attached console records Kotlin startup exceptions that log show misses.
+    pid = None
+    launch_deadline = time.monotonic() + 30
+    while time.monotonic() < launch_deadline:
+        match = re.search(r'net\.pocketmap\.iosprobe: (\d+)', console_path.read_text(errors='replace'))
+        if match:
+            pid = int(match.group(1))
+            break
+        if launch.poll() is not None:
+            raise RuntimeError('iOS probe exited during launch; see console.txt')
+        time.sleep(0.5)
+    if pid is None:
+        raise RuntimeError('iOS probe launch did not report a PID; see console.txt')
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         # A screenshot of SpringBoard after an app crash must never count as a pass.
         # Simulator applications share the macOS process namespace. The iOS
         # runtime does not ship a kill utility; check the host process directly.
+        if launch.poll() is not None:
+            raise RuntimeError('iOS probe exited before rendering; see console.txt')
         os.kill(pid, 0)
         screenshot = OUTPUT / 'ios-metal.png'
         run('xcrun', 'simctl', 'io', identifier, 'screenshot', str(screenshot))
@@ -58,6 +77,19 @@ try:
     else:
         raise AssertionError(f'Missing shared map content: {counts}')
 finally:
+    subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    try:
+        launch.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        launch.terminate()
+        launch.wait(timeout=15)
+    console.close()
+    print('IOS_CONSOLE_BEGIN\n' + console_path.read_text(errors='replace')[-40000:] + '\nIOS_CONSOLE_END')
+    reports = sorted((Path.home() / 'Library/Logs/DiagnosticReports').glob('TrailIosProbe*.ips'),
+                     key=lambda path: path.stat().st_mtime)
+    for report in reports[-2:]:
+        shutil.copy2(report, OUTPUT / report.name)
     with (OUTPUT / 'app-log.txt').open('w') as log:
         subprocess.run(['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--last', '5m',
                         '--predicate', 'process == "TrailIosProbe"', '--style', 'compact'],

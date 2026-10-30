@@ -21,6 +21,17 @@ case "$kind" in
 esac
 framework="experiments/ios-map/build/bin/$target/debugFramework"
 mkdir -p "$app"
+# Direct swiftc linking does not run Xcode's embedAndSign task. Run the same
+# Compose resource sync explicitly so transitive MapLibre strings reach the app.
+BUILT_PRODUCTS_DIR="$PWD/$(dirname "$app")" \
+UNLOCALIZED_RESOURCES_FOLDER_PATH="$(basename "$app")" \
+PLATFORM_NAME="$sdk_name" ARCHS=arm64 \
+    ./gradlew --no-daemon :iosProbe:syncComposeResourcesForIos
+required_resource="$app/compose-resources/composeResources/org.maplibre.compose.generated/values/strings.commonMain.cvr"
+if [ ! -s "$required_resource" ]; then
+    echo "Missing MapLibre Compose resource: $required_resource" >&2
+    exit 1
+fi
 cp experiments/ios-map/app/Info.plist "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string $platform" "$app/Info.plist"
