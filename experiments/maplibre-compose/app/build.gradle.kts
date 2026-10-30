@@ -72,4 +72,8 @@ val productionCacheSources by tasks.registering(Sync::class) {
     from(rootRepo.resolve("app/src/main/java")) { include("net/pocketmap/MbTilesCache.kt") }
     into(layout.buildDirectory.dir("generated/productionCacheSources"))
 }
-android.sourceSets.getByName("main").java.srcDir(productionCacheSources)
+// AGP 9 rejects TaskProvider/Provider values in the legacy SourceSet API.
+android.sourceSets.getByName("main").java.srcDir(
+    layout.buildDirectory.dir("generated/productionCacheSources").get().asFile)
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }
+    .configureEach { dependsOn(productionCacheSources) }
