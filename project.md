@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-29 for recording pin text and trip summaries (2.0.4).
+Updated 2026-10-29 for cross-platform migration through stage 5f; production app version remains 2.0.4.
 
 ## Product and identity
 
@@ -307,3 +307,24 @@ The standalone Compose probe now supports PMTiles v3 byte-range decoding and per
 - Production renderer replacement still requires PMTiles cache-format interoperability,
   camera/gesture and app overlay parity, then toolchain integration. Shared Compose
   UI/core already exist; iOS targets and platform adapters have not been added yet.
+
+## Validated migration checkpoint (2026-10-29)
+
+Stage 5e and 5f code is on `main`. Final verification at commit
+`09e800c843ca7d99e657e8a218e457bc9e7a3fb3` passed:
+https://github.com/mbligh/trail2/actions/runs/40987077419
+
+- Five deterministic Android 35 emulator tests cover offline styles, synthetic
+  contour pixels, activity recreation, glyph/sprite resources and production
+  raster-cache interoperability.
+- Four separate live-source instrumentation invocations cover actual NJ contours
+  and actual NJ 2020 satellite/hybrid maps, each warmed online then replayed in a
+  fresh process with networking disabled. Both replay tests require zero HTTP
+  attempts and zero missing cached ranges/tiles.
+- Assertion screenshots are copied into shell-owned emulator storage during tests
+  so Gradle uninstall cannot delete them before artifact collection.
+- Production APK/AAB renderer and release version have not changed in these stages.
+  No new phone test is needed for the isolated prototype. Next implementation work:
+  production PMTiles range-cache interoperability, camera/gesture and app-overlay
+  parity, then integrate the newer renderer/toolchain. iOS targets/adapters follow
+  after Android parity; no iOS compatibility claim has been made.
