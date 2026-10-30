@@ -1,49 +1,44 @@
 package net.pocketmap
 
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.test.core.app.ActivityScenario
+import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
-import androidx.test.rule.GrantPermissionRule
 import org.junit.Test
 
-/** Exercise the shared Compose header while MapLibre remains a native view. */
+/** Exercise real shared Compose controls alongside the renderer's main-thread event loop. */
 class ComposeHeaderTest {
-    @get:Rule(order = 0) val permissions = GrantPermissionRule.grant(
+    @get:Rule val permissions = GrantPermissionRule.grant(
         android.Manifest.permission.ACCESS_COARSE_LOCATION,
         android.Manifest.permission.ACCESS_FINE_LOCATION,
         android.Manifest.permission.POST_NOTIFICATIONS
     )
-    @get:Rule(order = 1) val rule = createAndroidComposeRule<MainActivity>()
 
     @Test fun basemapSelectionAndLayerMenuPersistInExistingPreferences() {
-        val prefs = rule.activity.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
-        val fallback = MapConfiguration(rule.activity).overlays.first { it.id == "contours" }.defaultVisible
-        val originallyEnabled = prefs.getBoolean("overlay_contours", fallback)
-
-        // Keep the original basemap_menu.xml icon instead of the temporary Compose sketch.
-        rule.onNodeWithTag("basemap-artwork", useUnmergedTree = true).assertExists()
-        rule.onNodeWithTag("basemap-control").performClick()
-        rule.onNodeWithTag("basemap-hybrid").performClick()
-        rule.runOnIdle { assertEquals("hybrid", prefs.getString("basemap", "")) }
-
-        rule.onNodeWithTag("trail-menu").performClick()
-        rule.onNodeWithTag("menu-layers").performClick()
-        rule.onNodeWithTag("map-layer-contours").performClick()
-        rule.runOnIdle { assertEquals(!originallyEnabled, prefs.getBoolean("overlay_contours", originallyEnabled)) }
-
-        // Toggling an overlay leaves its submenu open so users can edit several layers.
-        rule.onNodeWithTag("map-layer-contours").assertExists()
-        rule.onNodeWithTag("map-layer-contours").performClick()
-        rule.runOnIdle { assertEquals(originallyEnabled, prefs.getBoolean("overlay_contours", !originallyEnabled)) }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val ui = RealComposeUi(scenario)
+            lateinit var prefs: android.content.SharedPreferences
+            var originallyEnabled = false
+            scenario.onActivity { activity ->
+                prefs = activity.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
+                val fallback = MapConfiguration(activity).overlays.first { it.id == "contours" }.defaultVisible
+                originallyEnabled = prefs.getBoolean("overlay_contours", fallback)
+            }
+            ui.node("basemap-artwork")
+            ui.click("basemap-control"); ui.click("basemap-hybrid")
+            assertEquals("hybrid", prefs.getString("basemap", ""))
+            ui.click("trail-menu"); ui.click("menu-layers"); ui.click("map-layer-contours")
+            assertEquals(!originallyEnabled, prefs.getBoolean("overlay_contours", originallyEnabled))
+            ui.node("map-layer-contours"); ui.click("map-layer-contours")
+            assertEquals(originallyEnabled, prefs.getBoolean("overlay_contours", !originallyEnabled))
+        }
     }
 
     @Test fun trailVisibilityMenuLabelUpdatesAfterAction() {
-        rule.onNodeWithTag("trail-menu").performClick()
-        rule.onNodeWithTag("menu-TOGGLE_TRAILS").assertExists().performClick()
-        rule.onNodeWithTag("trail-menu").performClick()
-        rule.onNodeWithText("Show trails").assertExists()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val ui = RealComposeUi(scenario)
+            ui.click("trail-menu"); ui.click("menu-TOGGLE_TRAILS")
+            ui.click("trail-menu"); ui.text("Show trails")
+        }
     }
 }

@@ -30,6 +30,15 @@ class MapMigrationTest {
     }
     private fun renderer(activity: MainActivity): TrailMap = MainActivity::class.java.getDeclaredField("map").apply { isAccessible = true }.get(activity) as TrailMap
     private fun offline(map: TrailMap) { map.tiles.allowNetwork = false }
+    private fun isolateGps(activity: MainActivity) {
+        // Prevent the emulator's live 5 m fix from competing with this test's injected fixes.
+        val manager = MainActivity::class.java.getDeclaredField("manager").apply { isAccessible = true }.get(activity) as LocationManager
+        manager.removeUpdates(activity)
+        (MainActivity::class.java.getDeclaredField("recentLocations").apply { isAccessible = true }.get(activity) as ArrayDeque<*>).clear()
+    }
+    private fun following(activity: MainActivity, value: Boolean) {
+        MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.setBoolean(activity, value)
+    }
     private fun awaitRendered(scenario: ActivityScenario<MainActivity>, description: String,
         layerIds: Set<String>? = null, predicate: (List<org.maplibre.spatialk.geojson.Feature<org.maplibre.spatialk.geojson.Geometry, kotlinx.serialization.json.JsonObject?>>) -> Boolean) {
         val end = SystemClock.elapsedRealtime() + 30_000
@@ -135,7 +144,10 @@ class MapMigrationTest {
             .putFloat("lat", 40.69f).putFloat("lon", -74.78f).putFloat("zoom", 15f).commit()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             await(scenario, "Compose viewport") { it.mapState?.viewport != null }
-            scenario.onActivity { renderer(it).apply { setCenter(LatLng(40.697, -74.778)); setZoom(14.5) } }
+            scenario.onActivity { activity ->
+                isolateGps(activity); following(activity, false)
+                renderer(activity).apply { setCenter(LatLng(40.697, -74.778)); setZoom(14.5) }
+            }
             fun cameraMatches() = await(scenario, "saved center and display zoom") {
                 kotlin.math.abs(it.mapCenter.latitude - 40.697) < 0.000001 &&
                     kotlin.math.abs(it.mapCenter.longitude + 74.778) < 0.000001 &&
@@ -147,7 +159,12 @@ class MapMigrationTest {
             cameraMatches()
             scenario.recreate()
             await(scenario, "viewport after recreation") { it.mapState?.viewport != null }
+            scenario.onActivity {
+                isolateGps(it)
+                assertFalse("Following must survive recreation", MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.getBoolean(it))
+            }
             cameraMatches()
+            scenario.onActivity { following(it, true) }
             val down = SystemClock.uptimeMillis()
             fun touch(action: Int, step: Int) {
                 scenario.onActivity { activity ->
@@ -186,6 +203,7 @@ class MapMigrationTest {
         fun fix(provider: String, accuracy: Float, nanos: Long, lat: Double) = Location(provider).apply { latitude = lat; longitude = -74.78; this.accuracy = accuracy; elapsedRealtimeNanos = nanos; time = System.currentTimeMillis() }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
+                isolateGps(activity)
                 val now = SystemClock.elapsedRealtimeNanos()
                 activity.onLocationChanged(fix(LocationManager.GPS_PROVIDER,4f,now-2_000_000_000,40.69))
                 activity.onLocationChanged(fix(LocationManager.NETWORK_PROVIDER,1200f,now,41.5))
@@ -337,6 +355,38 @@ class MapMigrationTest {
                 assertNull(repository.loadOfflineResource("https://trail.tiles.invalid/invalid/99/0/0"))
             }
         } finally { copied.delete() }
+    }
+
+    @Test fun composeProviderServesLocalPmtilesThroughItsRegisteredTileJsonRoute() {
+        // One valid v3 directory entry and a two-byte vector tile. No external data.
+        val file = java.io.File(context.cacheDir, "provider-${System.nanoTime()}.pmtiles")
+        val header = java.nio.ByteBuffer.allocate(127).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        header.put("PMTiles".toByteArray()); header.put(3.toByte())
+        header.putLong(8, 127); header.putLong(16, 5)
+        header.putLong(56, 132); header.putLong(64, 2)
+        header.put(97, 1.toByte()); header.put(98, 1.toByte()); header.put(99, 1.toByte())
+        val tile = byteArrayOf(26, 0)
+        file.writeBytes(header.array() + byteArrayOf(1, 0, 1, 2, 1) + tile)
+        try {
+            ComposeMapResources(context).use { resources ->
+                resources.tiles.allowNetwork = false
+                val style = JSONObject().put("version", 8).put("layers", org.json.JSONArray())
+                    .put("sources", JSONObject().put("local", JSONObject().put("type", "vector")
+                        .put("url", "pmtiles://" + android.net.Uri.fromFile(file))))
+                val rewritten = JSONObject(resources.style(style))
+                val url = rewritten.getJSONObject("sources").getJSONObject("local").getString("url")
+                assertTrue(url.startsWith("https://trail.pmtiles.invalid/"))
+                val load = ComposeMapResources::class.java.getDeclaredMethod("load", String::class.java)
+                    .apply { isAccessible = true }
+                val metadata = JSONObject((load.invoke(resources, url) as ByteArray).decodeToString())
+                assertEquals(0, metadata.getInt("minzoom")); assertEquals(0, metadata.getInt("maxzoom"))
+                val template = metadata.getJSONArray("tiles").getString(0)
+                fun request(z: Int) = template.replace("{z}", z.toString()).replace("{x}", "0").replace("{y}", "0")
+                assertArrayEquals(tile, load.invoke(resources, request(0)) as ByteArray)
+                assertNull(load.invoke(resources, request(1)))
+                assertNull(load.invoke(resources, "https://trail.pmtiles.invalid/unknown/0/0/0"))
+            }
+        } finally { file.delete() }
     }
 
     @Test fun offlineOnlyArchiveKeepsZoomLimitsAcrossSwitches() {

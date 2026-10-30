@@ -476,6 +476,16 @@ The user confirmed the 2.0.6 system-bar fix and that the phone behavior works on
   roads and app overlays, and checks camera restoration and real drag/zoom input.
   Existing system-bar/cutout and pin-hold checks remain in the suite.
 
+Initial integration checks found that the fake Compose test frame clock resumes
+native-engine callbacks off the main thread. Header/inset tests now inspect and
+activate the actual semantics tree on Android's main thread, retaining the real
+frame clock. The regression also exposed following state resetting on recreation;
+the Activity now saves/restores that state with its camera. Feature taps use the
+renderer-managed layer hit handlers, including the 12 dp hit padding and original
+labels. Default renderer ornaments are omitted because the existing shared header
+already owns credits/zoom/controls. A local PMTiles provider-route test runs with
+HTTP disabled, in addition to the actual-source decoder/cache prototype checks.
+
 Validation is in progress. Next gate: install 2.0.7 through Play and verify map
 appearance, basemap/layer changes, taps on trails/pins, dragging/recenter/zoom,
 offline maps, a short recording including screen lock, and export/share behavior.

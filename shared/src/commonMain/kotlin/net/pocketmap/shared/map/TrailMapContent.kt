@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.json.*
 import org.maplibre.compose.expressions.dsl.image
+import org.maplibre.compose.interaction.ClickResult
+import org.maplibre.compose.layers.FeaturesClickHandler
 import org.maplibre.compose.layers.Layer
 import org.maplibre.compose.map.MapState
 import org.maplibre.compose.sources.GeoJsonData
@@ -30,7 +32,11 @@ data class MapArtwork(val key: String, val bitmap: ImageBitmap, val size: DpSize
 
 @Composable
 @MaplibreComposable
-fun TrailMapContent(trails: String, recording: String, pins: String, artwork: List<MapArtwork>) {
+fun TrailMapContent(trails: String, recording: String, pins: String, artwork: List<MapArtwork>, onFeatureClick: (String, androidx.compose.ui.unit.DpOffset) -> Unit) {
+    val onClick: FeaturesClickHandler = { features ->
+        val name = features.firstOrNull()?.properties?.get("name")?.jsonPrimitive?.content
+        if (name.isNullOrBlank()) ClickResult.Pass else { onFeatureClick(name, screenOffset); ClickResult.Consume }
+    }
     val features = rememberGeoJsonSource(GeoJsonData.JsonString(trails))
     val track = rememberGeoJsonSource(GeoJsonData.JsonString(recording))
     val savedPins = rememberGeoJsonSource(GeoJsonData.JsonString(pins))
@@ -39,7 +45,7 @@ fun TrailMapContent(trails: String, recording: String, pins: String, artwork: Li
         val spec = item.jsonObject
         val id = spec.getValue("id").jsonPrimitive.content
         Layer(id, spec.getValue("type").jsonPrimitive.content,
-            source = features) {
+            source = features, onClick = onClick, hitPadding = 12.dp) {
             spec["filter"]?.let { root("filter", it) }
             spec["layout"]?.jsonObject?.forEach { (k, v) -> layout(k, v) }
             spec["paint"]?.jsonObject?.forEach { (k, v) -> paint(k, v) }
@@ -47,7 +53,7 @@ fun TrailMapContent(trails: String, recording: String, pins: String, artwork: Li
     }
     artwork.filter { it.key != "trail-pin" }.forEach { icon ->
         key(icon.key) {
-            Layer("trail-points-${icon.key}", "symbol", source = features) {
+            Layer("trail-points-${icon.key}", "symbol", source = features, onClick = onClick, hitPadding = 12.dp) {
                 root("filter", Json.parseToJsonElement("""["all",["==",["geometry-type"],"Point"],["==",["get","icon"],"${icon.key}"]]"""))
                 layout("icon-image", image(BitmapPainter(icon.bitmap), size = icon.size))
                 layout("icon-size", Json.parseToJsonElement("""["get","scale"]"""))
@@ -56,12 +62,12 @@ fun TrailMapContent(trails: String, recording: String, pins: String, artwork: Li
             }
         }
     }
-    Layer("trail-recording", "line", source = track) {
+    Layer("trail-recording", "line", source = track, onClick = onClick, hitPadding = 12.dp) {
         layout("line-cap", JsonPrimitive("round")); layout("line-join", JsonPrimitive("round"))
         paint("line-color", JsonPrimitive("#1565c0")); paint("line-width", JsonPrimitive(4))
     }
     artwork.firstOrNull { it.key == "trail-pin" }?.let { pin ->
-        Layer("trail-recording-pins", "symbol", source = savedPins) {
+        Layer("trail-recording-pins", "symbol", source = savedPins, onClick = onClick, hitPadding = 12.dp) {
             layout("icon-image", image(BitmapPainter(pin.bitmap), size = pin.size))
             layout("icon-anchor", JsonPrimitive("bottom"))
             layout("icon-allow-overlap", JsonPrimitive(true))

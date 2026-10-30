@@ -92,6 +92,8 @@ class MainActivity : ComponentActivity(), LocationListener {
             statusBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE),
             navigationBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE)
         )
+        following = savedInstanceState?.getBoolean("following", true) ?: true
+        followingState.value = following
         manager = getSystemService(LOCATION_SERVICE) as LocationManager
         val root = ComposeView(this)
         mapConfig = MapConfiguration(this)
@@ -398,6 +400,7 @@ class MainActivity : ComponentActivity(), LocationListener {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("following", following)
         pinDraft?.let { draft ->
             draft.putString("text", pinEditor?.text?.toString().orEmpty())
             outState.putBundle("pinDraft", draft)

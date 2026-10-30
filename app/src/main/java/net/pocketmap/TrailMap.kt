@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.serialization.json.jsonPrimitive
 import net.pocketmap.shared.map.MapArtwork
 import net.pocketmap.shared.map.TrailMapContent
 import net.pocketmap.shared.map.PositionOverlay
@@ -162,7 +161,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         return ring
     }
     private fun color(value: Int) = String.format(java.util.Locale.US, "#%06x", value and 0xffffff)
-    private fun feature(kind: String, coordinates: JSONArray, properties: JSONObject) = JSONObject().put("type", "Feature").put("properties", properties.put("trailLabel", true)).put("geometry", JSONObject().put("type", kind).put("coordinates", coordinates))
+    private fun feature(kind: String, coordinates: JSONArray, properties: JSONObject) = JSONObject().put("type", "Feature").put("properties", properties).put("geometry", JSONObject().put("type", kind).put("coordinates", coordinates))
     private fun collection(features: List<JSONObject>) = JSONObject().put("type", "FeatureCollection").put("features", JSONArray(features))
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
@@ -177,7 +176,10 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
             }
             val state = rememberMapState(runtime = runtime, baseStyle = style,
                 initialCameraPosition = CameraPosition(center = Position(initialCenter.longitude, initialCenter.latitude), zoom = (initialZoom - 1.0).coerceIn(2.0, 18.0)),
-                content = { TrailMapContent(trailJson, trackJson, pinJson, artwork) })
+                content = { TrailMapContent(trailJson, trackJson, pinJson, artwork) { name, offset ->
+                    val density = resources.displayMetrics.density
+                    showLabel(name, (offset.x.value * density).toInt(), (offset.y.value * density).toInt())
+                } })
             SideEffect { mapState = state }
             LaunchedEffect(state) {
                 state.events.collectLatest { event ->
@@ -192,26 +194,17 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
             }
             Box(Modifier.fillMaxSize()) {
                 MaplibreMap(state = state,
+                    // The shared header already owns credits/zoom and map controls.
+                    overlay = {},
                     cameraConstraints = CameraConstraints { minZoom = 2.0; maxZoom = 18.0; maxPitch = 0.0 },
                     interactions = MapInteractions {
                         camera {
                             rotate { enabled = false }; pitch { enabled = false }
                             pan { onStart { popup?.dismiss(); if (pressedPointers == 1) onDrag() } }
                         }
-                        callbacks { click { onEvent { event ->
+                        callbacks { click { onEvent {
                             popup?.dismiss()
-                            val offset = event.screenOffset
-                            val density = resources.displayMetrics.density
-                            scope.launch {
-                                val radius = 12.dp
-                                val hits = state.queryRenderedFeatures(androidx.compose.ui.unit.DpRect(
-                                    offset.x-radius, offset.y-radius, offset.x+radius, offset.y+radius))
-                                // Only application overlays expose the prefixed property below.
-                                val label = hits.firstOrNull { it.properties?.get("trailLabel")?.jsonPrimitive?.content == "true" }
-                                val name = label?.properties?.get("name")?.jsonPrimitive?.content
-                                if (!name.isNullOrBlank()) showLabel(name, (offset.x.value*density).toInt(), (offset.y.value*density).toInt())
-                            }
-                            ClickResult.Consume
+                            ClickResult.Pass
                         } } }
                     },
                     modifier = Modifier.fillMaxSize().pointerInput(Unit) {
