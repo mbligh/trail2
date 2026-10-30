@@ -2,6 +2,7 @@ package net.pocketmap.composeprobe
 
 import android.os.SystemClock
 import android.view.MotionEvent
+import android.view.InputDevice
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
@@ -46,8 +47,15 @@ class CameraParityTest {
             fun touch(action: Int, x: Float) {
                 scenario.onActivity {
                     val root = it.window.decorView
-                    MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x,
-                        root.height * 0.5f, 0).also { event ->
+                    val properties = MotionEvent.PointerProperties().apply {
+                        id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER
+                    }
+                    val coordinates = MotionEvent.PointerCoords().apply {
+                        this.x = x; y = root.height * 0.5f; pressure = 1f; size = 1f
+                    }
+                    MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1,
+                        arrayOf(properties), arrayOf(coordinates), 0, 0, 1f, 1f, 0, 0,
+                        InputDevice.SOURCE_TOUCHSCREEN, 0).also { event ->
                         it.dispatchTouchEvent(event); event.recycle()
                     }
                 }
@@ -62,6 +70,7 @@ class CameraParityTest {
             scenario.onActivity { it.mapState.stopCameraMovement() }
             awaitResources("drag camera to settle") { var still = false; scenario.onActivity { still = !it.mapState.isCameraMoving }; still }
             scenario.onActivity { dragged = it.mapState.cameraPosition }
+            assertTrue("Drag did not move the map", kotlin.math.abs(dragged.center.longitude - desired.center.longitude) > 0.00001)
             val fix = Position(latitude = 40.693, longitude = -74.769)
             scenario.onActivity { it.updateFix(fix) }
             assertCamera(dragged)
