@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stage 7a; production version 2.0.7. Compose renderer phone testing is the next gate.
+Updated 2026-10-30 through stage 7a; production version 2.0.7. Android renderer phone testing passed; iOS startup diagnostics are the current blocker.
 
 ## Product and identity
 
@@ -539,3 +539,40 @@ Validation is in progress. This is an iOS build/rendering foundation, not a comp
 iOS Trail app. Core Location and background recording, persistent offline maps,
 local recordings/pins, camera and sharing still need iOS platform adapters. No
 Apple signing credentials or TestFlight distribution have been configured.
+
+
+### Stage 7a validation and current blocker (2026-10-30)
+
+- The user confirmed the production Android 2.0.7 renderer works on the phone.
+  After introducing iOS targets, all fifteen Android emulator checks passed again,
+  along with APK and Play publishing:
+  https://github.com/mbligh/trail2/actions/runs/41090588044
+  https://github.com/mbligh/trail2/actions/runs/41090588162
+  https://github.com/mbligh/trail2/actions/runs/41090588274
+- Both shared iOS frameworks compile/link and the shared calculation tests pass
+  on the iOS simulator. Both probe frameworks and Swift application binaries
+  build; the simulator app is ad-hoc signed and the device app remains unsigned.
+- Fixed the Swift host/framework module-name collision by compiling the host as
+  TrailIosProbeHost. App ZIPs now preserve executable permissions. Native caches
+  are retained after later host/checker failures, and native build phases have
+  separate CI steps.
+- The iOS rendering gate has NOT passed. The initial checker tried to invoke an
+  unavailable kill program inside the simulator. After correcting that to a
+  macOS process check, it reports ProcessLookupError after launch: the probe
+  process exits during startup. App logs show MapLibre runtime creation, but the
+  actual startup exception has not yet been captured. Latest full check:
+  https://github.com/mbligh/trail2/actions/runs/41097304517
+- Added a separate Replay iOS probe diagnostics workflow and tools/ios_probe_replay
+  to run the compiled simulator app without another native build. It captures
+  attached stdout/stderr, Darwin crash reports, rendering counts and a compact
+  screenshot in the job log. It can also be dispatched with a source run ID.
+  The first replay is currently assigned a runner but has not begun any steps:
+  https://github.com/mbligh/trail2/actions/runs/41100316846
+- The coding workspace became unavailable during diagnostics. All changes are
+  committed on main. No further Android phone testing is needed for this stage.
+
+Next: obtain the replay console/crash evidence and fix the iOS startup failure,
+then rerun the real Metal rendering gate. Do not mark the iOS probe validated or
+proceed to device distribution on the basis of successful compilation alone.
+Core Location, background recording, offline storage and the full iOS app host
+remain later work. Apple signing/TestFlight have not been configured.
