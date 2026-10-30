@@ -436,3 +436,20 @@ surface with the actual window's system-bar/cutout bounds, including exact top/
 bottom layout checks. CI runs it with three-button navigation, gesture navigation
 plus a tall cutout, and landscape rotation, and preserves screenshots for review.
 Automatic APK and Play publishing continue; version 2.0.6 is the phone-test patch.
+
+Validated the 2.0.6 fix at `0e858e626ab235de84da8e2b827b63beba01d157`:
+
+- Thirteen production emulator checks passed: the full eleven-test suite in
+  three-button mode, plus focused portrait-gesture/cutout and landscape checks:
+  https://github.com/mbligh/trail2/actions/runs/41044466991
+- Screenshots for all three configurations were retained and visually reviewed;
+  header and corner controls stay clear of system UI, without double padding.
+- APK and Play publishing passed:
+  https://github.com/mbligh/trail2/actions/runs/41044467033
+  https://github.com/mbligh/trail2/actions/runs/41044467113
+- The twelve isolated renderer checks also passed after fixing screenshot
+  persistence (UiAutomation runs individual programs, not shell command chains):
+  https://github.com/mbligh/trail2/actions/runs/41044467190
+
+Next: update the physical Pixel through Play to 2.0.6 and verify that both edges are
+clear, then complete the remaining phone regression checks before renderer integration.
