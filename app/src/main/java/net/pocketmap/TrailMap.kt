@@ -60,6 +60,8 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     private var heading by mutableStateOf<Float?>(null)
     private var connector by mutableStateOf<Position?>(null)
     private var popup: PopupWindow? = null
+    internal var styleLoads = 0
+        private set
     private var pressedPointers = 0
     var onCameraChanged: () -> Unit = {}
     var onDrag: () -> Unit = {}
@@ -182,7 +184,8 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
                     when (event) {
                         is MapEvent.StyleLoadFailed -> onError(event.reason)
                         is MapEvent.SourceDataFailed -> onError(event.cause.message ?: "Unable to load map data")
-                        MapEvent.CameraMoved, MapEvent.StyleLoaded -> onCameraChanged()
+                        MapEvent.StyleLoaded -> { styleLoads++; onCameraChanged() }
+                        MapEvent.CameraMoved -> onCameraChanged()
                         else -> Unit
                     }
                 }

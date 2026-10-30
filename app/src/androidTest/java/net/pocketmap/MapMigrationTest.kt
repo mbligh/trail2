@@ -96,7 +96,12 @@ class MapMigrationTest {
             assertArtwork()
             val config = MapConfiguration(context)
             for (choice in listOf("hybrid", "bright")) {
-                scenario.onActivity { renderer(it).setBasemap(config.basemaps.first { b -> b.name == choice }) }
+                var previousStyle = 0
+                scenario.onActivity { renderer(it).apply {
+                    previousStyle = styleLoads
+                    setBasemap(config.basemaps.first { b -> b.name == choice })
+                } }
+                await(scenario, "$choice actually finishes loading its new style") { it.styleLoads > previousStyle }
                 awaitRendered(scenario, "$choice restores trails and recording", setOf("trail-lines", "trail-recording")) { it.size >= 2 }
                 assertArtwork()
             }
@@ -108,7 +113,12 @@ class MapMigrationTest {
                 val popup = TrailMap::class.java.getDeclaredField("popup").apply { isAccessible = true }.get(map) as android.widget.PopupWindow?
                 popup?.isShowing == true && (popup.contentView as android.widget.TextView).text.contains("Broken gate")
             }
-            scenario.onActivity { renderer(it).onPause() } // Dismiss label before screenshot.
+            scenario.onActivity { renderer(it).apply { onPause(); setTrailsVisible(false) } }
+            awaitRendered(scenario, "hide trails leaves recording visible", setOf("trail-lines", "trail-recording")) { features ->
+                features.size == 1 && features.single().properties?.get("name")?.toString() == "\"Recorded trail\""
+            }
+            scenario.onActivity { renderer(it).setTrailsVisible(true) }
+            assertArtwork()
 
             assertEquals(emptyList<String>(), errors)
             awaitRendered(scenario, "Bright streets restored for screenshot") { features ->
