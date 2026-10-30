@@ -2,6 +2,13 @@ package net.pocketmap
 
 import android.Manifest
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
@@ -82,17 +89,12 @@ class MainActivity : ComponentActivity(), LocationListener {
     private val prefs by lazy { getSharedPreferences("map", MODE_PRIVATE) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE),
+            navigationBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE)
+        )
         manager = getSystemService(LOCATION_SERVICE) as LocationManager
         val root = ComposeView(this)
-        root.setOnApplyWindowInsetsListener { view, insets ->
-            if (android.os.Build.VERSION.SDK_INT >= 30) {
-                val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
-                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            } else {
-                view.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
-            }
-            insets
-        }
         mapConfig = MapConfiguration(this)
         basemaps = mapConfig.basemaps
         val oldChoice = prefs.getString("basemap", "bright")
@@ -114,49 +116,54 @@ class MainActivity : ComponentActivity(), LocationListener {
         mapFrame.addView(map, android.widget.FrameLayout.LayoutParams(-1, -1))
         // Preserve a single native instance of MapLibre and each control across recompositions.
         root.setContent {
-            TrailScreen(
-                status = statusText.value,
-                trailStatus = trailStatusText.value,
-                recordingStatus = recordingStatusText.value,
-                basemaps = basemaps.map { MapChoice(it.name, it.label) },
-                selectedBasemap = selectedBasemapName.value,
-                onBasemapSelected = ::selectBasemap,
-                basemapIcon = {
-                    Image(
-                        painter = painterResource(R.drawable.basemap_menu),
-                        contentDescription = null,
-                        modifier = Modifier.size(40.dp).testTag("basemap-artwork")
-                    )
-                },
-                zoomLabel = zoomLabel.value,
-                onMapCredits = ::showMapCredits,
-                trailsVisible = trailsVisibleState.value,
-                mapLayers = mapConfig.overlays.map {
-                    MapLayerChoice(it.id, it.name, it.id in layerSelections.value)
-                },
-                onLayerToggled = ::toggleMapLayer,
-                onMenuAction = ::performMenuAction,
-                map = { AndroidView(factory = { mapFrame }, modifier = Modifier.fillMaxSize()) },
-                recording = recordingState.value,
-                following = followingState.value,
-                pinEnabled = pinControlEnabled.value,
-                onRecord = ::toggleRecording,
-                onReport = ::shareCurrentLocation,
-                onPin = { addRecordingPin() },
-                onPinWithText = { addRecordingPin(withText = true) },
-                onRecenter = ::recenterOnGps,
-                reportIcon = { Image(painterResource(R.drawable.ic_report_flag), null, Modifier.size(28.dp)) },
-                pinIcon = { Image(painterResource(R.drawable.ic_track_pin), null, Modifier.size(24.dp)) },
-                recenterIcon = {
-                    Image(
-                        painterResource(R.drawable.ic_recenter), null, Modifier.size(28.dp),
-                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                            if (followingState.value) androidx.compose.ui.graphics.Color(0xff1565c0)
-                            else androidx.compose.ui.graphics.Color.DarkGray
+            // Keep the entire shared screen inside the system bars/cutout. Insets
+            // belong to Compose here; View padding is not the Compose layout contract.
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                .windowInsetsPadding(WindowInsets.safeDrawing)) {
+                TrailScreen(
+                    status = statusText.value,
+                    trailStatus = trailStatusText.value,
+                    recordingStatus = recordingStatusText.value,
+                    basemaps = basemaps.map { MapChoice(it.name, it.label) },
+                    selectedBasemap = selectedBasemapName.value,
+                    onBasemapSelected = ::selectBasemap,
+                    basemapIcon = {
+                        Image(
+                            painter = painterResource(R.drawable.basemap_menu),
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp).testTag("basemap-artwork")
                         )
-                    )
-                }
-            )
+                    },
+                    zoomLabel = zoomLabel.value,
+                    onMapCredits = ::showMapCredits,
+                    trailsVisible = trailsVisibleState.value,
+                    mapLayers = mapConfig.overlays.map {
+                        MapLayerChoice(it.id, it.name, it.id in layerSelections.value)
+                    },
+                    onLayerToggled = ::toggleMapLayer,
+                    onMenuAction = ::performMenuAction,
+                    map = { AndroidView(factory = { mapFrame }, modifier = Modifier.fillMaxSize().testTag("map-surface")) },
+                    recording = recordingState.value,
+                    following = followingState.value,
+                    pinEnabled = pinControlEnabled.value,
+                    onRecord = ::toggleRecording,
+                    onReport = ::shareCurrentLocation,
+                    onPin = { addRecordingPin() },
+                    onPinWithText = { addRecordingPin(withText = true) },
+                    onRecenter = ::recenterOnGps,
+                    reportIcon = { Image(painterResource(R.drawable.ic_report_flag), null, Modifier.size(28.dp)) },
+                    pinIcon = { Image(painterResource(R.drawable.ic_track_pin), null, Modifier.size(24.dp)) },
+                    recenterIcon = {
+                        Image(
+                            painterResource(R.drawable.ic_recenter), null, Modifier.size(28.dp),
+                            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                                if (followingState.value) androidx.compose.ui.graphics.Color(0xff1565c0)
+                                else androidx.compose.ui.graphics.Color.DarkGray
+                            )
+                        )
+                    }
+                )
+            }
         }
         showAttribution()
         setContentView(root)

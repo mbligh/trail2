@@ -7,7 +7,7 @@ android {
     namespace = "net.pocketmap"
     buildFeatures { compose = true }
     compileSdk = 37
-    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 18; versionName = "2.0.5" }
+    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 18; versionName = "2.0.6" }
     signingConfigs.getByName("debug") { storeFile = rootProject.file("development-signing.jks"); storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android" }
     signingConfigs.create("upload") {
         System.getenv("TRAIL_UPLOAD_KEYSTORE")?.let { storeFile = file(it) }

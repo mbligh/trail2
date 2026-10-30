@@ -62,13 +62,28 @@ jobs:
           done
           cat /tmp/emulator.log
           exit 1
-      - name: Exercise native offline rendering, cache and GPS selection
-        run: ./gradlew --no-daemon connectedDebugAndroidTest
+      - name: Exercise native rendering, GPS and three-button system-bar bounds
+        run: |
+          adb shell cmd overlay enable-exclusive --user 0 --category com.android.internal.systemui.navbar.threebutton
+          ./gradlew --no-daemon connectedDebugAndroidTest
+      - name: Verify gesture navigation and portrait camera-cutout bounds
+        run: |
+          adb shell cmd overlay enable-exclusive --user 0 --category com.android.internal.systemui.navbar.gestural
+          adb shell cmd overlay enable --user 0 com.android.internal.display.cutout.emulation.tall
+          ./gradlew --no-daemon connectedDebugAndroidTest \
+            -Pandroid.testInstrumentationRunnerArguments.class=net.pocketmap.ScreenInsetsTest
+      - name: Verify landscape system-bar and cutout bounds
+        run: |
+          adb shell settings put system accelerometer_rotation 0
+          adb shell settings put system user_rotation 1
+          ./gradlew --no-daemon connectedDebugAndroidTest \
+            -Pandroid.testInstrumentationRunnerArguments.class=net.pocketmap.ScreenInsetsTest
       - name: Collect screenshots and logs
         if: always()
         run: |
           mkdir -p smoke-results
           timeout 10 adb pull /data/local/tmp/maplibre-offline.png smoke-results/ || true
+          timeout 10 adb pull /data/local/tmp/trail-insets/. smoke-results/ || true
           timeout 10 adb logcat -d > smoke-results/logcat.txt || true
           cp /tmp/emulator.log smoke-results/ || true
       - uses: actions/upload-artifact@v6

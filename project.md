@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stages 5g–5i and 6a; production version 2.0.5. Phone regression testing is the next gate.
+Updated 2026-10-30 through stages 5g–5i and 6a; production version 2.0.6. Phone regression testing is the next gate.
 
 ## Product and identity
 
@@ -421,3 +421,18 @@ pixels, and real contour/satellite/hybrid replay with zero HTTP attempts or cach
 misses. Assertion screenshots and logs are stored in the workflow artifacts.
 The remaining gate is the 2.0.5 physical-phone baseline described above, before
 production renderer integration. All work so far is committed directly on `main`.
+
+## 2.0.6: keep the screen clear of system bars and camera cutouts
+
+Physical Pixel testing of 2.0.5 exposed header overlap with the clock/camera and
+bottom controls under three-button navigation. Replace the manual ComposeView
+inset listener/View padding with one Compose `WindowInsets.safeDrawing` wrapper
+around the shared screen. Enable edge-to-edge explicitly, paint the inset area
+white and keep dark system icons. This handles navigation bars, status bars and
+cutouts on all sides without double padding. Recording/GPS and map data are unchanged.
+
+An instrumentation regression compares every header/corner control and the map
+surface with the actual window's system-bar/cutout bounds, including exact top/
+bottom layout checks. CI runs it with three-button navigation, gesture navigation
+plus a tall cutout, and landscape rotation, and preserves screenshots for review.
+Automatic APK and Play publishing continue; version 2.0.6 is the phone-test patch.
