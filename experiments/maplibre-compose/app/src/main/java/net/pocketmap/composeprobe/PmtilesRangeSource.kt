@@ -5,7 +5,7 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
+import net.pocketmap.RangeCacheStorage
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
@@ -19,7 +19,7 @@ internal class PmtilesRangeSource(
     private val url: String,
     private val namespace: String,
     private val allowNetwork: () -> Boolean = { true },
-    private val fetch: (Long, Int) -> ByteArray? = { offset, length ->
+    private val fetch: (Long, Int) -> RangeCacheStorage.Entry? = { offset, length ->
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 7_000
@@ -28,18 +28,21 @@ internal class PmtilesRangeSource(
             connection.setRequestProperty("Accept-Encoding", "identity")
             if (connection.responseCode != 206) throw IOException("Expected HTTP 206")
             val expected = "bytes $offset-" + (offset + length - 1) + "/"
-            if (connection.getHeaderField("Content-Range")?.lowercase()?.startsWith(expected) != true)
+            val contentRange = connection.getHeaderField("Content-Range") ?: ""
+            if (!contentRange.lowercase().startsWith(expected))
                 throw IOException("Invalid Content-Range")
             // Do not allocate/read an unbounded response from a broken range server.
             connection.inputStream.use { stream ->
                 val bytes = ByteArray(length)
                 DataInputStream(stream).readFully(bytes)
                 if (stream.read() != -1) throw IOException("Oversized range response")
-                bytes
+                RangeCacheStorage.Entry(contentRange,
+                    connection.getHeaderField("Content-Type") ?: "application/octet-stream", bytes)
             }
         } finally { connection.disconnect() }
     }
 ) {
+    private val storage = RangeCacheStorage(directory)
     val cacheHits = AtomicInteger()
     val networkRequests = AtomicInteger()
     val networkBytes = AtomicLong()
@@ -54,47 +57,28 @@ internal class PmtilesRangeSource(
     @Synchronized fun read(offset: Long, length: Int): ByteArray? {
         if (offset < 0 || length !in 1..(16 * 1024 * 1024) || offset > Long.MAX_VALUE - length)
             return null
-        val hash = MessageDigest.getInstance("SHA-256")
-            .digest("$url|$namespace|$offset|$length".toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val file = File(directory, "$hash.range")
-        if (file.exists()) {
-            if (file.length() == length.toLong()) {
+        val requestedRange = "bytes=$offset-" + (offset + length - 1)
+        val expected = "bytes $offset-" + (offset + length - 1) + "/"
+        storage.get(url, requestedRange, namespace)?.let { entry ->
+            if (entry.data.size == length && entry.contentRange.lowercase().startsWith(expected)) {
                 cacheHits.incrementAndGet()
-                return file.readBytes()
+                return entry.data
             }
-            file.delete()
         }
         if (!allowNetwork()) {
             blockedRequests.incrementAndGet()
             return null
         }
         networkRequests.incrementAndGet()
-        val bytes = try { fetch(offset, length) } catch (error: IOException) {
+        val entry = try { fetch(offset, length) } catch (error: IOException) {
             android.util.Log.w("ComposeProbeRange", "Range $offset+$length failed for $url", error)
             null
         }
-        if (bytes?.size != length) return null
-        networkBytes.addAndGet(bytes.size.toLong())
-        val tmp = File(file.path + ".tmp")
-        try {
-            tmp.writeBytes(bytes)
-            if (!tmp.renameTo(file) && !file.exists()) throw IOException("Cannot persist range")
-        } finally { tmp.delete() }
-        prune()
-        return bytes
-    }
-
-    private var writes = 0
-    private fun prune() {
-        if (++writes % 32 != 0) return
-        val files = directory.listFiles()?.filter { it.extension == "range" }?.sortedBy { it.lastModified() } ?: return
-        var size = files.sumOf { it.length() }
-        if (size <= 500L * 1024 * 1024) return
-        for (file in files) {
-            val length = file.length()
-            if (file.delete()) size -= length
-            if (size <= 400L * 1024 * 1024) break
+        if (entry == null || entry.data.size != length || !entry.contentRange.lowercase().startsWith(expected)) return null
+        networkBytes.addAndGet(entry.data.size.toLong())
+        runCatching { storage.put(url, requestedRange, namespace, entry) }.onFailure {
+            android.util.Log.w("ComposeProbeRange", "Cannot persist $requestedRange", it)
         }
+        return entry.data
     }
 }

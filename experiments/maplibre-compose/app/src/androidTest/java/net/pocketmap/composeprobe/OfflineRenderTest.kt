@@ -29,7 +29,9 @@ class OfflineRenderTest {
         try {
             val uri = "https://mapping.mbligh.org/contours.pmtiles"
             val source = PmtilesRangeSource(cache, uri, "test-v1") { offset, length ->
-                pmtiles.copyOfRange(offset.toInt(), (offset + length).toInt())
+                net.pocketmap.RangeCacheStorage.Entry(
+                    "bytes $offset-${offset + length - 1}/${pmtiles.size}", "application/octet-stream",
+                    pmtiles.copyOfRange(offset.toInt(), (offset + length).toInt()))
             }
             val archive = PmtilesArchive(source::read)
             assertTrue(archive.tileType == 1)

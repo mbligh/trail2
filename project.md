@@ -328,3 +328,17 @@ https://github.com/mbligh/trail2/actions/runs/40987077419
   production PMTiles range-cache interoperability, camera/gesture and app-overlay
   parity, then integrate the newer renderer/toolchain. iOS targets/adapters follow
   after Android parity; no iOS compatibility claim has been made.
+
+## Stage 5g: production PMTiles range-cache compatibility
+
+- Extract `RangeCacheStorage` from the shipping OkHttp interceptor without changing
+  its 24-character SHA-256 filename, `URL|Range|namespace` key, binary UTF headers/
+  byte-count/payload layout, or FIFO 500/400 MiB eviction policy. The interceptor
+  delegates to that storage; existing cached regions remain readable.
+- Compile the same storage class into the isolated Compose project. Its PMTiles
+  reader now stores the real HTTP Content-Range and MIME alongside bytes, uses the
+  production cache directory/key/namespace, and replays native-written ranges.
+  This is format compatibility inside the separate app sandbox, not cross-app file access.
+- JVM tests read the old binary layout and independently inspect newly written
+  files; emulator tests cover both read/write directions and reject mismatched
+  server ranges. The real NJ online/cold-offline checks continue to run.

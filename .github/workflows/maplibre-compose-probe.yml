@@ -6,6 +6,7 @@ on:
     paths:
       - 'experiments/maplibre-compose/**'
       - 'app/src/main/java/net/pocketmap/MbTilesCache.kt'
+      - 'app/src/main/java/net/pocketmap/RangeCacheStorage.kt'
       - 'basemaps.json'
       - 'offline-maps.json'
       - 'tools/prepare_maps'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'experiments/maplibre-compose/**'
       - 'app/src/main/java/net/pocketmap/MbTilesCache.kt'
+      - 'app/src/main/java/net/pocketmap/RangeCacheStorage.kt'
       - 'basemaps.json'
       - 'offline-maps.json'
       - 'tools/prepare_maps'
@@ -82,7 +84,7 @@ jobs:
           adb shell svc wifi disable || true
           adb shell svc data disable || true
           gradle --no-daemon -p experiments/maplibre-compose :app:connectedDebugAndroidTest \
-            -Pandroid.testInstrumentationRunnerArguments.class=net.pocketmap.composeprobe.OfflineRenderTest,net.pocketmap.composeprobe.RasterCacheInteropTest
+            -Pandroid.testInstrumentationRunnerArguments.class=net.pocketmap.composeprobe.OfflineRenderTest,net.pocketmap.composeprobe.RasterCacheInteropTest,net.pocketmap.composeprobe.RangeCacheInteropTest
       - name: Warm actual NJ contour ranges online
         run: |
           adb shell svc wifi enable

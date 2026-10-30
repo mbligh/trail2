@@ -27,7 +27,7 @@ class LiveContourRenderTest {
     @Test fun warmRealContoursOnline() {
         receipt.delete()
         // Fresh process and an empty cache prove this really fetched the NJ dataset.
-        File(context.filesDir, "probe-pmtiles-ranges").deleteRecursively()
+        File(context.filesDir, "map-cache/pmtiles").deleteRecursively()
         val intent = Intent(context, ProbeActivity::class.java).putExtra("style", "nj-contours")
         ActivityScenario.launch<ProbeActivity>(intent).use {
             awaitResources("actual NJ contour tiles") { resources.remoteContourTiles.get() >= 2 }

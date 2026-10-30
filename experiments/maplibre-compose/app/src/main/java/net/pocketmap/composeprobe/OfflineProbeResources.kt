@@ -37,9 +37,9 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
     @Volatile var allowRemoteNetwork = true
     internal val remoteRange by lazy {
         PmtilesRangeSource(
-            java.io.File(context.filesDir, "probe-pmtiles-ranges"),
+            java.io.File(context.filesDir, "map-cache/pmtiles"),
             "https://mapping.mbligh.org/contours.pmtiles",
-            "nj-contours-v1",
+            contourOverlay.getJSONObject("sources").getJSONObject("nj-contours").optString("cacheVersion", "1"),
             allowNetwork = { allowRemoteNetwork }
         )
     }
