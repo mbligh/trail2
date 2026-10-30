@@ -77,3 +77,13 @@ android.sourceSets.getByName("main").java.srcDir(
     layout.buildDirectory.dir("generated/productionCacheSources").get().asFile)
 tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }
     .configureEach { dependsOn(productionCacheSources) }
+
+val productionIconResources by tasks.registering(Sync::class) {
+    from(rootRepo.resolve("app/src/main/res")) { include("drawable/ic_track_pin.xml") }
+    into(layout.buildDirectory.dir("generated/productionIconResources"))
+}
+android.sourceSets.getByName("main").res.srcDir(
+    layout.buildDirectory.dir("generated/productionIconResources").get().asFile)
+tasks.named("preBuild").configure { dependsOn(productionIconResources) }
+tasks.matching { it.name != "productionIconResources" && (it.name.contains("Resources") || it.name.contains("generate") && it.name.endsWith("ResValues")) }
+    .configureEach { dependsOn(productionIconResources) }

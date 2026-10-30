@@ -354,3 +354,15 @@ https://github.com/mbligh/trail2/actions/runs/40987077419
 - Keep latest position and following state through recreation, and test recenter,
   paused-follow fix updates, real Activity-dispatched drag input, and zoom input on
   the offline emulator. GPS acquisition remains outside the renderer.
+
+## Stage 5i: app-owned overlays in the Compose renderer
+
+- The isolated map now exercises declarative trail lines, polygons with holes,
+  blue recording lines, and the unchanged production pin drawable/annotation tap.
+  Sources update without replacing the basemap and reattach after style reloads.
+- Verify independent trail visibility, continued recording/pin visibility, changed
+  track data, recreation, pin hit-testing and polygon holes on the actual renderer.
+  A Compose Canvas also projects the blue position dot/heading through the rendered
+  viewport, independently of location acquisition and native map drawing.
+- Fixture data is synthetic and opt-in for instrumentation; it is not a real user
+  recording. Existing GPS acquisition, files and exports remain untouched.

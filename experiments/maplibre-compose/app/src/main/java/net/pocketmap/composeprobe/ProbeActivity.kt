@@ -41,6 +41,11 @@ class ProbeActivity : ComponentActivity() {
     internal val mapReady get() = ::mapState.isInitialized && mapState.viewport != null
     private var fix by mutableStateOf(Position(latitude = 40.692, longitude = -74.771))
     private var pressedPointers = 0
+    internal var fixtureEnabled by mutableStateOf(false)
+    internal var trailsVisible by mutableStateOf(true)
+    internal var recordingRevision by mutableStateOf(0)
+    internal var pinText by mutableStateOf("")
+    internal var heading by mutableStateOf<Float?>(null)
 
     internal fun updateFix(position: Position) {
         fix = position
@@ -67,6 +72,9 @@ class ProbeActivity : ComponentActivity() {
         (savedInstanceState?.getString("style") ?: intent.getStringExtra("style"))
             ?.takeIf { it in STYLES }?.let { selected = it }
         following = savedInstanceState?.getBoolean("following", true) ?: true
+        fixtureEnabled = savedInstanceState?.getBoolean("fixture", false) ?: false
+        trailsVisible = savedInstanceState?.getBoolean("trails", true) ?: true
+        recordingRevision = savedInstanceState?.getInt("recording-revision", 0) ?: 0
         savedInstanceState?.takeIf { it.containsKey("fix-lat") }?.let {
             fix = Position(latitude = it.getDouble("fix-lat"), longitude = it.getDouble("fix-lon"))
         }
@@ -78,7 +86,8 @@ class ProbeActivity : ComponentActivity() {
                     initialCameraPosition = CameraPosition(
                         center = Position(latitude = 40.692, longitude = -74.771),
                         zoom = 12.5
-                    )
+                    ),
+                    content = { if (fixtureEnabled) ProbeOverlays(trailsVisible, recordingRevision) { pinText = it } }
                 )
                 SideEffect { mapState = state }
                 Box(Modifier.fillMaxSize()) {
@@ -99,6 +108,7 @@ class ProbeActivity : ComponentActivity() {
                                 }
                             }
                         })
+                    if (fixtureEnabled) PositionOverlay(state, fix, heading, Modifier.fillMaxSize())
                     BasicText(
                         selected + " • tap to switch (sample contours are synthetic)",
                         modifier = Modifier.align(Alignment.TopCenter)
@@ -114,6 +124,9 @@ class ProbeActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("style", selected)
         outState.putBoolean("following", following)
+        outState.putBoolean("fixture", fixtureEnabled)
+        outState.putBoolean("trails", trailsVisible)
+        outState.putInt("recording-revision", recordingRevision)
         outState.putDouble("fix-lat", fix.latitude)
         outState.putDouble("fix-lon", fix.longitude)
         super.onSaveInstanceState(outState)
