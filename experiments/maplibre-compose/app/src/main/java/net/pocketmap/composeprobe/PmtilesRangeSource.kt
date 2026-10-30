@@ -1,10 +1,13 @@
 package net.pocketmap.composeprobe
 
+import java.io.DataInputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Persistent PMTiles range cache with a bounded 500/400 MiB pruning policy.
@@ -15,6 +18,7 @@ internal class PmtilesRangeSource(
     private val directory: File,
     private val url: String,
     private val namespace: String,
+    private val allowNetwork: () -> Boolean = { true },
     private val fetch: (Long, Int) -> ByteArray? = { offset, length ->
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
@@ -26,10 +30,21 @@ internal class PmtilesRangeSource(
             val expected = "bytes $offset-" + (offset + length - 1) + "/"
             if (connection.getHeaderField("Content-Range")?.lowercase()?.startsWith(expected) != true)
                 throw IOException("Invalid Content-Range")
-            connection.inputStream.use { it.readBytes() }
+            // Do not allocate/read an unbounded response from a broken range server.
+            connection.inputStream.use { stream ->
+                val bytes = ByteArray(length)
+                DataInputStream(stream).readFully(bytes)
+                if (stream.read() != -1) throw IOException("Oversized range response")
+                bytes
+            }
         } finally { connection.disconnect() }
     }
 ) {
+    val cacheHits = AtomicInteger()
+    val networkRequests = AtomicInteger()
+    val networkBytes = AtomicLong()
+    val blockedRequests = AtomicInteger()
+
     init {
         require(url.startsWith("https://") || url.startsWith("http://127.0.0.1:"))
         require(namespace.isNotBlank())
@@ -44,11 +59,23 @@ internal class PmtilesRangeSource(
             .joinToString("") { "%02x".format(it) }
         val file = File(directory, "$hash.range")
         if (file.exists()) {
-            if (file.length() == length.toLong()) return file.readBytes()
+            if (file.length() == length.toLong()) {
+                cacheHits.incrementAndGet()
+                return file.readBytes()
+            }
             file.delete()
         }
-        val bytes = try { fetch(offset, length) } catch (_: IOException) { null }
+        if (!allowNetwork()) {
+            blockedRequests.incrementAndGet()
+            return null
+        }
+        networkRequests.incrementAndGet()
+        val bytes = try { fetch(offset, length) } catch (error: IOException) {
+            android.util.Log.w("ComposeProbeRange", "Range $offset+$length failed for $url", error)
+            null
+        }
         if (bytes?.size != length) return null
+        networkBytes.addAndGet(bytes.size.toLong())
         val tmp = File(file.path + ".tmp")
         try {
             tmp.writeBytes(bytes)

@@ -13,7 +13,7 @@ import java.util.zip.GZIPInputStream
 
 /**
  * Android-only experimental adapter over the *same generated* offline map assets as Trail2.
- * Unlike the shipping TileRepository it never contacts a server or mutates a tile cache.
+ * Bundled resources are read-only; only the explicit live-contour mode fetches remote ranges.
  * The renderer stays in a separate app and does not touch Trail2's private files.
  */
 internal class OfflineProbeResources(private val context: Context) : Closeable {
@@ -34,11 +34,13 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
     private val databases = mutableMapOf<String, SQLiteDatabase>()
     private var sampleFile: RandomAccessFile? = null
     private val samplePmtiles by lazy { PmtilesArchive(::localPmtilesRange) }
-    private val remoteRange by lazy {
+    @Volatile var allowRemoteNetwork = true
+    internal val remoteRange by lazy {
         PmtilesRangeSource(
             java.io.File(context.filesDir, "probe-pmtiles-ranges"),
             "https://mapping.mbligh.org/contours.pmtiles",
-            "nj-contours-v1"
+            "nj-contours-v1",
+            allowNetwork = { allowRemoteNetwork }
         )
     }
     private val remotePmtiles by lazy { PmtilesArchive(remoteRange::read) }
@@ -84,6 +86,8 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
                 val bytes = runCatching {
                     if (source == "sample-contours") samplePmtiles.get(z, x.toInt(), y.toInt())
                     else remotePmtiles.get(z, x.toInt(), y.toInt())
+                }.onFailure {
+                    android.util.Log.w("ComposeProbePmtiles", "Cannot load $source/$z/$x/$y", it)
                 }.getOrNull()
                 if (bytes != null) {
                     if (source == "sample-contours") sampleContourTiles.incrementAndGet()

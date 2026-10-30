@@ -38,6 +38,7 @@ class ProbeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        offlineResources.allowRemoteNetwork = !intent.getBooleanExtra("offline-only", false)
         (savedInstanceState?.getString("style") ?: intent.getStringExtra("style"))
             ?.takeIf { it in STYLES }?.let { selected = it }
         setContent {

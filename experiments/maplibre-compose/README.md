@@ -41,5 +41,21 @@ sprite loads, and a varied central map viewport. It switches Bright → Natural
 Earth → synthetic contours → Bright in one activity, recreates the activity on
 contours, and verifies that the saved style survives. Screenshots for each check
 are included in `ComposeProbeSmoke`, including the last failed assertion frame.
-Synthetic contour pixels establish fixture rendering only; live NJ contour range
-fetch/replay, satellite/hybrid imagery and production cache integration remain.
+Synthetic contour pixels establish fixture rendering only. Separate live-data checks
+below cover real NJ range replay; satellite/hybrid and production cache integration remain.
+
+## Actual NJ contours: online warm-up, cold offline replay
+
+CI runs `OfflineRenderTest` with networking disabled. It then enables networking
+and invokes only `LiveContourRenderTest#warmRealContoursOnline` against the real
+configured NJ PMTiles URL with an empty probe range cache. The test requires
+rendered magenta lines and actual downloaded ranges. After force-stopping the app,
+CI disables networking and invokes `replayRealContoursOffline` in a fresh process
+without reinstalling or deleting private data. That test requires visible real
+contours from disk, cache hits, zero HTTP attempts and zero uncached range requests.
+
+The probe's offline-only intent also blocks remote fetches at the provider, so a
+network-toggle failure cannot silently make replay pass through HTTP. Both phases
+save screenshots and instrumentation output in `ComposeProbeSmoke`. This validates
+only the viewed Oldwick region, not statewide coverage. Live data availability is
+an explicit CI dependency; no synthetic fallback hides a real-source failure.

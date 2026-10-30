@@ -272,3 +272,19 @@ The standalone Compose probe now supports PMTiles v3 byte-range decoding and per
 - Remaining before a production renderer switch: actual NJ remote-range rendering and
   offline replay, satellite/hybrid imagery, production cache interoperability, camera/
   gesture and user-overlay parity, then toolchain integration. iOS remains unconfigured.
+
+## Stage 5e: actual NJ contour ranges and cold offline replay
+
+- The isolated Compose workflow first runs deterministic offline renderer checks,
+  then fetches the configured real NJ contour PMTiles archive for the Oldwick
+  viewport and asserts visible magenta contour lines. It stops the app process,
+  disables emulator networking, and launches a separate instrumentation invocation
+  to verify the same real contour viewport from persisted byte ranges.
+- Range counters distinguish disk hits, HTTP attempts/bytes and blocked cache misses.
+  Replay disables HTTP in the provider too and requires zero HTTP attempts and zero
+  missing ranges. A warm-up receipt and screenshots distinguish real-data checks
+  from the separate synthetic fixture. No statewide download is performed.
+- Bound HTTP range body reads to the requested size and log range/PMTiles errors
+  for diagnosis. This remains an isolated Android prototype; production Trail2 and
+  its user data are unchanged. Satellite/hybrid imagery, production cache format
+  interoperability, camera/gesture/user-overlay parity and iOS remain to validate.
