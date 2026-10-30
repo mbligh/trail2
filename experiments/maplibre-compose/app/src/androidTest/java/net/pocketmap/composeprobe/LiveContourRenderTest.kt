@@ -20,6 +20,10 @@ class LiveContourRenderTest {
     private val resources get() = (context.applicationContext as ProbeApplication).offlineResources
     private val receipt get() = File(context.filesDir, "real-contour-warm.json")
 
+    private fun awaitBrightUnderlay() = awaitResources("Bright vector underlay and fonts") {
+        resources.vectorTiles.get() >= 2 && resources.glyphLoads.get() > 0
+    }
+
     @Test fun warmRealContoursOnline() {
         receipt.delete()
         // Fresh process and an empty cache prove this really fetched the NJ dataset.
@@ -27,6 +31,7 @@ class LiveContourRenderTest {
         val intent = Intent(context, ProbeActivity::class.java).putExtra("style", "nj-contours")
         ActivityScenario.launch<ProbeActivity>(intent).use {
             awaitResources("actual NJ contour tiles") { resources.remoteContourTiles.get() >= 2 }
+            awaitBrightUnderlay()
             assertContours("compose-real-contours-online.png")
             // Let viewport-adjacent requests finish before the cold/offline invocation.
             var previous = -1
@@ -61,6 +66,7 @@ class LiveContourRenderTest {
             awaitResources("real NJ contours from disk after process restart") {
                 resources.remoteContourTiles.get() >= 2
             }
+            awaitBrightUnderlay()
             assertContours("compose-real-contours-offline.png")
             val ranges = resources.remoteRange
             assertTrue("No persisted range replay", ranges.cacheHits.get() > 0)
