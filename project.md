@@ -618,3 +618,10 @@ sampling and recent-accuracy policy. Tests inject clock jumps and inaccurate,
 stale and out-of-order samples; CI also typechecks the iOS-only APIs against the
 actual simulator SDK. These adapters are not yet wired to the probe or a shipping
 iOS host, and simulator checks cannot establish physical GNSS/locked-screen behavior.
+
+Swift recording/coordinator tests and the simulator-SDK Core Location typecheck
+passed in run `41138324840`. Native GPX/KML writers now accept statistics supplied
+by shared Kotlin, preserve pins/Unicode notes and GPS outage gaps, and carry the
+same distance/time/ascent/descent fields and readable description as Android.
+Swift tests parse both exports as XML and check notes, gaps, accuracy styles and
+imperial summary formatting. Export validation is pending the next package run.
