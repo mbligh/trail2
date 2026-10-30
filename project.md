@@ -257,3 +257,18 @@ screenshots/logs. Update version metadata on app releases and keep this document
 ## Stage 5c: PMTiles and contour renderer experiment
 
 The standalone Compose probe now supports PMTiles v3 byte-range decoding and persisted HTTP 206 ranges, including a deterministic synthetic contour fixture and the same real NJ contour source URL configured in Trail2. A generated sample archive verifies PMTiles structure, MVT contour source-layer and render integration offline. The actual NJ dataset remains online-on-first-use and has not been claimed to be downloaded or fully offline; satellite source and production cache interoperability are separate parity steps. Production Trail2 remains unchanged.
+
+## Stage 5d: offline renderer parity checks and recreation
+
+- Strengthen the isolated Compose emulator suite to assert visible magenta pixels from
+  synthetic PMTiles contour layers, rather than treating tile requests or screenshot
+  existence as proof that contours rendered. Bright must also request bundled glyphs
+  and sprites and draw a varied map viewport.
+- Exercise Bright → Natural Earth → synthetic contours → Bright in one activity,
+  checking raster/contour resource loads and map pixels. Recreate the activity on the
+  contour style and retain that selection through Android saved instance state.
+- Save screenshots for every renderer check in the probe workflow artifacts, including
+  failures. All checks run with emulator Wi-Fi/mobile data disabled.
+- Remaining before a production renderer switch: actual NJ remote-range rendering and
+  offline replay, satellite/hybrid imagery, production cache interoperability, camera/
+  gesture and user-overlay parity, then toolchain integration. iOS remains unconfigured.

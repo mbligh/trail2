@@ -6,6 +6,10 @@ on:
     paths:
       - 'experiments/maplibre-compose/**'
       - '.github/workflows/maplibre-compose-probe.yml'
+  pull_request:
+    paths:
+      - 'experiments/maplibre-compose/**'
+      - '.github/workflows/maplibre-compose-probe.yml'
   workflow_dispatch:
 
 permissions:
@@ -76,7 +80,7 @@ jobs:
           mkdir -p experiments/maplibre-compose/smoke
           timeout 10 adb logcat -d > experiments/maplibre-compose/smoke/logcat.txt || true
           cp /tmp/compose-probe-emulator.log experiments/maplibre-compose/smoke/ || true
-          timeout 10 adb pull /sdcard/Android/data/net.pocketmap.composeprobe/files/compose-offline.png experiments/maplibre-compose/smoke/ || true
+          timeout 20 adb pull /sdcard/Android/data/net.pocketmap.composeprobe/files/. experiments/maplibre-compose/smoke/ || true
       - uses: actions/upload-artifact@v6
         if: always()
         with:
