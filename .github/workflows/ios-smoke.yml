@@ -34,17 +34,25 @@ jobs:
           if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
             ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
           fi
-      - uses: actions/cache@v5
+      - uses: actions/cache/restore@v5
+        id: konan
         with:
           path: ~/.konan
           key: trail-konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('build.gradle.kts', 'shared/build.gradle.kts', 'experiments/ios-map/build.gradle.kts') }}
-      - name: Compile device and simulator frameworks; run shared tests on iOS
+      - name: Link shared iPhone framework
+        run: ./gradlew --no-daemon :shared:linkDebugFrameworkIosArm64
+      - name: Link shared simulator framework
+        run: ./gradlew --no-daemon :shared:linkDebugFrameworkIosSimulatorArm64
+      - name: Run shared tests on iOS
+        run: ./gradlew --no-daemon :shared:iosSimulatorArm64Test
+      - name: Link Metal simulator probe
+        run: ./gradlew --no-daemon :iosProbe:linkDebugFrameworkIosSimulatorArm64
+      - name: Link Metal iPhone probe
+        run: ./gradlew --no-daemon :iosProbe:linkDebugFrameworkIosArm64
+      - name: Build simulator and unsigned device probes without Apple credentials
         run: |
-          ./gradlew --no-daemon :shared:linkDebugFrameworkIosArm64 \
-            :shared:linkDebugFrameworkIosSimulatorArm64 :shared:iosSimulatorArm64Test \
-            :iosProbe:linkDebugFrameworkIosSimulatorArm64
-      - name: Build simulator application without Apple credentials
-        run: bash experiments/ios-map/build_simulator_app
+          bash experiments/ios-map/build_probe_app simulator
+          bash experiments/ios-map/build_probe_app device
       - name: Verify real Metal rendering in the simulator
         run: |
           python -m pip install Pillow==11.3.0
@@ -59,5 +67,11 @@ jobs:
             shared/build/reports/tests/
             shared/build/test-results/
             experiments/ios-map/build/TrailIosProbe.app/
+            experiments/ios-map/build/TrailIosProbe-device.app/
             experiments/ios-map/build/smoke/
           if-no-files-found: warn
+      - uses: actions/cache/save@v5
+        if: always() && steps.konan.outputs.cache-hit != 'true'
+        with:
+          path: ~/.konan
+          key: ${{ steps.konan.outputs.cache-primary-key }}

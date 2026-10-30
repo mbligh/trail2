@@ -10,14 +10,17 @@ On an Apple Silicon Mac with current Xcode, JDK 17 and the Android SDK configure
 ```sh
 ./gradlew :shared:linkDebugFrameworkIosArm64 \
   :shared:linkDebugFrameworkIosSimulatorArm64 :shared:iosSimulatorArm64Test \
-  :iosProbe:linkDebugFrameworkIosSimulatorArm64
-bash experiments/ios-map/build_simulator_app
+  :iosProbe:linkDebugFrameworkIosSimulatorArm64 :iosProbe:linkDebugFrameworkIosArm64
+bash experiments/ios-map/build_probe_app simulator
+bash experiments/ios-map/build_probe_app device
 python -m pip install Pillow==11.3.0
 python experiments/ios-map/smoke_simulator.py
 ```
 
 `build/TrailIosProbe.app` is a simulator app; ad-hoc signing requires no Apple
-account. The static frameworks in `shared/build/bin/` are separate device and
+account. `build/TrailIosProbe-device.app` is also compiled for a physical ARM64 iPhone,
+but is unsigned and cannot be installed without valid Apple provisioning/signing.
+It remains a fixture app, not the full Trail application. The static frameworks in `shared/build/bin/` are separate device and
 simulator slices. The dependency publishes only ARM64 variants, so an Intel Mac
 cannot run this simulator build. An iPhone build/distribution will need an actual
 iOS app host, platform services and Apple signing setup in a later stage.

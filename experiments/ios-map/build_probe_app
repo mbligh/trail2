@@ -1,0 +1,38 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+kind="${1:-simulator}"
+case "$kind" in
+    simulator)
+        target=iosSimulatorArm64
+        sdk_name=iphonesimulator
+        platform=iPhoneSimulator
+        triple=arm64-apple-ios15.5-simulator
+        app="experiments/ios-map/build/TrailIosProbe.app"
+        ;;
+    device)
+        target=iosArm64
+        sdk_name=iphoneos
+        platform=iPhoneOS
+        triple=arm64-apple-ios15.5
+        app="experiments/ios-map/build/TrailIosProbe-device.app"
+        ;;
+    *) echo "Usage: $0 [simulator|device]" >&2; exit 2 ;;
+esac
+framework="experiments/ios-map/build/bin/$target/debugFramework"
+mkdir -p "$app"
+cp experiments/ios-map/app/Info.plist "$app/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$app/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string $platform" "$app/Info.plist"
+sdk="$(xcrun --sdk "$sdk_name" --show-sdk-path)"
+xcrun --sdk "$sdk_name" swiftc -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
+    -target "$triple" \
+    -F "$framework" -framework TrailIosProbe \
+    -framework UIKit -framework CoreFoundation -framework CoreGraphics \
+    -framework CoreText -framework Foundation -framework ImageIO \
+    -framework Metal -framework QuartzCore -lc++ -lz \
+    -Xlinker -ObjC \
+    experiments/ios-map/app/App.swift -o "$app/TrailIosProbe"
+# Device artifacts deliberately remain unsigned until a real team/profile is supplied.
+if [ "$kind" = simulator ]; then codesign --force --sign - "$app"; fi
+xcrun vtool -show-build "$app/TrailIosProbe"

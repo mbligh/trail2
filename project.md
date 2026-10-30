@@ -529,7 +529,7 @@ production Compose renderer gate.
   draws the actual shared trail/polygon/recording/pin and GPS overlay code through
   MapLibre's Metal backend, using synthetic geometry/artwork and no network.
 - macOS ARM64 CI links device/simulator frameworks, runs the shared tests, builds
-  an ad-hoc signed simulator application without Apple account credentials, and
+  an ad-hoc signed simulator app and unsigned device probe without Apple account credentials, and
   requires visible red trails, green polygon fills and blue recordings. Screenshots,
   render counts, logs, the simulator app and framework slices are retained.
 - The Android application keeps version 2.0.7 and its existing behavior. iOS probe
