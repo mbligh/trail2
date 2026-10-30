@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+data class LatLng(val latitude: Double, val longitude: Double)
+
 /** Map choices and layer groups are data; the UI does not know any provider IDs. */
 data class Basemap(val name: String, val label: String, val style: String?, val source: String?, val attribution: String, val attributionUrl: String?)
 data class MapOverlay(val id: String, val name: String, val defaultVisible: Boolean, val definition: JSONObject)

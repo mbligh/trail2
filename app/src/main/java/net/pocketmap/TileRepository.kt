@@ -12,7 +12,6 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
-import org.maplibre.android.module.http.HttpRequestUtil
 import java.io.Closeable
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -31,9 +30,26 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
     private val ranges = RangeCache(File(context.filesDir, "map-cache/pmtiles"))
     private val resources = JSONObject(context.assets.open("bundled-resources.json").bufferedReader().use { it.readText() })
     private val manifest = JSONObject(context.assets.open("offline-manifest.json").bufferedReader().use { it.readText() }).getJSONObject("resources")
-    private val client = OkHttpClient.Builder().addInterceptor(this).connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+    private val client = OkHttpClient.Builder().addInterceptor(this).connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            if (!allowNetwork) throw IOException("Offline: network disabled")
+            chain.proceed(chain.request())
+        }.build()
     @Volatile private var closed = false
-    init { HttpRequestUtil.setOkHttpClient(client) }
+    @Volatile internal var allowNetwork = true
+
+    /** The Compose runtime uses this same route and cache, including online misses. */
+    fun loadResource(url: String): ByteArray? {
+        if (closed) return null
+        if (url.startsWith("asset://")) {
+            val path = url.removePrefix("asset://")
+            require(!path.startsWith('/') && path.split('/').none { it == ".." })
+            return context.assets.open(path).use { it.readBytes() }
+        }
+        return client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use {
+            if (it.isSuccessful) it.body?.bytes() else null
+        }
+    }
 
     @Synchronized private fun assetFile(path: String): File {
         require(!path.startsWith('/') && path.split('/').none { it == ".." })
@@ -137,6 +153,22 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         return (seed ?: store.cache.get(z, x, y))?.let(::uncompressed)
     }
 
+    fun loadArchiveRange(url: String, offset: Long, length: Int): ByteArray? {
+        if (closed || offset < 0 || length !in 1..(16 * 1024 * 1024) || offset > Long.MAX_VALUE - length) return null
+        val range = "bytes=$offset-" + (offset + length - 1)
+        val prefix = "bytes $offset-" + (offset + length - 1) + "/"
+        val request = okhttp3.Request.Builder().url(url).header("Range", range)
+            .header("Accept-Encoding", "identity").build()
+        return client.newCall(request).execute().use { response ->
+            if (response.code != 206 || response.header("Content-Range")?.startsWith(prefix) != true) return null
+            val stream = response.body?.byteStream() ?: return null
+            val bytes = ByteArray(length)
+            java.io.DataInputStream(stream).readFully(bytes)
+            if (stream.read() != -1) throw IOException("Oversized archive range")
+            bytes
+        }
+    }
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         if (closed) throw IOException("Map closed")
@@ -155,7 +187,14 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
             if (result.code != 206) return result
             val contentRange = result.header("Content-Range") ?: return result
             val mime = result.header("Content-Type") ?: "application/octet-stream"
-            val data = result.body?.bytes() ?: throw IOException("Empty archive range")
+            val expected = Regex("bytes=(\\d+)-(\\d+)").matchEntire(range)
+                ?: throw IOException("Invalid archive range")
+            val size = expected.groupValues[2].toLong() - expected.groupValues[1].toLong() + 1
+            if (size !in 1..(16L * 1024 * 1024)) throw IOException("Oversized archive range")
+            val stream = result.body?.byteStream() ?: throw IOException("Empty archive range")
+            val data = ByteArray(size.toInt())
+            java.io.DataInputStream(stream).readFully(data)
+            if (stream.read() != -1) throw IOException("Oversized archive response")
             result.close()
             runCatching { ranges.put(url.toString(), range, namespace, contentRange, mime, data) }
                 .onFailure { Log.w("TrailTiles", "Cannot cache archive range", it) }
@@ -196,7 +235,6 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
         client.dispatcher.cancelAll()
         stores.values.forEach { it.seed?.close(); it.cache.close() }
         stores.clear()
-        HttpRequestUtil.setOkHttpClient(null)
     }
     companion object { fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(12).joinToString("") { "%02x".format(it) } }
 }

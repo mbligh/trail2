@@ -24,6 +24,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material)
             implementation(compose.ui)
+            api("org.maplibre.compose:maplibre-compose:0.20.0")
         }
         commonTest.dependencies { implementation(kotlin("test")) }
     }

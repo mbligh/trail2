@@ -12,30 +12,43 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 import org.junit.Assert.*
+import androidx.compose.ui.unit.dp
 import org.junit.Test
 import org.junit.Before
-import org.maplibre.android.geometry.LatLng
 import org.junit.runner.RunWith
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.module.http.HttpRequestUtil
 import java.io.IOException
 
-/** Exercises the real native renderer and local tile route, with all network blocked. */
+/** Exercises the shipping Compose renderer and local tile route, with all network blocked. */
 @RunWith(AndroidJUnit4::class)
 class MapMigrationTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     @Before fun grantLocationForUiTests() {
-        instrumentation.runOnMainSync { org.maplibre.android.MapLibre.getInstance(context) }
         for (permission in listOf("ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS")) {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.$permission")).use { it.readBytes() }
         }
     }
     private fun renderer(activity: MainActivity): TrailMap = MainActivity::class.java.getDeclaredField("map").apply { isAccessible = true }.get(activity) as TrailMap
-    private fun native(map: TrailMap): MapLibreMap? = TrailMap::class.java.getDeclaredField("native").apply { isAccessible = true }.get(map) as MapLibreMap?
-    private fun offline(map: TrailMap) {
-        val repo = TrailMap::class.java.getDeclaredField("tiles").apply { isAccessible = true }.get(map) as TileRepository
-        HttpRequestUtil.setOkHttpClient(OkHttpClient.Builder().addInterceptor(repo).addInterceptor { throw IOException("Airplane-mode test: network blocked") }.build())
+    private fun offline(map: TrailMap) { map.tiles.allowNetwork = false }
+    private fun awaitRendered(scenario: ActivityScenario<MainActivity>, description: String,
+        layerIds: Set<String>? = null, predicate: (List<org.maplibre.spatialk.geojson.Feature<org.maplibre.spatialk.geojson.Geometry, kotlinx.serialization.json.JsonObject?>>) -> Boolean) {
+        val end = SystemClock.elapsedRealtime() + 30_000
+        while (SystemClock.elapsedRealtime() < end) {
+            var map: TrailMap? = null
+            scenario.onActivity { map = renderer(it) }
+            val features = kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    val state = map?.mapState
+                    if (state?.viewport == null) null else state.queryRenderedFeatures(
+                        androidx.compose.ui.unit.DpRect(0.dp, 0.dp,
+                            (map!!.width / context.resources.displayMetrics.density).dp,
+                            (map!!.height / context.resources.displayMetrics.density).dp), layerIds)
+                }
+            }
+            if (features != null && predicate(features)) return
+            Thread.sleep(100)
+        }
+        fail("Timed out: $description")
     }
     private fun await(scenario: ActivityScenario<MainActivity>, description: String, predicate: (TrailMap) -> Boolean) {
         val end = SystemClock.elapsedRealtime() + 30_000
@@ -60,26 +73,77 @@ class MapMigrationTest {
                     elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(); time = System.currentTimeMillis()
                 })
             }
-            await(scenario, "Bright vector roads render from bundled tiles") { map ->
-                val native = native(map)
-                native?.style?.isFullyLoaded == true && native.queryRenderedFeatures(android.graphics.RectF(0f,0f,map.width.toFloat(),map.height.toFloat())).any { it.hasProperty("class") }
+            awaitRendered(scenario, "Bright vector roads render from bundled tiles") { features ->
+                features.any { it.properties?.containsKey("class") == true }
             }
             val document = TrailKml.Document("Test trails", listOf(TrailKml.Feature("Offline test trail", "LineString", listOf(TrailKml.Coordinate(40.688,-74.782),TrailKml.Coordinate(40.692,-74.778)), emptyList(), TrailKml.Style())))
             val points = listOf(RecordedTrack.Point(40.688,-74.782,1000,null,4f),RecordedTrack.Point(40.692,-74.778,31_000,null,3f))
             scenario.onActivity { renderer(it).apply { showTrails(document,true); showRecording(points,emptyList()) } }
-            await(scenario, "trails and recording") { map -> native(map)?.queryRenderedFeatures(android.graphics.RectF(0f,0f,map.width.toFloat(),map.height.toFloat()), "trail-lines", "trail-recording")?.size?.let { it >= 2 } == true }
+            awaitRendered(scenario, "trails and recording", setOf("trail-lines", "trail-recording")) { it.size >= 2 }
             val config = MapConfiguration(context)
             for (choice in listOf("hybrid", "bright")) {
                 scenario.onActivity { renderer(it).setBasemap(config.basemaps.first { b -> b.name == choice }) }
-                await(scenario, "$choice restores trails and recording") { map -> native(map)?.style?.isFullyLoaded == true && native(map)?.queryRenderedFeatures(android.graphics.RectF(0f,0f,map.width.toFloat(),map.height.toFloat()), "trail-lines", "trail-recording")?.size?.let { it >= 2 } == true }
+                awaitRendered(scenario, "$choice restores trails and recording", setOf("trail-lines", "trail-recording")) { it.size >= 2 }
             }
             assertEquals(emptyList<String>(), errors)
-            await(scenario, "Bright streets restored for screenshot") { map ->
-                native(map)?.queryRenderedFeatures(android.graphics.RectF(0f,0f,map.width.toFloat(),map.height.toFloat()))?.any { it.hasProperty("class") } == true
+            awaitRendered(scenario, "Bright streets restored for screenshot") { features ->
+                features.any { it.properties?.containsKey("class") == true }
             }
             Thread.sleep(500)
             instrumentation.waitForIdleSync()
             android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("screencap -p /data/local/tmp/maplibre-offline.png")).use { it.readBytes() }
+        }
+    }
+
+    @Test fun composeCameraSurvivesRecreationAndRealDragPausesFollowing() {
+        context.getSharedPreferences("map", Context.MODE_PRIVATE).edit()
+            .putFloat("lat", 40.69f).putFloat("lon", -74.78f).putFloat("zoom", 15f).commit()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            await(scenario, "Compose viewport") { it.mapState?.viewport != null }
+            scenario.onActivity { renderer(it).apply { setCenter(LatLng(40.697, -74.778)); setZoom(14.5) } }
+            fun cameraMatches() = await(scenario, "saved center and display zoom") {
+                kotlin.math.abs(it.mapCenter.latitude - 40.697) < 0.000001 &&
+                    kotlin.math.abs(it.mapCenter.longitude + 74.778) < 0.000001 &&
+                    kotlin.math.abs(it.zoomLevelDouble - 14.5) < 0.001
+            }
+            cameraMatches()
+            val config = MapConfiguration(context)
+            scenario.onActivity { renderer(it).setBasemap(config.basemaps.first { b -> b.name == "hybrid" }) }
+            cameraMatches()
+            scenario.recreate()
+            await(scenario, "viewport after recreation") { it.mapState?.viewport != null }
+            cameraMatches()
+            val down = SystemClock.uptimeMillis()
+            fun touch(action: Int, step: Int) {
+                scenario.onActivity { activity ->
+                    val root = activity.window.decorView
+                    val properties = android.view.MotionEvent.PointerProperties().apply {
+                        id = 0; toolType = android.view.MotionEvent.TOOL_TYPE_FINGER
+                    }
+                    val coordinates = android.view.MotionEvent.PointerCoords().apply {
+                        x = root.width * 0.4f + step * 12; y = root.height * 0.5f
+                        pressure = 1f; size = 1f
+                    }
+                    val event = android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1,
+                        arrayOf(properties), arrayOf(coordinates), 0, 0, 1f, 1f, 0, 0,
+                        android.view.InputDevice.SOURCE_TOUCHSCREEN, 0)
+                    try { activity.dispatchTouchEvent(event) } finally { event.recycle() }
+                }
+            }
+            touch(android.view.MotionEvent.ACTION_DOWN, 0)
+            for (step in 1..12) { Thread.sleep(20); touch(android.view.MotionEvent.ACTION_MOVE, step) }
+            touch(android.view.MotionEvent.ACTION_UP, 12)
+            await(scenario, "one-finger drag moves map and pauses following") {
+                kotlin.math.abs(it.mapCenter.longitude + 74.778) > 0.00001
+            }
+            scenario.onActivity { activity ->
+                assertFalse(MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.getBoolean(activity))
+                val state = renderer(activity).mapState!!
+                assertEquals(0.0, state.cameraPosition.bearing, 0.0001)
+                assertEquals(0.0, state.cameraPosition.pitch, 0.0001)
+                state.scaleBy(2.0, androidx.compose.ui.unit.DpOffset(160.dp, 220.dp))
+            }
+            await(scenario, "zoom input retains display convention") { it.zoomLevelDouble > 15.0 }
         }
     }
 

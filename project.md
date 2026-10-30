@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stages 5g–5i and 6a; production version 2.0.6. Phone regression testing is the next gate.
+Updated 2026-10-30 through stages 5g–5i and 6a; production version 2.0.7. Compose renderer phone testing is the next gate.
 
 ## Product and identity
 
@@ -453,3 +453,30 @@ Validated the 2.0.6 fix at `0e858e626ab235de84da8e2b827b63beba01d157`:
 
 Next: update the physical Pixel through Play to 2.0.6 and verify that both edges are
 clear, then complete the remaining phone regression checks before renderer integration.
+
+
+## Compose migration, stage 6b: production renderer integration (2.0.7)
+
+The user confirmed the 2.0.6 system-bar fix and that the phone behavior works on
+2026-10-30, clearing the toolchain/UI regression gate.
+
+- Replace the Android MapView/SDK renderer with MapLibre Compose 0.20.0 and its
+  OpenGL runtime. The shared module owns trail, polygon, recording, pin and live
+  position/heading/connector drawing. Android supplies the original artwork and
+  retains its controller, tap-label popup, permissions, sensors and recording service.
+- Keep one MapState across style/layer changes, north-up/no pitch, display zoom
+  offset, one-finger drag follow cancellation, zoom-to-trails, and saved camera.
+- A per-map runtime routes requests through the production TileRepository and
+  existing MBTiles/range files. PMTiles uses the decoder proven by the isolated
+  app, now compiled from the production source by both apps. Bundled archives,
+  fonts/sprites and cached raster tiles keep the same paths and identities.
+- Keep safeDrawing insets at the existing outer screen boundary. No changes to
+  RecordingService, location selection, CSV/pin persistence, report/share or exports.
+- Production instrumentation now queries the actual Compose renderer for bundled
+  roads and app overlays, and checks camera restoration and real drag/zoom input.
+  Existing system-bar/cutout and pin-hold checks remain in the suite.
+
+Validation is in progress. Next gate: install 2.0.7 through Play and verify map
+appearance, basemap/layer changes, taps on trails/pins, dragging/recenter/zoom,
+offline maps, a short recording including screen lock, and export/share behavior.
+No iOS targets/adapters are configured yet.

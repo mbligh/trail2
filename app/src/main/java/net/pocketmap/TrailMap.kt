@@ -5,100 +5,119 @@ import android.graphics.*
 import android.location.Location
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
 import android.widget.FrameLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.serialization.json.jsonPrimitive
+import net.pocketmap.shared.map.MapArtwork
+import net.pocketmap.shared.map.TrailMapContent
+import net.pocketmap.shared.map.PositionOverlay
 import org.json.JSONArray
 import org.json.JSONObject
-import org.maplibre.android.MapLibre
-import org.maplibre.android.gestures.MoveGestureDetector
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
-import org.maplibre.android.camera.CameraPosition
-import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapLibreMapOptions
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
-import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.compose.camera.CameraFit
+import org.maplibre.compose.camera.CameraPosition
+import org.maplibre.compose.interaction.ClickResult
+import org.maplibre.compose.interaction.MapInteractions
+import org.maplibre.compose.map.*
+import org.maplibre.compose.style.BaseStyle
+import org.maplibre.compose.util.DpPadding
+import org.maplibre.spatialk.geojson.Position
 
-/** Native MapLibre renderer. Location acquisition and recording remain outside this class. */
+/** Android lifecycle/controller adapter over the shared Compose map content. GPS stays outside. */
 class TrailMap(context: Context, private val config: MapConfiguration, initial: Basemap, center: LatLng, zoom: Double, saved: Bundle?) : FrameLayout(context) {
-    private val tiles: TileRepository
-    private val view: MapView
-    private var native: MapLibreMap? = null
-    private var basemap = initial
-    private var enabled = emptySet<String>()
-    private var centerBeforeReady = center
-    private var zoomBeforeReady = zoom
-    private var generation = 0
-    private var destroyed = false
+    private val mapResources = ComposeMapResources(context.applicationContext)
+    internal val tiles get() = mapResources.tiles
+    private val runtime = createMapRuntime { resourceProvider = mapResources.provider }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val compose = ComposeView(context)
+    internal var mapState: MapState? = null
+        private set
+    private var basemap by mutableStateOf(initial)
+    private var enabled by mutableStateOf(emptySet<String>())
+    private var initialCenter = saved?.takeIf { it.containsKey("latitude") }?.let { LatLng(it.getDouble("latitude"), it.getDouble("longitude")) } ?: center
+    private var initialZoom = saved?.getDouble("zoom", zoom) ?: zoom
     private var trails: TrailKml.Document? = null
     private var trailsVisible = true
     private var track = emptyList<RecordedTrack.Point>()
     private var pins = emptyList<RecordedPins.Pin>()
-    private var current: Location? = null
-    private var heading: Float? = null
-    private var connector: RecordedTrack.Point? = null
+    private var trailJson by mutableStateOf(collection(emptyList()).toString())
+    private var trackJson by mutableStateOf(collection(emptyList()).toString())
+    private var pinJson by mutableStateOf(collection(emptyList()).toString())
+    private var artwork by mutableStateOf(emptyList<MapArtwork>())
+    private var current by mutableStateOf<Position?>(null)
+    private var heading by mutableStateOf<Float?>(null)
+    private var connector by mutableStateOf<Position?>(null)
     private var popup: PopupWindow? = null
+    private var pressedPointers = 0
     var onCameraChanged: () -> Unit = {}
     var onDrag: () -> Unit = {}
     var onError: (String) -> Unit = {}
-    // osmdroid used a 256px world. Preserve the saved scale and displayed zoom.
-    val zoomLevelDouble: Double get() = native?.cameraPosition?.zoom?.plus(1.0) ?: zoomBeforeReady
-    val mapCenter: LatLng get() = native?.cameraPosition?.target ?: centerBeforeReady
+    val zoomLevelDouble: Double get() = mapState?.cameraPosition?.zoom?.plus(1.0) ?: initialZoom
+    val mapCenter: LatLng get() = mapState?.cameraPosition?.center?.let { LatLng(it.latitude, it.longitude) } ?: initialCenter
     val controller get() = this
 
-    fun setCenter(point: LatLng) { centerBeforeReady = point; native?.moveCamera(CameraUpdateFactory.newLatLng(point)) }
-    fun setZoom(zoom: Double) { zoomBeforeReady = zoom; native?.moveCamera(CameraUpdateFactory.zoomTo((zoom-1.0).coerceIn(2.0, 18.0))) }
-    fun setBasemap(value: Basemap) { basemap = value; loadStyle() }
-    fun setOverlays(ids: Set<String>) { enabled = ids; loadStyle() }
+    fun setCenter(point: LatLng) {
+        initialCenter = point
+        mapState?.let { it.setCameraPosition(it.cameraPosition.copy(center = Position(point.longitude, point.latitude), bearing = 0.0, pitch = 0.0)) }
+    }
+    fun setZoom(zoom: Double) {
+        initialZoom = zoom
+        mapState?.let { it.setCameraPosition(it.cameraPosition.copy(zoom = (zoom - 1.0).coerceIn(2.0, 18.0))) }
+    }
+    fun setBasemap(value: Basemap) { basemap = value }
+    fun setOverlays(ids: Set<String>) { enabled = ids.toSet() }
     fun zoomTo(points: List<LatLng>, padding: Int) {
         if (points.isEmpty()) return
-        native?.animateCamera(CameraUpdateFactory.newLatLngBounds(LatLngBounds.Builder().includes(points).build(), padding))
+        scope.launch {
+            val state = mapState ?: return@launch
+            val fit = CameraFit(fitPadding = (padding / resources.displayMetrics.density).dp.let { DpPadding(it, it, it, it) })
+            val camera = state.cameraForCoordinates(points.map { Position(it.longitude, it.latitude) }, fit)
+            state.setCameraPosition(camera.copy(zoom = camera.zoom.coerceIn(2.0, 18.0)))
+        }
     }
-    fun showTrails(document: TrailKml.Document, visible: Boolean) { trails = document; trailsVisible = visible; updateData() }
+    fun showTrails(document: TrailKml.Document, visible: Boolean) {
+        trails = document; trailsVisible = visible
+        artwork = listOf(pinImage()) + trailImages()
+        updateData()
+    }
     fun setTrailsVisible(visible: Boolean) { trailsVisible = visible; updateData() }
-    fun showRecording(points: List<RecordedTrack.Point>, recordedPins: List<RecordedPins.Pin>) { track = points; pins = recordedPins; updateData() }
-    fun setPosition(location: Location?, facing: Float?, last: RecordedTrack.Point?) { current = location; heading = facing; connector = last; positionView.invalidate() }
-
-    private fun loadStyle() {
-        val map = native ?: return
-        val request = ++generation
-        try {
-            val json = config.style(basemap, enabled, tiles)
-            val sources = json.getJSONObject("sources")
-            listOf("trail-features", "trail-track", "trail-pins").forEach { id -> sources.put(id, JSONObject().put("type", "geojson").put("data", collection(emptyList()))) }
-            val layers = json.getJSONArray("layers")
-            fun layer(raw: String) { layers.put(JSONObject(raw)) }
-            layer("""{"id":"trail-polygon-fill","type":"fill","source":"trail-features","filter":["==",["geometry-type"],"Polygon"],"paint":{"fill-color":["get","fillColor"],"fill-opacity":["get","fillOpacity"]}}""")
-            layer("""{"id":"trail-polygon-outline","type":"line","source":"trail-features","filter":["==",["geometry-type"],"Polygon"],"paint":{"line-color":["get","lineColor"],"line-opacity":["get","lineOpacity"],"line-width":2}}""")
-            layer("""{"id":"trail-lines","type":"line","source":"trail-features","filter":["==",["geometry-type"],"LineString"],"layout":{"line-cap":"round","line-join":"round"},"paint":{"line-color":["get","lineColor"],"line-opacity":["get","lineOpacity"],"line-width":["get","width"]}}""")
-            layer("""{"id":"trail-points","type":"symbol","source":"trail-features","filter":["==",["geometry-type"],"Point"],"layout":{"icon-image":["get","icon"],"icon-size":["get","scale"],"icon-anchor":["get","anchor"],"icon-allow-overlap":true}}""")
-            layer("""{"id":"trail-recording","type":"line","source":"trail-track","layout":{"line-cap":"round","line-join":"round"},"paint":{"line-color":"#1565c0","line-width":4}}""")
-            layer("""{"id":"trail-recording-pins","type":"symbol","source":"trail-pins","layout":{"icon-image":"trail-pin","icon-anchor":"bottom","icon-allow-overlap":true}}""")
-            map.setStyle(Style.Builder().fromJson(json.toString())) { style ->
-                if (destroyed || request != generation) return@setStyle
-                addPinImage(style)
-                updateData(style)
-                onCameraChanged()
-            }
-        } catch (error: Exception) { onError(error.message ?: "Unable to load map") }
+    fun showRecording(points: List<RecordedTrack.Point>, recordedPins: List<RecordedPins.Pin>) {
+        track = points; pins = recordedPins; updateData()
     }
-
-    private fun addPinImage(style: Style) {
+    fun setPosition(location: Location?, facing: Float?, last: RecordedTrack.Point?) {
+        current = location?.let { Position(it.longitude, it.latitude) }
+        heading = facing
+        connector = last?.let { Position(it.longitude, it.latitude) }
+    }
+    private fun pinImage(): MapArtwork {
         val drawable = context.getDrawable(R.drawable.ic_track_pin)!!
         val bitmap = Bitmap.createBitmap(dp(24), dp(24), Bitmap.Config.ARGB_8888)
         drawable.setBounds(0, 0, bitmap.width, bitmap.height); drawable.draw(Canvas(bitmap))
         bitmap.density = resources.displayMetrics.densityDpi
-        style.addImage("trail-pin", bitmap)
+        return MapArtwork("trail-pin", bitmap.asImageBitmap(), DpSize((bitmap.width / resources.displayMetrics.density).dp, (bitmap.height / resources.displayMetrics.density).dp))
+    }
+    private fun updateData() {
+        trailJson = trailData()
+        trackJson = recordingData()
+        pinJson = collection(pins.map { pin -> feature("Point", JSONArray().put(pin.longitude).put(pin.latitude), JSONObject().put("name", if (pin.text.isBlank()) "Pin" else "Pin\n${pin.text}")) }).toString()
     }
     private fun iconKey(feature: TrailKml.Feature) = "trail-icon-${feature.style.iconId}-${feature.style.iconColor}"
-    private fun addTrailImages(style: Style) {
+    private fun trailImages(): List<MapArtwork> {
+        val result = mutableListOf<MapArtwork>()
         trails?.features?.filter { it.kind == "Point" }?.distinctBy { iconKey(it) }?.forEach { feature ->
             val key = iconKey(feature)
-            if (style.getImage(key) != null) return@forEach
             val resource = when (feature.style.iconId) { "1763" -> R.drawable.mymaps_1763; "1899" -> R.drawable.mymaps_1899; "1205" -> R.drawable.mymaps_1205; "503" -> R.drawable.mymaps_503; else -> 0 }
             val bitmap = if (resource != 0) {
                 val original = BitmapFactory.decodeResource(resources, resource)
@@ -113,15 +132,9 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
                 }
             }
             bitmap.density = resources.displayMetrics.densityDpi
-            style.addImage(key, bitmap)
+            result.add(MapArtwork(key, bitmap.asImageBitmap(), DpSize((bitmap.width / resources.displayMetrics.density).dp, (bitmap.height / resources.displayMetrics.density).dp)))
         }
-    }
-    private fun updateData(style: Style? = native?.style) {
-        if (style == null || !style.isFullyLoaded) return
-        addTrailImages(style)
-        style.getSourceAs<GeoJsonSource>("trail-features")?.setGeoJson(trailData())
-        style.getSourceAs<GeoJsonSource>("trail-track")?.setGeoJson(recordingData())
-        style.getSourceAs<GeoJsonSource>("trail-pins")?.setGeoJson(collection(pins.map { pin -> feature("Point", JSONArray().put(pin.longitude).put(pin.latitude), JSONObject().put("name", if (pin.text.isBlank()) "Pin" else "Pin\n${pin.text}")) }).toString())
+        return result
     }
     private fun trailData(): String {
         val features = if (!trailsVisible) emptyList() else trails?.features?.map { f ->
@@ -147,87 +160,92 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         return ring
     }
     private fun color(value: Int) = String.format(java.util.Locale.US, "#%06x", value and 0xffffff)
-    private fun feature(kind: String, coordinates: JSONArray, properties: JSONObject) = JSONObject().put("type", "Feature").put("properties", properties).put("geometry", JSONObject().put("type", kind).put("coordinates", coordinates))
+    private fun feature(kind: String, coordinates: JSONArray, properties: JSONObject) = JSONObject().put("type", "Feature").put("properties", properties.put("trailLabel", true)).put("geometry", JSONObject().put("type", kind).put("coordinates", coordinates))
     private fun collection(features: List<JSONObject>) = JSONObject().put("type", "FeatureCollection").put("features", JSONArray(features))
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private val positionView: View by lazy { object : View(context) {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        override fun onDraw(canvas: Canvas) {
-            val map = native ?: return
-            val fix = current ?: return
-            val pixel = map.projection.toScreenLocation(LatLng(fix.latitude, fix.longitude))
-            connector?.let { last ->
-                val from = map.projection.toScreenLocation(LatLng(last.latitude, last.longitude))
-                paint.color = Color.rgb(21,101,192); paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(4).toFloat(); paint.strokeCap = Paint.Cap.ROUND
-                canvas.drawLine(from.x, from.y, pixel.x, pixel.y, paint)
-            }
-            paint.style = Paint.Style.FILL
-            val facing = heading
-            if (facing == null) {
-                paint.color = Color.WHITE; canvas.drawCircle(pixel.x, pixel.y, dp(10).toFloat(), paint)
-                paint.color = Color.rgb(21,101,192); canvas.drawCircle(pixel.x, pixel.y, dp(7).toFloat(), paint)
-            } else {
-                val saved = canvas.save(); canvas.translate(pixel.x, pixel.y); canvas.rotate(facing)
-                val triangle = Path().apply { moveTo(0f,-dp(15).toFloat()); lineTo(dp(10).toFloat(),dp(10).toFloat()); lineTo(-dp(10).toFloat(),dp(10).toFloat()); close() }
-                paint.color = Color.WHITE; paint.style = Paint.Style.STROKE; paint.strokeWidth = dp(4).toFloat(); paint.strokeJoin = Paint.Join.ROUND; canvas.drawPath(triangle,paint)
-                paint.color = Color.rgb(21,101,192); paint.style = Paint.Style.FILL; canvas.drawPath(triangle,paint)
-                canvas.restoreToCount(saved)
-            }
-        }
-    } }
+
     init {
-        MapLibre.getInstance(context)
-        tiles = TileRepository(context)
-        view = MapView(context, MapLibreMapOptions.createFromAttributes(context)
-            .compassEnabled(false).attributionEnabled(false).logoEnabled(false)
-            .rotateGesturesEnabled(false).tiltGesturesEnabled(false))
-        addView(view, LayoutParams(-1, -1))
-        addView(positionView, LayoutParams(-1, -1))
-        view.onCreate(saved)
-        view.addOnDidFailLoadingMapListener { message -> if (!destroyed) onError(message) }
-        view.getMapAsync { map ->
-            if (destroyed) return@getMapAsync
-            native = map
-            map.setMinZoomPreference(2.0)
-            map.setMaxZoomPreference(18.0)
-            map.cameraPosition = CameraPosition.Builder().target(centerBeforeReady).zoom((zoomBeforeReady - 1.0).coerceIn(2.0, 18.0)).bearing(0.0).tilt(0.0).build()
-            map.addOnCameraMoveListener { positionView.invalidate(); onCameraChanged() }
-            map.addOnMoveListener(object : MapLibreMap.OnMoveListener {
-                override fun onMoveBegin(detector: MoveGestureDetector) { popup?.dismiss(); if (detector.pointersCount == 1) onDrag() }
-                override fun onMove(detector: MoveGestureDetector) {}
-                override fun onMoveEnd(detector: MoveGestureDetector) {}
-            })
-            map.addOnMapClickListener { point ->
-                popup?.dismiss()
-                val pixel = map.projection.toScreenLocation(point)
-                val radius = dp(12).toFloat()
-                val hit = map.queryRenderedFeatures(RectF(pixel.x-radius, pixel.y-radius, pixel.x+radius, pixel.y+radius), "trail-points", "trail-lines", "trail-polygon-outline", "trail-polygon-fill", "trail-recording-pins", "trail-recording").firstOrNull()
-                val name = hit?.getStringProperty("name")
-                if (!name.isNullOrBlank()) {
-                    val label = TextView(context).apply {
-                        text = name; maxWidth = dp(280); maxLines = 12
-                        movementMethod = android.text.method.ScrollingMovementMethod()
-                        isVerticalScrollBarEnabled = true
-                        setTextColor(Color.BLACK); setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE)
-                    }
-                    val screen = IntArray(2); getLocationOnScreen(screen)
-                    popup = PopupWindow(label, LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, true).apply {
-                        elevation = dp(6).toFloat(); setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.WHITE))
-                        showAtLocation(this@TrailMap, Gravity.TOP or Gravity.START, screen[0] + pixel.x.toInt(), screen[1] + pixel.y.toInt())
+        artwork = listOf(pinImage())
+        addView(compose, LayoutParams(-1, -1))
+        compose.setContent {
+            val style = remember(basemap, enabled) {
+                try { BaseStyle.Json(mapResources.style(config.style(basemap, enabled, tiles))) }
+                catch (error: Exception) { onError(error.message ?: "Unable to load map"); BaseStyle.Empty }
+            }
+            val state = rememberMapState(runtime = runtime, baseStyle = style,
+                initialCameraPosition = CameraPosition(center = Position(initialCenter.longitude, initialCenter.latitude), zoom = (initialZoom - 1.0).coerceIn(2.0, 18.0)),
+                content = { TrailMapContent(trailJson, trackJson, pinJson, artwork) })
+            SideEffect { mapState = state }
+            LaunchedEffect(state) {
+                state.events.collectLatest { event ->
+                    when (event) {
+                        is MapEvent.StyleLoadFailed -> onError(event.reason)
+                        is MapEvent.SourceDataFailed -> onError(event.cause.message ?: "Unable to load map data")
+                        MapEvent.CameraMoved, MapEvent.StyleLoaded -> onCameraChanged()
+                        else -> Unit
                     }
                 }
-                hit != null
             }
-            loadStyle()
+            Box(Modifier.fillMaxSize()) {
+                MaplibreMap(state = state,
+                    cameraConstraints = CameraConstraints { minZoom = 2.0; maxZoom = 18.0; maxPitch = 0.0 },
+                    interactions = MapInteractions {
+                        camera {
+                            rotate { enabled = false }; pitch { enabled = false }
+                            pan { onStart { popup?.dismiss(); if (pressedPointers == 1) onDrag() } }
+                        }
+                        callbacks { click { onEvent { event ->
+                            popup?.dismiss()
+                            val offset = event.screenOffset
+                            val density = resources.displayMetrics.density
+                            scope.launch {
+                                val radius = 12.dp
+                                val hits = state.queryRenderedFeatures(androidx.compose.ui.unit.DpRect(
+                                    offset.x-radius, offset.y-radius, offset.x+radius, offset.y+radius))
+                                // Only application overlays expose the prefixed property below.
+                                val label = hits.firstOrNull { it.properties?.get("trailLabel")?.jsonPrimitive?.content == "true" }
+                                val name = label?.properties?.get("name")?.jsonPrimitive?.content
+                                if (!name.isNullOrBlank()) showLabel(name, (offset.x.value*density).toInt(), (offset.y.value*density).toInt())
+                            }
+                            ClickResult.Consume
+                        } } }
+                    },
+                    modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                        awaitPointerEventScope { while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            pressedPointers = event.changes.count { it.pressed }
+                        } }
+                    })
+                PositionOverlay(state, current, heading, connector, Modifier.fillMaxSize())
+            }
         }
     }
-
-    fun onStart() = view.onStart()
-    fun onResume() = view.onResume()
-    fun onPause() = view.onPause()
-    fun onStop() = view.onStop()
-    fun onSaveInstanceState(state: Bundle) = view.onSaveInstanceState(state)
-    fun onLowMemory() = view.onLowMemory()
-    fun onDestroy() { destroyed = true; popup?.dismiss(); view.onDestroy(); tiles.close() }
+    private fun showLabel(name: String, x: Int, y: Int) {
+        val label = TextView(context).apply {
+            text = name; maxWidth = dp(280); maxLines = 12
+            movementMethod = android.text.method.ScrollingMovementMethod()
+            isVerticalScrollBarEnabled = true
+            setTextColor(Color.BLACK); setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE)
+        }
+        val screen = IntArray(2); getLocationOnScreen(screen)
+        popup = PopupWindow(label, LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, true).apply {
+            elevation = dp(6).toFloat(); setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.WHITE))
+            showAtLocation(this@TrailMap, Gravity.TOP or Gravity.START, screen[0]+x, screen[1]+y)
+        }
+    }
+    // Compose owns renderer lifecycle via its surface; the Activity keeps this controller API.
+    fun onStart() = Unit
+    fun onResume() = Unit
+    fun onPause() { popup?.dismiss() }
+    fun onStop() = Unit
+    fun onSaveInstanceState(state: Bundle) {
+        state.putDouble("latitude", mapCenter.latitude); state.putDouble("longitude", mapCenter.longitude)
+        state.putDouble("zoom", zoomLevelDouble)
+    }
+    fun onLowMemory() = Unit
+    fun onDestroy() {
+        popup?.dismiss(); scope.cancel(); compose.disposeComposition()
+        mapState = null; runtime.close(); mapResources.close()
+    }
 }

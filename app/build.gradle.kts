@@ -7,7 +7,7 @@ android {
     namespace = "net.pocketmap"
     buildFeatures { compose = true }
     compileSdk = 37
-    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 18; versionName = "2.0.6" }
+    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 19; versionName = "2.0.7" }
     signingConfigs.getByName("debug") { storeFile = rootProject.file("development-signing.jks"); storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android" }
     signingConfigs.create("upload") {
         System.getenv("TRAIL_UPLOAD_KEYSTORE")?.let { storeFile = file(it) }
@@ -29,7 +29,8 @@ dependencies {
     implementation("androidx.compose.ui:ui:1.12.1")
     implementation("androidx.compose.foundation:foundation-layout:1.12.1")
     implementation("androidx.compose.foundation:foundation:1.12.1")
-    implementation("org.maplibre.gl:android-sdk:13.7.1")
+    implementation("org.maplibre.compose:maplibre-compose:0.20.0")
+    runtimeOnly("org.maplibre.compose:maplibre-compose-runtime-opengl-android:0.20.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")

@@ -1,4 +1,4 @@
-name: MapLibre native smoke tests
+name: MapLibre Compose production smoke tests
 on:
   push:
     branches: [main, codex/maplibre-migration]
@@ -62,7 +62,7 @@ jobs:
           done
           cat /tmp/emulator.log
           exit 1
-      - name: Exercise native rendering, GPS and three-button system-bar bounds
+      - name: Exercise production Compose rendering, GPS and three-button system-bar bounds
         run: |
           adb shell cmd overlay enable-exclusive --user 0 --category com.android.internal.systemui.navbar.threebutton
           ./gradlew --no-daemon connectedDebugAndroidTest

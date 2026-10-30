@@ -26,7 +26,6 @@ import net.pocketmap.shared.ui.TrailMenuAction
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import org.maplibre.android.geometry.LatLng
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
