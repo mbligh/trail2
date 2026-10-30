@@ -607,3 +607,14 @@ truncated rows cannot merge with the next appended fix. Swift package tests cove
 reopening active/stopped sessions, Unicode notes, old Android rows, incomplete
 writes, and invalid-coordinate rejection. The package is not yet connected to
 Core Location or an iOS application UI. macOS CI validation is pending.
+
+The initial storage package passed macOS tests in run `41138132576`. The next
+adapter stage adds Core Location foreground updates, precise-permission and
+visible-app recording gates, a visible background indicator, explicit stop and
+error reporting, and heading callbacks. `RecordingCoordinator` uses Darwin's
+continuous clock for its four-hour deadline, preserving expiration across sleep
+and wall-clock changes. A fresh-fix selector keeps Android's initial/30-second
+sampling and recent-accuracy policy. Tests inject clock jumps and inaccurate,
+stale and out-of-order samples; CI also typechecks the iOS-only APIs against the
+actual simulator SDK. These adapters are not yet wired to the probe or a shipping
+iOS host, and simulator checks cannot establish physical GNSS/locked-screen behavior.
