@@ -625,3 +625,9 @@ by shared Kotlin, preserve pins/Unicode notes and GPS outage gaps, and carry the
 same distance/time/ascent/descent fields and readable description as Android.
 Swift tests parse both exports as XML and check notes, gaps, accuracy styles and
 imperial summary formatting. Export validation is pending the next package run.
+
+The native export package checks passed in run `41138777605`. An immutable iOS
+MBTiles reader is now being validated against standard TMS rows, gzip vector
+tiles, raw raster bytes, metadata and read-only behavior. It uses system SQLite
+and zlib, with tile-size bounds and explicit errors for corrupt archives. The
+reader remains separate from the map runtime until its interoperability tests pass.
