@@ -1,12 +1,22 @@
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
-    id("com.android.library")
+    id("com.android.kotlin.multiplatform.library")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
-    androidTarget()
+    @Suppress("UnstableApiUsage")
+    android {
+        namespace = "net.pocketmap.shared"
+        compileSdk = 37
+        minSdk = 26
+        compilations.configureEach {
+            compileTaskProvider.configure {
+                compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 }
+            }
+        }
+    }
     jvm() // Run shared tests on Linux without requiring an emulator or Xcode.
     sourceSets {
         commonMain.dependencies {
@@ -16,15 +26,5 @@ kotlin {
             implementation(compose.ui)
         }
         commonTest.dependencies { implementation(kotlin("test")) }
-    }
-}
-
-android {
-    namespace = "net.pocketmap.shared"
-    compileSdk = 36
-    defaultConfig { minSdk = 26 }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 }

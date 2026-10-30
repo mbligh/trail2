@@ -58,7 +58,11 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK
-        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+        run: |
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

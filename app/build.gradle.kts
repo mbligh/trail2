@@ -6,8 +6,8 @@ plugins {
 android {
     namespace = "net.pocketmap"
     buildFeatures { compose = true }
-    compileSdk = 36
-    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 18; versionName = "2.0.4" }
+    compileSdk = 37
+    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "mbligh.trail"; minSdk = 26; targetSdk = 36; versionCode = System.getenv("TRAIL_VERSION_CODE")?.toInt() ?: 18; versionName = "2.0.5" }
     signingConfigs.getByName("debug") { storeFile = rootProject.file("development-signing.jks"); storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android" }
     signingConfigs.create("upload") {
         System.getenv("TRAIL_UPLOAD_KEYSTORE")?.let { storeFile = file(it) }
@@ -21,14 +21,14 @@ android {
         isMinifyEnabled = false
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
+
 }
 dependencies {
     implementation(project(":shared"))
-    implementation("androidx.activity:activity-compose:1.10.1")
-    implementation("androidx.compose.ui:ui:1.8.2")
-    implementation("androidx.compose.foundation:foundation-layout:1.8.2")
-    implementation("androidx.compose.foundation:foundation:1.8.2")
+    implementation("androidx.activity:activity-compose:1.12.2")
+    implementation("androidx.compose.ui:ui:1.12.1")
+    implementation("androidx.compose.foundation:foundation-layout:1.12.1")
+    implementation("androidx.compose.foundation:foundation:1.12.1")
     implementation("org.maplibre.gl:android-sdk:13.7.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
@@ -38,7 +38,7 @@ dependencies {
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.8.2")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.12.1")
 }
 
 // Bundle the repository-root configuration on every build; do not maintain a second copy.
@@ -57,3 +57,7 @@ val prepareMaps by tasks.registering(Exec::class) {
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/mapAssets"))
 android.androidResources.noCompress += listOf("mbtiles", "pmtiles")
 tasks.named("preBuild").configure { dependsOn(bundleBasemaps, prepareMaps) }
+
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+}

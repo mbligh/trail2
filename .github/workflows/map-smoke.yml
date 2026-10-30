@@ -33,7 +33,10 @@ jobs:
           key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
       - name: Build and verify
         run: |
-          sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
           ./gradlew --no-daemon :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
           python tools/test_offline_maps
       - name: Install emulator

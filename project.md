@@ -171,8 +171,8 @@ Existing scoped URI providers and permission grants remain unchanged.
 
 ## Architecture and distribution
 
-Native Kotlin Activity/UI, Android 8+/API 26 minimum, compile/target 36, JDK 17,
-AGP 8.9.1, Kotlin 2.1.20, Gradle 8.13. MapLibre adds native libraries; validate 16 KiB
+Native Kotlin Activity/UI, Android 8+/API 26 minimum, compile 37 / target 36, JDK 17,
+AGP 9.2.0, Kotlin 2.4.20, Compose Multiplatform 1.12.1, Gradle 9.4.1. MapLibre adds native libraries; validate 16 KiB
 alignment in the APK/bundle. No WebView or browser UI.
 
 - MainActivity: existing controls, report/share flow, foreground location selection.
@@ -366,3 +366,15 @@ https://github.com/mbligh/trail2/actions/runs/40987077419
   viewport, independently of location acquisition and native map drawing.
 - Fixture data is synthetic and opt-in for instrumentation; it is not a real user
   recording. Existing GPS acquisition, files and exports remain untouched.
+
+## Stage 6a: align the production and prototype toolchains
+
+- Upgrade the main build to the separately exercised Kotlin 2.4.20 / Compose 1.12.1 /
+  AGP 9.2.0 / Gradle 9.4.1 stack, compile SDK 37 and keep target SDK 36/minimum 26.
+  The shared module uses the current Android KMP library plugin. Shared JVM tests
+  remain runnable on Linux; the Android app still uses its external Kotlin plugin.
+- Update all APK, Play bundle and native-smoke SDK setup together. Preserve the
+  package ID, stable signing keys, offline assets, current native renderer, GPS
+  service and automatic publishing. Version 2.0.5 distinguishes this release.
+- This step intentionally validates the compiler/build upgrade before changing
+  the main renderer. The isolated camera and overlay regression work continues.
