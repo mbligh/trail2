@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stages 5g–5i and 6b; production version 2.0.7. Compose renderer phone testing is the next gate.
+Updated 2026-10-30 through stage 7a; production version 2.0.7. Compose renderer phone testing is the next gate.
 
 ## Product and identity
 
@@ -515,3 +515,27 @@ Stage 6b implementation and automated validation are complete. Next gate: instal
 appearance, basemap/layer changes, taps on trails/pins, dragging/recenter/zoom,
 offline maps, a short recording including screen lock, and export/share behavior.
 No iOS targets/adapters are configured yet.
+
+
+## iOS foundation, stage 7a: ARM64 targets and isolated Metal probe
+
+The user tested 2.0.7 on the phone and confirmed it looks good, clearing the
+production Compose renderer gate.
+
+- Add `iosArm64` and `iosSimulatorArm64` targets to the shared module, with static
+  `TrailShared` frameworks. The exact shared track/heading tests run on the iOS
+  simulator. MapLibre 0.20 does not publish an Intel iOS simulator variant.
+- Add an independent `iosProbe` module under `experiments/ios-map`. Its UIKit host
+  draws the actual shared trail/polygon/recording/pin and GPS overlay code through
+  MapLibre's Metal backend, using synthetic geometry/artwork and no network.
+- macOS ARM64 CI links device/simulator frameworks, runs the shared tests, builds
+  an ad-hoc signed simulator application without Apple account credentials, and
+  requires visible red trails, green polygon fills and blue recordings. Screenshots,
+  render counts, logs, the simulator app and framework slices are retained.
+- The Android application keeps version 2.0.7 and its existing behavior. iOS probe
+  code is outside the shipping Android target. Android checks/publishing continue.
+
+Validation is in progress. This is an iOS build/rendering foundation, not a complete
+iOS Trail app. Core Location and background recording, persistent offline maps,
+local recordings/pins, camera and sharing still need iOS platform adapters. No
+Apple signing credentials or TestFlight distribution have been configured.

@@ -1,0 +1,63 @@
+name: iOS shared framework and Metal simulator smoke test
+on:
+  push:
+    branches: [main]
+    paths: ['shared/**', 'experiments/ios-map/**', '*.gradle.kts', 'gradle.properties', 'gradle/**', 'gradlew*', '.github/workflows/ios-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: trail-ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Configure toolchains
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
+      - uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: trail-konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('build.gradle.kts', 'shared/build.gradle.kts', 'experiments/ios-map/build.gradle.kts') }}
+      - name: Compile device and simulator frameworks; run shared tests on iOS
+        run: |
+          ./gradlew --no-daemon :shared:linkDebugFrameworkIosArm64 \
+            :shared:linkDebugFrameworkIosSimulatorArm64 :shared:iosSimulatorArm64Test \
+            :iosProbe:linkDebugFrameworkIosSimulatorArm64
+      - name: Build simulator application without Apple credentials
+        run: bash experiments/ios-map/build_simulator_app
+      - name: Verify real Metal rendering in the simulator
+        run: |
+          python -m pip install Pillow==11.3.0
+          python experiments/ios-map/smoke_simulator.py
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: Trail-iOS-simulator-check
+          path: |
+            shared/build/bin/iosArm64/debugFramework/
+            shared/build/bin/iosSimulatorArm64/debugFramework/
+            shared/build/reports/tests/
+            shared/build/test-results/
+            experiments/ios-map/build/TrailIosProbe.app/
+            experiments/ios-map/build/smoke/
+          if-no-files-found: warn

@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+framework="experiments/ios-map/build/bin/iosSimulatorArm64/debugFramework"
+app="experiments/ios-map/build/TrailIosProbe.app"
+mkdir -p "$app"
+cp experiments/ios-map/app/Info.plist "$app/Info.plist"
+sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+xcrun --sdk iphonesimulator swiftc -parse-as-library -sdk "$sdk" \
+    -target arm64-apple-ios15.5-simulator \
+    -F "$framework" -framework TrailIosProbe \
+    -framework UIKit -framework CoreFoundation -framework CoreGraphics \
+    -framework CoreText -framework Foundation -framework ImageIO \
+    -framework Metal -framework QuartzCore -lc++ -lz \
+    -Xlinker -ObjC \
+    experiments/ios-map/app/App.swift -o "$app/TrailIosProbe"
+codesign --force --sign - "$app"

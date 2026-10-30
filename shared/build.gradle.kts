@@ -17,6 +17,14 @@ kotlin {
             }
         }
     }
+    // MapLibre 0.20 publishes Apple Silicon simulator and ARM64 device variants.
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "TrailShared"
+            isStatic = true
+            binaryOption("bundleId", "net.pocketmap.shared")
+        }
+    }
     jvm() // Run shared tests on Linux without requiring an emulator or Xcode.
     sourceSets {
         commonMain.dependencies {
