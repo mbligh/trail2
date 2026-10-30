@@ -1,0 +1,100 @@
+package net.pocketmap.iosprobe
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import net.pocketmap.shared.map.MapArtwork
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.ComposeUIViewController
+import net.pocketmap.shared.map.PositionOverlay
+import net.pocketmap.shared.map.TrailMapContent
+import net.pocketmap.shared.ui.MapChoice
+import net.pocketmap.shared.ui.TrailScreen
+import org.maplibre.compose.camera.CameraPosition
+import org.maplibre.compose.interaction.MapInteractions
+import org.maplibre.compose.map.*
+import org.maplibre.compose.resource.MapResourceLoad
+import org.maplibre.compose.resource.MapResourceProvider
+import org.maplibre.compose.style.BaseStyle
+import org.maplibre.spatialk.geojson.Position
+
+interface IosPlatformActions { fun perform(action: String) }
+
+/** iOS integration host. This deliberately has a blank offline canvas until the
+ * native tile-storage adapter is integrated; it is not a production basemap. */
+class IosRecordingHost(private val actions: IosPlatformActions) {
+    private var status by mutableStateOf("Location not started")
+    private var recording by mutableStateOf(false)
+    private var position by mutableStateOf<Position?>(null)
+    private var heading by mutableStateOf<Float?>(null)
+    private var track by mutableStateOf(EMPTY)
+    private var pins by mutableStateOf(EMPTY)
+    private var following by mutableStateOf(true)
+
+    fun update(status: String, recording: Boolean, hasFix: Boolean, latitude: Double,
+               longitude: Double, heading: Double, track: String, pins: String) {
+        this.status = status
+        this.recording = recording
+        this.position = if (hasFix) Position(longitude, latitude) else null
+        this.heading = heading.takeIf { it.isFinite() && it >= 0 }?.toFloat()
+        this.track = track
+        this.pins = pins
+    }
+
+    fun viewController() = ComposeUIViewController {
+        val runtime = remember { createMapRuntime {
+            resourceProvider = MapResourceProvider(accepts = { true }, load = { MapResourceLoad.NoContent() })
+        } }
+        DisposableEffect(runtime) { onDispose { runtime.close() } }
+        val artwork = remember {
+            val image = ImageBitmap(24, 24)
+            Canvas(image).drawCircle(Offset(12f, 12f), 11f, Paint().apply { color = Color(0xff1565c0) })
+            listOf(MapArtwork("trail-pin", image, DpSize(24.dp, 24.dp)))
+        }
+        var pointers by remember { mutableStateOf(0) }
+        val map = rememberMapState(runtime = runtime,
+            baseStyle = BaseStyle.Json("""{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#ffffff"}}]}"""),
+            initialCameraPosition = CameraPosition(center = Position(-74.771, 40.692), zoom = 13.5),
+            content = { TrailMapContent(EMPTY, track, pins, artwork) { name, _ -> actions.perform("label:$name") } })
+        LaunchedEffect(position, following) {
+            if (following) position?.let { map.setCameraPosition(map.cameraPosition.copy(center = it)) }
+        }
+        Box(Modifier.fillMaxSize().background(Color.White).windowInsetsPadding(WindowInsets.safeDrawing)) {
+            TrailScreen(
+                status = status, trailStatus = "iOS integration — offline canvas", recordingStatus = if (recording) "Recording" else null,
+                basemaps = listOf(MapChoice("canvas", "Offline test canvas")), selectedBasemap = "canvas",
+                onBasemapSelected = {}, basemapIcon = { BasicText("Map") }, zoomLabel = ((map.cameraPosition.zoom + 1) * 10).toInt().let { "${it / 10}.${it % 10}" },
+                onMapCredits = { actions.perform("credits") }, trailsVisible = true,
+                mapLayers = emptyList(), onLayerToggled = {}, onMenuAction = { actions.perform(it.name) },
+                map = {
+                    Box(Modifier.fillMaxSize()) {
+                        MaplibreMap(state = map, overlay = {}, modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                            awaitPointerEventScope { while (true) {
+                                pointers = awaitPointerEvent(PointerEventPass.Initial).changes.count { it.pressed }
+                            } }
+                        },
+                            cameraConstraints = CameraConstraints { minZoom = 2.0; maxZoom = 18.0; maxPitch = 0.0 },
+                            interactions = MapInteractions { camera { rotate { enabled = false }; pitch { enabled = false }; pan { onStart { if (pointers == 1) following = false } } } })
+                        PositionOverlay(map, position, heading, null, Modifier.fillMaxSize())
+                    }
+                }, recording = recording, following = following, pinEnabled = recording && position != null,
+                onRecord = { actions.perform("record") }, onReport = { actions.perform("report") },
+                onPin = { actions.perform("pin") }, onPinWithText = { actions.perform("pinText") },
+                onRecenter = { following = true; actions.perform("recenter") },
+                reportIcon = { BasicText("⚑") }, pinIcon = { BasicText("●") }, recenterIcon = { BasicText("◎") }
+            )
+        }
+    }
+
+    private companion object { const val EMPTY = """{"type":"FeatureCollection","features":[]}""" }
+}

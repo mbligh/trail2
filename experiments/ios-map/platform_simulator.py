@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Exercise native iOS storage and the shared UI across real app relaunches."""
+import json
+from pathlib import Path
+import subprocess
+import time
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent
+OUT = ROOT / 'build/smoke'
+OUT.mkdir(parents=True, exist_ok=True)
+
+
+def run(*args, **kwargs):
+    return subprocess.run(args, check=True, timeout=180, **kwargs)
+
+
+devices = json.loads(subprocess.check_output(
+    ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], timeout=60))
+phone = next(device for runtime, values in devices['devices'].items() if '.iOS-' in runtime
+             for device in values if 'iPhone' in device['name'] and device['state'] == 'Booted')
+identifier = phone['udid']
+
+for phase in ('write', 'read'):
+    output = OUT / f'platform-{phase}-console.txt'
+    with output.open('w') as log:
+        app = subprocess.Popen(
+            ['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console', identifier,
+             'net.pocketmap.iosprobe', '--platform-self-test', phase], stdout=log, stderr=subprocess.STDOUT)
+        try:
+            deadline = time.monotonic() + 90
+            while time.monotonic() < deadline:
+                if app.poll() is not None:
+                    raise RuntimeError(f'iOS platform host exited during {phase}; see {output}')
+                screenshot = OUT / f'platform-{phase}.png'
+                run('xcrun', 'simctl', 'io', identifier, 'screenshot', str(screenshot))
+                image = Image.open(screenshot).convert('RGB')
+                pixels = list(image.crop((0, image.height // 5, image.width, image.height * 4 // 5)).getdata())
+                blue = sum(b > r + 50 and b > g + 35 for r, g, b in pixels)
+                white = sum(r > 245 and g > 245 and b > 245 for r, g, b in pixels)
+                console = output.read_text(errors='replace')
+                if f'PLATFORM_SELF_TEST_PASS:{phase}' in console and blue >= 150 and white > len(pixels) // 2:
+                    print(f'Native storage + shared UI passed {phase}: blue={blue}, white={white}', flush=True)
+                    break
+                time.sleep(3)
+            else:
+                raise AssertionError(f'iOS persistence/shared renderer did not pass {phase}')
+        finally:
+            subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+            try:
+                app.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                app.terminate()
+                app.wait(timeout=15)
+    print(output.read_text(errors='replace')[-40000:], flush=True)

@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stage 7a; production version 2.0.7. Android renderer phone testing passed; iOS startup diagnostics are the current blocker.
+Updated 2026-10-30 through stage 7a; production version 2.0.7. Android renderer phone testing and iOS Metal rendering passed; native iOS adapters are in progress.
 
 ## Product and identity
 
@@ -631,3 +631,25 @@ MBTiles reader is now being validated against standard TMS rows, gzip vector
 tiles, raw raster bytes, metadata and read-only behavior. It uses system SQLite
 and zlib, with tile-size bounds and explicit errors for corrupt archives. The
 reader remains separate from the map runtime until its interoperability tests pass.
+
+
+## iOS host integration, stage 7c
+
+The strict Metal replay passed in run `41137884591` with 11,042 red trail,
+390,241 green polygon and 15,738 blue recording pixels. Its screenshot was
+visually checked, including the polygon hole, pin and position/heading. The full
+rebuild `41137884430` also passed the Metal step and is uploading its artifacts.
+
+The optional `--platform-host` launch mode now connects the shared TrailScreen
+and map overlays to native Core Location, persistent recordings/pins, native pin
+note prompts, report sharing, stop summaries and GPX/KML share sheets. Statistics
+come from the existing shared TrackStatistics through an iOS CSV bridge. This
+stage uses a deliberately blank offline canvas and synthetic pin artwork; actual
+map bundle routing follows separately. The original synthetic Metal probe is
+retained as the default mode so its strict rendering gate stays independent.
+
+CI now compiles the Swift adapters into both native apps and runs two opt-in
+platform self-test launches. The write phase uses a dedicated fixture directory
+and saves a track plus Unicode pin; a fresh process must reopen those files,
+obtain shared statistics, generate valid GPX/KML and draw the saved track. No
+location permission or real GPS is used by that fixture. Validation is pending.

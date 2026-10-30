@@ -39,11 +39,11 @@ sdk="$(xcrun --sdk "$sdk_name" --show-sdk-path)"
 xcrun --sdk "$sdk_name" swiftc -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
     -target "$triple" \
     -F "$framework" -framework TrailIosProbe \
-    -framework UIKit -framework CoreFoundation -framework CoreGraphics \
+    -framework CoreLocation -framework UIKit -framework CoreFoundation -framework CoreGraphics \
     -framework CoreText -framework Foundation -framework ImageIO \
-    -framework Metal -framework QuartzCore -lc++ -lz \
+    -framework Metal -framework QuartzCore -lc++ -lz -lsqlite3 \
     -Xlinker -ObjC \
-    experiments/ios-map/app/App.swift -o "$app/TrailIosProbe"
+    experiments/ios-map/app/*.swift ios/TrailPlatform/Sources/TrailPlatform/*.swift -o "$app/TrailIosProbe"
 # Device artifacts deliberately remain unsigned until a real team/profile is supplied.
 if [ "$kind" = simulator ]; then codesign --force --sign - "$app"; fi
 xcrun vtool -show-build "$app/TrailIosProbe"

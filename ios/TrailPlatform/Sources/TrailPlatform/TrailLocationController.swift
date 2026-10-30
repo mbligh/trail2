@@ -13,6 +13,7 @@ import UIKit
     public var onChange: (() -> Void)?
     private let manager = CLLocationManager()
     private var timer: Timer?
+    private var headingTimer: Timer?
     private var wantsUpdates = false
 
     public init(store: RecordingStore) {
@@ -128,6 +129,13 @@ import UIKit
             disableBackgroundRecording()
             latestFix = nil; heading = nil
         }
+        if recorder.recording != nil && manager.accuracyAuthorization != .fullAccuracy {
+            _ = try? recorder.stop()
+            disableBackgroundRecording()
+            message = "Recording stopped: precise location is disabled"
+            onChange?()
+            return
+        }
         if wantsUpdates { startForegroundUpdates() }
     }
 
@@ -155,6 +163,12 @@ import UIKit
     public func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         heading = newHeading.headingAccuracy >= 0 && abs(newHeading.timestamp.timeIntervalSinceNow) <= 5
             ? (newHeading.trueHeading >= 0 ? newHeading.trueHeading : nil) : nil
+        headingTimer?.invalidate()
+        if heading != nil {
+            headingTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.heading = nil; self?.onChange?() }
+            }
+        }
         onChange?()
     }
 
