@@ -10,15 +10,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.ComposeView
+import net.pocketmap.shared.ui.BasemapArtwork
+import net.pocketmap.shared.ui.ReportArtwork
+import net.pocketmap.shared.ui.PinArtwork
+import net.pocketmap.shared.ui.RecenterArtwork
 import net.pocketmap.shared.ui.TrailScreen
 import net.pocketmap.shared.ui.MapChoice
 import net.pocketmap.shared.ui.MapLayerChoice
@@ -128,13 +128,7 @@ class MainActivity : ComponentActivity(), LocationListener {
                     basemaps = basemaps.map { MapChoice(it.name, it.label) },
                     selectedBasemap = selectedBasemapName.value,
                     onBasemapSelected = ::selectBasemap,
-                    basemapIcon = {
-                        Image(
-                            painter = painterResource(R.drawable.basemap_menu),
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp).testTag("basemap-artwork")
-                        )
-                    },
+                    basemapIcon = { BasemapArtwork(Modifier.testTag("basemap-artwork")) },
                     zoomLabel = zoomLabel.value,
                     onMapCredits = ::showMapCredits,
                     trailsVisible = trailsVisibleState.value,
@@ -152,17 +146,9 @@ class MainActivity : ComponentActivity(), LocationListener {
                     onPin = { addRecordingPin() },
                     onPinWithText = { addRecordingPin(withText = true) },
                     onRecenter = ::recenterOnGps,
-                    reportIcon = { Image(painterResource(R.drawable.ic_report_flag), null, Modifier.size(28.dp)) },
-                    pinIcon = { Image(painterResource(R.drawable.ic_track_pin), null, Modifier.size(24.dp)) },
-                    recenterIcon = {
-                        Image(
-                            painterResource(R.drawable.ic_recenter), null, Modifier.size(28.dp),
-                            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                                if (followingState.value) androidx.compose.ui.graphics.Color(0xff1565c0)
-                                else androidx.compose.ui.graphics.Color.DarkGray
-                            )
-                        )
-                    }
+                    reportIcon = { ReportArtwork() },
+                    pinIcon = { PinArtwork() },
+                    recenterIcon = { RecenterArtwork(followingState.value) }
                 )
             }
         }

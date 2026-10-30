@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through stage 7a; production version 2.0.7. Android renderer phone testing and iOS Metal rendering passed; native iOS adapters are in progress.
+Updated 2026-10-30 through shared artwork migration; Android version 2.0.8 is in validation. iOS Metal rendering passed; native iOS recording/map integration is in validation.
 
 ## Product and identity
 
@@ -673,3 +673,23 @@ and after a cold relaunch, with screenshots and local-tile evidence. Synthetic
 recording self-tests still use their independent white canvas. Validation is
 pending; satellite/PMTiles runtime caching, trail refresh/import, original icon
 artwork and complete iOS application packaging remain later work.
+
+
+## Shared control artwork (Android 2.0.8 phone gate)
+
+The original basemap, report, pin and recenter vector viewport paths now live in
+`shared/.../ui/TrailControlArtwork.kt`, with the same 40/28/24/28 dp display sizes
+and following-state tint. Android and the iOS integration host use those common
+painters. The Android vector XMLs remain as independent regression references;
+the native recording-pin bitmap is unchanged. A production emulator test compares
+the actual shared controls against native XML rendering, including dimensions,
+colors and recenter tint, and preserves a screenshot. Existing inset, gesture,
+long-hold pin, map/GPS, export and publishing checks continue.
+
+This is the first shipping Android change since the user confirmed 2.0.7. After
+automated validation and Play internal upload pass, physical Android testing is
+required before further migration: check the original top-left map icon and
+three other corner icons, blue/gray recenter state, menus and the one-second pin
+interaction. The iOS adapters stay separate from Android location/storage.
+Native GNSS and actual locked-screen iOS behavior have not been established by
+the simulator; Apple signing/TestFlight remain unconfigured.

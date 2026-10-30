@@ -2,7 +2,6 @@ package net.pocketmap.iosprobe
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +25,10 @@ import androidx.compose.ui.window.ComposeUIViewController
 import net.pocketmap.shared.map.PositionOverlay
 import net.pocketmap.shared.map.TrailMapContent
 import net.pocketmap.shared.ui.MapChoice
+import net.pocketmap.shared.ui.BasemapArtwork
+import net.pocketmap.shared.ui.ReportArtwork
+import net.pocketmap.shared.ui.PinArtwork
+import net.pocketmap.shared.ui.RecenterArtwork
 import net.pocketmap.shared.ui.TrailScreen
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.interaction.MapInteractions
@@ -102,7 +105,7 @@ class IosRecordingHost(private val actions: IosPlatformActions,
             TrailScreen(
                 status = status, trailStatus = if (resources == null) "iOS integration — offline canvas" else "Tewksbury offline map", recordingStatus = if (recording) "Recording" else null,
                 basemaps = listOf(MapChoice("bright", if (resources == null) "Offline test canvas" else "Bright")), selectedBasemap = "bright",
-                onBasemapSelected = {}, basemapIcon = { BasicText("Map") }, zoomLabel = ((map.cameraPosition.zoom + 1) * 10).toInt().let { "${it / 10}.${it % 10}" },
+                onBasemapSelected = {}, basemapIcon = { BasemapArtwork() }, zoomLabel = ((map.cameraPosition.zoom + 1) * 10).toInt().let { "${it / 10}.${it % 10}" },
                 onMapCredits = { actions.perform("credits") }, trailsVisible = true,
                 mapLayers = emptyList(), onLayerToggled = {}, onMenuAction = { actions.perform(it.name) },
                 map = {
@@ -120,7 +123,7 @@ class IosRecordingHost(private val actions: IosPlatformActions,
                 onRecord = { actions.perform("record") }, onReport = { actions.perform("report") },
                 onPin = { actions.perform("pin") }, onPinWithText = { actions.perform("pinText") },
                 onRecenter = { following = true; actions.perform("recenter") },
-                reportIcon = { BasicText("⚑") }, pinIcon = { BasicText("●") }, recenterIcon = { BasicText("◎") }
+                reportIcon = { ReportArtwork() }, pinIcon = { PinArtwork() }, recenterIcon = { RecenterArtwork(following) }
             )
         }
     }
