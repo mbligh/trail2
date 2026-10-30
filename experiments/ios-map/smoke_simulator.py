@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Boot the unsigned fixture app and require real red/green/blue Metal output."""
 import json
-import os
-import re
 import shutil
 from pathlib import Path
 import subprocess
@@ -37,27 +35,13 @@ launch = subprocess.Popen(
      identifier, 'net.pocketmap.iosprobe'], stdout=console, stderr=subprocess.STDOUT)
 
 try:
-    # The attached console records Kotlin startup exceptions that log show misses.
-    pid = None
-    launch_deadline = time.monotonic() + 30
-    while time.monotonic() < launch_deadline:
-        match = re.search(r'net\.pocketmap\.iosprobe: (\d+)', console_path.read_text(errors='replace'))
-        if match:
-            pid = int(match.group(1))
-            break
-        if launch.poll() is not None:
-            raise RuntimeError('iOS probe exited during launch; see console.txt')
-        time.sleep(0.5)
-    if pid is None:
-        raise RuntimeError('iOS probe launch did not report a PID; see console.txt')
+    # --console remains attached for the app lifetime, but does not promise a
+    # PID banner. Monitor it directly and require actual fixture pixels below.
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         # A screenshot of SpringBoard after an app crash must never count as a pass.
-        # Simulator applications share the macOS process namespace. The iOS
-        # runtime does not ship a kill utility; check the host process directly.
         if launch.poll() is not None:
             raise RuntimeError('iOS probe exited before rendering; see console.txt')
-        os.kill(pid, 0)
         screenshot = OUTPUT / 'ios-metal.png'
         run('xcrun', 'simctl', 'io', identifier, 'screenshot', str(screenshot))
         image = Image.open(screenshot).convert('RGB')

@@ -2,7 +2,7 @@ name: Replay iOS probe diagnostics
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/ios-replay.yml', 'tools/ios_probe_replay']
+    paths: ['.github/workflows/ios-replay.yml', 'tools/ios_probe_replay', 'experiments/ios-map/smoke_simulator.py']
   workflow_dispatch:
     inputs:
       run_id:
@@ -54,8 +54,12 @@ jobs:
           python -m pip install Pillow==11.3.0
           python -m py_compile tools/ios_probe_replay
           python tools/ios_probe_replay
+      - name: Require shared map rendering from the compiled probe
+        run: python experiments/ios-map/smoke_simulator.py
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: Trail-iOS-replay-evidence
-          path: experiments/ios-map/build/replay/
+          path: |
+            experiments/ios-map/build/replay/
+            experiments/ios-map/build/smoke/

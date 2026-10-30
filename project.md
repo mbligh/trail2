@@ -588,3 +588,9 @@ output environment, and requires the MapLibre resource before signing either app
 The rendering smoke test captures attached stdout/stderr and crash reports so
 future startup failures retain their original exception. Validation is pending
 the next macOS simulator run; Android remains at the tested 2.0.7 baseline.
+
+The packaging recovery run `41134940558` built both resource-complete apps and
+logged the first Metal map frame. Its checker incorrectly required a PID banner
+from attached `simctl --console`; the checker now monitors the attached process
+and the same strict fixture-pixel assertions without assuming that banner. The
+replay workflow also runs the strict smoke check against the saved compiled app.
