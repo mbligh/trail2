@@ -342,3 +342,15 @@ https://github.com/mbligh/trail2/actions/runs/40987077419
 - JVM tests read the old binary layout and independently inspect newly written
   files; emulator tests cover both read/write directions and reject mismatched
   server ranges. The real NJ online/cold-offline checks continue to run.
+
+## Stage 5h: Compose camera and follow behavior
+
+- Retain a single Compose `MapState` across basemap changes: its declared baseStyle
+  updates directly, while the library's saved-state support retains center/zoom
+  through activity recreation. Remove the experiment's map-per-style recreation.
+- Match shipping limits (native zoom 2–18 / displayed zoom 3–19), disable rotate/pitch
+  gestures and keep pitch zero. Observe pointer count without consuming input so
+  one-finger panning pauses following while pinch zoom remains available.
+- Keep latest position and following state through recreation, and test recenter,
+  paused-follow fix updates, real Activity-dispatched drag input, and zoom input on
+  the offline emulator. GPS acquisition remains outside the renderer.

@@ -84,7 +84,7 @@ jobs:
           adb shell svc wifi disable || true
           adb shell svc data disable || true
           gradle --no-daemon -p experiments/maplibre-compose :app:connectedDebugAndroidTest \
-            -Pandroid.testInstrumentationRunnerArguments.class=net.pocketmap.composeprobe.OfflineRenderTest,net.pocketmap.composeprobe.RasterCacheInteropTest,net.pocketmap.composeprobe.RangeCacheInteropTest
+            -Pandroid.testInstrumentationRunnerArguments.class=net.pocketmap.composeprobe.OfflineRenderTest,net.pocketmap.composeprobe.RasterCacheInteropTest,net.pocketmap.composeprobe.RangeCacheInteropTest,net.pocketmap.composeprobe.CameraParityTest
       - name: Warm actual NJ contour ranges online
         run: |
           adb shell svc wifi enable
