@@ -26,7 +26,8 @@ import org.maplibre.spatialk.geojson.Position
  * rendering experiment using the same Tewksbury MBTiles/bright style/fonts.
  */
 class ProbeActivity : ComponentActivity() {
-    private var selected by mutableStateOf("bright")
+    internal var selected by mutableStateOf("bright")
+        private set
 
     internal val offlineResources get() =
         (application as ProbeApplication).offlineResources
@@ -37,7 +38,8 @@ class ProbeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        intent.getStringExtra("style")?.takeIf { it in STYLES }?.let { selected = it }
+        (savedInstanceState?.getString("style") ?: intent.getStringExtra("style"))
+            ?.takeIf { it in STYLES }?.let { selected = it }
         setContent {
             // Recreate the map state on style changes: changing an initial
             // argument to rememberMapState alone does not switch the style.
@@ -62,6 +64,11 @@ class ProbeActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("style", selected)
+        super.onSaveInstanceState(outState)
     }
 
     companion object {

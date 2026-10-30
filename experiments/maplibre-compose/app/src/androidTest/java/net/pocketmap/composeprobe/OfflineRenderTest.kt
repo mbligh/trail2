@@ -79,10 +79,9 @@ class OfflineRenderTest {
                 resources.sampleContourTiles.get() >= initialContours + 2)
             assertTrue("MapLibre did not load the contour style",
                 resources.styleLoads.get() > initialStyles)
-            instrumentation.waitForIdleSync()
-            val image = instrumentation.uiAutomation.takeScreenshot()
-            assertNotNull("Missing PMTiles rendered screenshot", image)
-            image!!.recycle()
+            // Requests alone do not prove that the source-layer/filter/paint
+            // combination actually drew any contours on the map.
+            assertContours("compose-contours.png")
         }
     }
 
@@ -112,45 +111,94 @@ class OfflineRenderTest {
             assertTrue("Compose renderer did not load live offline vector tiles",
                 resources.vectorTiles.get() >= 2)
 
-            instrumentation.waitForIdleSync()
-            // Native tile requests alone don't prove the GPU presented a map.
-            // Sample only the middle of the screenshot (outside the Compose
-            // control banner). A blank/black/white map has very few colors;
-            // a rendered Bright map contains roads, water, land and labels.
-            var distinctColors = 0
-            for (attempt in 1..12) {
-                val bitmap = instrumentation.uiAutomation.takeScreenshot()
-                if (bitmap == null) {
-                    Thread.sleep(500)
-                    continue
-                }
+            awaitResources("bundled Bright fonts and sprites") {
+                resources.glyphLoads.get() > 0 && resources.spriteLoads.get() > 0
+            }
+            assertMapVariety("compose-offline.png")
+        }
+    }
+
+    @Test fun offlineStylesSwitchAndSurviveActivityRecreation() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val resources = (instrumentation.targetContext.applicationContext as ProbeApplication).offlineResources
+        ActivityScenario.launch(ProbeActivity::class.java).use { scenario ->
+            awaitResources("initial Bright style") { resources.styleLoads.get() > 0 }
+            assertMapVariety("compose-switch-bright.png")
+            val rasters = resources.rasterTiles.get()
+            scenario.onActivity { it.showStyle("earth") }
+            awaitResources("Natural Earth raster tiles") { resources.rasterTiles.get() > rasters }
+            assertMapVariety("compose-switch-earth.png")
+
+            val contours = resources.sampleContourTiles.get()
+            scenario.onActivity { it.showStyle("sample-contours") }
+            awaitResources("PMTiles after style switch") { resources.sampleContourTiles.get() > contours }
+            assertContours("compose-switch-contours.png")
+            scenario.recreate()
+            scenario.onActivity {
+                assertTrue("Recreation reset the selected style", it.selected == "sample-contours")
+            }
+            assertContours("compose-recreated-contours.png")
+
+            val styles = resources.styleLoads.get()
+            scenario.onActivity { it.showStyle("bright") }
+            awaitResources("Bright after switching back") { resources.styleLoads.get() > styles }
+            assertMapVariety("compose-switch-back.png")
+        }
+    }
+
+    private fun assertContours(filename: String) =
+        assertMapPixels(filename, "visible magenta contour lines", 40) { color ->
+            val red = (color shr 16) and 255
+            val green = (color shr 8) and 255
+            val blue = color and 255
+            red > 180 && blue > 130 && red - green > 80 && blue - green > 60
+        }
+
+    private fun awaitResources(description: String, ready: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 60_000
+        while (!ready() && System.currentTimeMillis() < deadline) Thread.sleep(250)
+        assertTrue("Renderer did not load $description", ready())
+    }
+
+    private fun assertMapVariety(filename: String) =
+        assertMapPixels(filename, "rendered map colors", 16, distinct = true) { true }
+
+    /** Check the central viewport, excluding all Compose text/system chrome. */
+    private fun assertMapPixels(
+        filename: String,
+        description: String,
+        minimum: Int,
+        distinct: Boolean = false,
+        matches: (Int) -> Boolean
+    ) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.waitForIdleSync()
+        var count = 0
+        for (attempt in 1..30) {
+            val bitmap = instrumentation.uiAutomation.takeScreenshot()
+            if (bitmap != null) {
                 try {
                     val colors = HashSet<Int>()
-                    val x0 = bitmap.width / 4
-                    val x1 = bitmap.width * 3 / 4
-                    val y0 = bitmap.height / 4
-                    val y1 = bitmap.height * 3 / 4
-                    val stepX = ((x1 - x0) / 50).coerceAtLeast(1)
-                    val stepY = ((y1 - y0) / 50).coerceAtLeast(1)
-                    for (y in y0 until y1 step stepY) {
-                        for (x in x0 until x1 step stepX) {
-                            colors.add(bitmap.getPixel(x, y) and 0x00ffffff)
+                    count = 0
+                    for (y in bitmap.height / 4 until bitmap.height * 3 / 4 step 2) {
+                        for (x in bitmap.width / 4 until bitmap.width * 3 / 4 step 2) {
+                            val color = bitmap.getPixel(x, y) and 0x00ffffff
+                            if (matches(color)) {
+                                count++
+                                if (distinct) colors.add(color)
+                            }
                         }
                     }
-                    distinctColors = colors.size
-                    val output = File(
-                        instrumentation.targetContext.getExternalFilesDir(null), "compose-offline.png")
+                    if (distinct) count = colors.size
+                    val output = File(instrumentation.targetContext.getExternalFilesDir(null), filename)
                     output.outputStream().use {
                         bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
                     }
-                } finally {
-                    bitmap.recycle()
-                }
-                if (distinctColors >= 16) break
-                Thread.sleep(1_000)
+                } finally { bitmap.recycle() }
+                if (count >= minimum) return
             }
-            assertTrue("MapLibre Compose surface is blank ($distinctColors distinct colors)",
-                distinctColors >= 16)
+            Thread.sleep(500)
         }
+        assertTrue("Map lacks $description ($count, expected >= $minimum); see $filename", count >= minimum)
     }
 }

@@ -6,12 +6,13 @@ The production Trail2 app remains on Kotlin 2.1.20 / Compose 1.8.2 and MapLibre 
 
 Build from the repository root with Gradle 9.4.1: `gradle -p experiments/maplibre-compose :app:assembleDebug`. The APK installs with a distinct application ID `net.pocketmap.composeprobe`, so it cannot upgrade or overwrite Trail2.
 
-## What this does and does not prove
+## Scope and validation
 
-- Exercises a **real** MapLibre Compose `MapResourceProvider` and offline style/tile routing against a synthetic raster tile, on Android when launched.
-- A successful build proves API compatibility with the experiment's toolchain, **not** the render runtime, offline-cache correctness, or iOS compatibility.
-- Separately, Trail2's production `TileRepository.loadOfflineResource` provides bytes from real bundled MBTiles and persistent caches. The native emulator test verifies that bridge.
-- Next connect the MapLibre Compose provider to that adapter and test actual Tewksbury vector tiles, sprites/glyphs, source/layer ordering, PMTiles ranges, and style switches, then add emulator rendering tests. Do not replace the production map until those work offline.
+This experiment validates real Tewksbury vector/raster assets through Compose's
+resource provider on Android. It runs independently of production Trail2's mutable
+cache and release toolchain. Compilation alone proves API compatibility; emulator
+checks below establish the specific offline rendering behaviors covered so far.
+They do not establish iOS compatibility or production cache interoperability.
 
 ## Real Tewksbury offline prototype
 
@@ -32,3 +33,13 @@ The offline Android UI smoke test additionally captures a screenshot and checks 
 - The separate probe requests Android INTERNET permission only to support remote-range experiments. This does not change production Trail2. The regular emulator smoke remains offline; separate checks cover PMTiles archive decoding, the cache across reopen, and the synthetic contour renderer.
 
 The test suite now checks a deterministic PMTiles v3 contour fixture, Hilbert addressing, actual `elevation_ft` layer properties, persistent range replay after the remote fetcher disappears, cache namespace invalidation, and MapLibre's offline contour tile requests. The fixture contains invented lines, not real NJ elevation values.
+
+## Offline style and lifecycle parity
+
+The emulator suite checks actual magenta contour pixels, bundled Bright glyph and
+sprite loads, and a varied central map viewport. It switches Bright → Natural
+Earth → synthetic contours → Bright in one activity, recreates the activity on
+contours, and verifies that the saved style survives. Screenshots for each check
+are included in `ComposeProbeSmoke`, including the last failed assertion frame.
+Synthetic contour pixels establish fixture rendering only; live NJ contour range
+fetch/replay, satellite/hybrid imagery and production cache integration remain.
