@@ -109,12 +109,12 @@ Shared Kotlin algorithms now live in the `shared/` Kotlin Multiplatform module (
 
 ## Compose migration
 
-The top-level layout and dynamic status header are implemented with shared Compose Multiplatform UI code in `shared/commonMain`. Native Android MapLibre and its controls are embedded through `AndroidView`, preserving existing offline maps, GPS services and map interactions. The project still builds Android only.
+The top-level layout and dynamic status header are implemented with shared Compose Multiplatform UI code in `shared/commonMain`. The native Android MapLibre map is embedded through `AndroidView`, preserving existing offline maps, GPS services and map interactions. Header and corner controls use shared Compose UI. The project still builds Android only.
 
 
 ### Shared header controls
 
-The basemap selector, map attribution/zoom readout, menu actions and Map layers submenu now use shared Compose components and platform-neutral callbacks. Map rendering and the four map corner buttons remain native Android while the migration proceeds incrementally.
+The basemap selector, map attribution/zoom readout, menu actions and Map layers submenu now use shared Compose components and platform-neutral callbacks. The four map corner buttons also use shared Compose UI. Map rendering remains on the existing Android SDK pending the renderer-integration stage.
 
 ### Updating an installed Trail 2
 
@@ -122,4 +122,4 @@ The [GitHub Pages APK](https://mbligh.github.io/trail2/Trail2.apk) is signed usi
 
 ### MapLibre Compose feasibility
 
-Before switching renderers, the Android `TileRepository` now exposes a blocking, offline-only resource reader intended for a future MapLibre Compose `MapResourceProvider`. It reuses the existing bundled glyph/tiles and persistent MBTiles caches, and deliberately does not fall back to the network for missing offline resources. The production MapLibre renderer and release configuration remain unchanged. See `project.md` for the staged experiment and remaining PMTiles/renderer questions.
+Before switching renderers, the Android `TileRepository` now exposes a blocking, offline-only resource reader intended for a future MapLibre Compose `MapResourceProvider`. It reuses the existing bundled glyph/tiles and persistent MBTiles caches, and deliberately does not fall back to the network for missing offline resources. The isolated renderer now exercises real offline streets, contours, satellite/hybrid imagery, compatible production cache files, camera/follow behavior, and app-layer fixtures. Production version 2.0.5 aligns Kotlin/Compose/AGP/Gradle with that prototype while retaining the existing native renderer. A phone regression check of this upgraded runtime is the next gate before replacing the renderer. See `project.md` for validation and next steps.
