@@ -43,6 +43,8 @@ class LiveContourRenderTest {
                 stable = if (count == previous) stable + 1 else 0
                 previous = count
             }
+            val prefetched = resources.prefetchRemoteContourBorder()
+            assertTrue("No viewport border was cached", prefetched > 0)
             val ranges = resources.remoteRange
             assertTrue("No real HTTP ranges fetched", ranges.networkRequests.get() > 0)
             assertTrue("No real NJ PMTiles bytes fetched", ranges.networkBytes.get() > 127)
@@ -51,6 +53,7 @@ class LiveContourRenderTest {
                 .put("networkRequests", ranges.networkRequests.get())
                 .put("networkBytes", ranges.networkBytes.get())
                 .put("renderedTiles", resources.remoteContourTiles.get())
+                .put("prefetchedViewportTiles", prefetched)
                 .toString())
         }
     }

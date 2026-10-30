@@ -28,6 +28,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
     val spriteLoads = AtomicInteger()
     val sampleContourTiles = AtomicInteger()
     val remoteContourTiles = AtomicInteger()
+    private val requestedRemoteTiles = linkedSetOf<Triple<Int, Int, Int>>()
 
     private val sources = JSONObject(readAssetText("resolved-sources.json"))
     private val manifests = JSONObject(readAssetText("offline-manifest.json"))
@@ -91,6 +92,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
                 return satellite.load(z, x.toInt(), y.toInt())?.also { rasterTiles.incrementAndGet() }
             }
             if (source == "sample-contours" || source == "nj-contours") {
+                if (source == "nj-contours") requestedRemoteTiles.add(Triple(z, x.toInt(), y.toInt()))
                 val bytes = runCatching {
                     if (source == "sample-contours") samplePmtiles.get(z, x.toInt(), y.toInt())
                     else remotePmtiles.get(z, x.toInt(), y.toInt())
@@ -122,6 +124,21 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             return readAssetBytes(path)
         }
         return null
+    }
+
+    /** Warm only one tile beyond the rendered viewport, covering edge/LOD requests on restart. */
+    @Synchronized fun prefetchRemoteContourBorder(): Int {
+        val requested = requestedRemoteTiles.toList()
+        require(requested.size in 1..64) { "Unexpected viewport request count: ${requested.size}" }
+        val border = linkedSetOf<Triple<Int, Int, Int>>()
+        for ((z, x, y) in requested) {
+            for (dx in -1..1) for (dy in -1..1) {
+                if (x + dx in 0 until (1 shl z) && y + dy in 0 until (1 shl z)) {
+                    border.add(Triple(z, x + dx, y + dy))
+                }
+            }
+        }
+        return border.count { (z, x, y) -> remotePmtiles.get(z, x, y) != null }
     }
 
     private fun localPmtilesRange(offset: Long, length: Int): ByteArray? {

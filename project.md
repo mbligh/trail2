@@ -378,3 +378,11 @@ https://github.com/mbligh/trail2/actions/runs/40987077419
   service and automatic publishing. Version 2.0.5 distinguishes this release.
 - This step intentionally validates the compiler/build upgrade before changing
   the main renderer. The isolated camera and overlay regression work continues.
+
+### Renderer warm-up coverage
+
+The real contour warm-up also caches a one-tile border around tiles requested by
+the viewport (limited to at most 64 initial viewport requests). A cold renderer can
+request an adjacent tile during edge/LOD scheduling that the prior run did not ask
+for. Offline replay still requires zero missing byte ranges and zero HTTP attempts;
+this does not relax the assertion or download statewide coverage.
