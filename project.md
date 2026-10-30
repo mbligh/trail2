@@ -594,3 +594,16 @@ logged the first Metal map frame. Its checker incorrectly required a PID banner
 from attached `simctl --console`; the checker now monitors the attached process
 and the same strict fixture-pixel assertions without assuming that banner. The
 replay workflow also runs the strict smoke check against the saved compiled app.
+
+
+## iOS platform adapters, stage 7b: recording storage
+
+`ios/TrailPlatform` is a native Swift package, outside Android builds. Its main-actor
+recording store persists UUID-named CSV tracks and Base64 note sidecars compatible
+with Android, atomic active/session metadata, and explicit recovery after process
+termination. Writes synchronize to disk and use iOS protection that permits writes
+while locked after the first unlock. Invalid fixes are rejected before writing;
+truncated rows cannot merge with the next appended fix. Swift package tests cover
+reopening active/stopped sessions, Unicode notes, old Android rows, incomplete
+writes, and invalid-coordinate rejection. The package is not yet connected to
+Core Location or an iOS application UI. macOS CI validation is pending.

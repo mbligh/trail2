@@ -1,0 +1,19 @@
+name: iOS platform adapter tests
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios-platform.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: trail-ios-platform-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  platform:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test recording recovery and Android file compatibility
+        run: swift test --package-path ios/TrailPlatform

@@ -8,3 +8,6 @@ local.properties
 
 .map-downloads/
 __pycache__/
+
+.swiftpm/
+.build/
