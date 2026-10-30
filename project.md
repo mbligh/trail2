@@ -381,7 +381,7 @@ https://github.com/mbligh/trail2/actions/runs/40987077419
 
 ### Renderer warm-up coverage
 
-The real contour warm-up also caches a one-tile border around tiles requested by
+The real contour and satellite warm-ups also cache a one-tile border around tiles requested by
 the viewport (limited to at most 64 initial viewport requests). A cold renderer can
 request an adjacent tile during edge/LOD scheduling that the prior run did not ask
 for. Offline replay still requires zero missing byte ranges and zero HTTP attempts;

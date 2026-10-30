@@ -31,6 +31,7 @@ class LiveRasterRenderTest {
             }
             assertMapVariety("compose-hybrid-online.png")
             Thread.sleep(3_000)
+            assertTrue("No satellite viewport border cached", resources.satellite.prefetchViewportBorder() > 0)
             assertTrue("No real satellite HTTP fetches", resources.satellite.networkRequests.get() > 0)
             assertEquals(0, resources.satellite.blockedRequests.get())
             receipt.writeText("NJ 2020 tiles fetched: ${resources.satellite.networkRequests.get()}")

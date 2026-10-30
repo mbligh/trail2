@@ -56,10 +56,12 @@ internal class RasterProbeSource(
     val cacheHits = AtomicInteger()
     val networkRequests = AtomicInteger()
     val blockedRequests = AtomicInteger()
+    private val requestedTiles = linkedSetOf<Triple<Int, Int, Int>>()
 
     @Synchronized fun load(z: Int, x: Int, y: Int): ByteArray? {
         if (z !in 0..definition.optInt("maxzoom", 20) || x < 0 || y < 0 ||
             x.toLong() >= (1L shl z) || y.toLong() >= (1L shl z)) return null
+        requestedTiles.add(Triple(z, x, y))
         cache.get(z, x, y)?.let { cacheHits.incrementAndGet(); return it }
         if (!allowNetwork()) { blockedRequests.incrementAndGet(); return null }
         val templates = definition.getJSONArray("tiles")
@@ -80,6 +82,18 @@ internal class RasterProbeSource(
             android.util.Log.w("ComposeProbeRaster", "Cannot cache $url", it)
         }
         return bytes
+    }
+
+    @Synchronized fun prefetchViewportBorder(): Int {
+        val requested = requestedTiles.toList()
+        require(requested.size in 1..64) { "Unexpected raster viewport size: ${requested.size}" }
+        val border = linkedSetOf<Triple<Int, Int, Int>>()
+        for ((z, x, y) in requested) for (dx in -1..1) for (dy in -1..1) {
+            if (x + dx in 0 until (1 shl z) && y + dy in 0 until (1 shl z)) {
+                border.add(Triple(z, x + dx, y + dy))
+            }
+        }
+        return border.count { (z, x, y) -> load(z, x, y) != null }
     }
 
     fun styleSource(): JSONObject = JSONObject(definition.toString()).apply {
