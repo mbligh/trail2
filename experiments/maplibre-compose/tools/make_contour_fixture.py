@@ -103,9 +103,15 @@ def make(output):
     assert len(header) + len(root) < 16384
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(header + root + metadata + tile * len(ordered))
+    # The standalone app needs the same contour layer definitions as Trail2.
+    root_repo = Path(__file__).resolve().parents[3]
+    config = (root_repo / "basemaps.json").read_bytes()
+    config_target = output.parents[1] / "basemaps.json"
+    config_target.write_bytes(config)
     manifest_path = output.parents[1] / "offline-manifest.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["resources"][output.relative_to(output.parents[1]).as_posix()] = hashlib.sha256(output.read_bytes()).hexdigest()
+    manifest["resources"]["basemaps.json"] = hashlib.sha256(config).hexdigest()
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(f"Created {output}: {len(ordered)} synthetic PMTiles tiles, {output.stat().st_size} bytes")
 
