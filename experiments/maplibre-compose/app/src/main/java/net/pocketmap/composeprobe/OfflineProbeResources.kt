@@ -77,7 +77,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
             styleLoads.incrementAndGet()
             return style("bright")
         }
-        if (path in setOf("style-earth.json", "style-satellite.json", "style-hybrid.json", "style-sample-contours.json", "style-nj-contours.json")) {
+        if (path in setOf("style-earth.json", "style-blank.json", "style-satellite.json", "style-hybrid.json", "style-sample-contours.json", "style-nj-contours.json")) {
             styleLoads.incrementAndGet()
             return style(path.removePrefix("style-").removeSuffix(".json"))
         }
@@ -164,6 +164,7 @@ internal class OfflineProbeResources(private val context: Context) : Closeable {
 
     /** Keeps the exact Bright layer stack and bundled sprite/font resources. */
     private fun style(name: String): ByteArray {
+        if (name == "blank") return """{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#ffffff"}}]}""".encodeToByteArray()
         if (name == "earth") return JSONObject().apply {
             put("version", 8)
             put("sources", JSONObject().put("ne2_shaded", offlineSource("ne2_shaded")))

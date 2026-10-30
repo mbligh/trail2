@@ -57,14 +57,40 @@ class OverlayParityTest {
             awaitResources("pin annotation tap") { var hit = false; scenario.onActivity { hit = it.pinText == "Pin annotation survives style reload" }; hit }
             scenario.onActivity { it.heading = 45f }
             assertMapVariety("compose-app-heading.png")
-            // Query the polygon's hole; it must not become a solid fill after migration.
-            lateinit var state: MapState
-            scenario.onActivity { state = it.mapState }
-            val insideHole = runBlocking { withContext(Dispatchers.Main) {
-                val center = state.screenLocationFromPosition(Position(latitude = 40.692, longitude = -74.771))!!
-                state.queryRenderedFeatures(center, setOf("trail-polygon-fill"))
-            } }
-            assertTrue("Polygon hole was filled", insideHole.isEmpty())
+            // Query hit-testing can return the containing polygon for its hole.
+            // Verify the actual fill pixels over a controlled white background.
+            val resources = (androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .targetContext.applicationContext as ProbeApplication).offlineResources
+            val before = resources.styleLoads.get()
+            scenario.onActivity { it.showStyle("blank") }
+            awaitResources("controlled polygon background") { resources.styleLoads.get() > before }
+            fun screen(position: Position): Pair<Int, Int> {
+                var result = 0 to 0
+                scenario.onActivity {
+                    val offset = it.mapState.screenLocationFromPosition(position)!!
+                    val origin = IntArray(2)
+                    it.findViewById<android.view.View>(android.R.id.content).getLocationOnScreen(origin)
+                    val density = it.resources.displayMetrics.density
+                    result = (origin[0] + offset.x.value * density).toInt() to
+                        (origin[1] + offset.y.value * density).toInt()
+                }
+                return result
+            }
+            val hole = screen(Position(latitude = 40.691, longitude = -74.772))
+            val fill = screen(Position(latitude = 40.687, longitude = -74.779))
+            awaitResources("white polygon hole and green surrounding fill") {
+                val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                    .uiAutomation.takeScreenshot() ?: return@awaitResources false
+                try {
+                    val inside = bitmap.getPixel(hole.first, hole.second)
+                    val outside = bitmap.getPixel(fill.first, fill.second)
+                    android.graphics.Color.red(inside) > 240 && android.graphics.Color.green(inside) > 240 &&
+                        android.graphics.Color.blue(inside) > 240 &&
+                        android.graphics.Color.green(outside) - android.graphics.Color.red(outside) > 20 &&
+                        android.graphics.Color.green(outside) - android.graphics.Color.blue(outside) > 20
+                } finally { bitmap.recycle() }
+            }
+            assertMapVariety("compose-polygon-hole.png")
             assertTrue("Polygon never rendered", names("trail-polygon-fill").isNotEmpty())
         }
     }

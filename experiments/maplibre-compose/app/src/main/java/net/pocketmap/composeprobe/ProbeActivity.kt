@@ -133,7 +133,7 @@ class ProbeActivity : ComponentActivity() {
     }
 
     companion object {
-        private val STYLES = listOf("bright", "earth", "sample-contours", "nj-contours", "satellite", "hybrid")
+        private val STYLES = listOf("bright", "earth", "sample-contours", "nj-contours", "satellite", "hybrid", "blank")
     }
 
 }
