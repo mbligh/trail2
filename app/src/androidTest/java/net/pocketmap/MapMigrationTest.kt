@@ -176,6 +176,7 @@ class MapMigrationTest {
                 isolateGps(activity); following(activity, false)
                 renderer(activity).apply {
                     offline(this)
+                    setCenter(LatLng(40.692, -74.771)); setZoom(14.5)
                     showRecording(points, listOf(RecordedPins.Pin(40.695, -74.765, 1_180_000, null, 3f, "Gate, broken\n🐴 <&>")))
                 }
             }
