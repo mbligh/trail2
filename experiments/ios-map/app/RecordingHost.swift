@@ -9,7 +9,6 @@ import UIKit
     private(set) var model: IosRecordingHost!
     private(set) var controller: UIViewController!
     private var trailRepository: TrailRepository!
-    private let trailBridge = IosTrailBridge()
     private var trailDocument: IosTrailDocument?
     private var trailTask: Task<Void, Never>?
     private var displayed: RecordingSession?
@@ -40,7 +39,7 @@ import UIKit
         model = IosRecordingHost(actions: self, resources: offlineResources, styleJson: style)
         for id in ["1763", "1899", "1205", "503"] {
             if let url = Bundle.main.resourceURL?.appendingPathComponent("trail-icons/mymaps_\(id).png"),
-               let data = try? Data(contentsOf: url) { model.installIcon(id: id, png: kotlinBytes(data)) }
+               let data = try? Data(contentsOf: url) { model.installIcon(id: id, png: Self.kotlinBytes(data)) }
         }
         controller = model.viewController()
         do { trailRepository = try TrailRepository(directory: store.directory.appendingPathComponent("map-cache")) }
@@ -97,15 +96,19 @@ import UIKit
             _ = try await repository.refresh { parsed = try self.parseTrails($0) }
         } else {
             let prior = try repository.cached { parsed = try self.parseTrails($0) }
+            var validationReached = false
             do {
-                _ = try await repository.refresh { _ = try self.parseTrails($0) }
+                _ = try await repository.refresh {
+                    validationReached = true
+                    _ = try self.parseTrails($0)
+                }
                 throw RecordingStoreError.corruptSession
             } catch is TrailDownloadError {
                 guard phase == "offline" else { throw RecordingStoreError.corruptSession }
             } catch {
                 // The invalid phase must fail in the common parser, and both
                 // phases must retain the byte-for-byte previous valid cache.
-                guard phase == "invalid", !(error is RecordingStoreError) else { throw error }
+                guard phase == "invalid", validationReached, !(error is RecordingStoreError) else { throw error }
             }
             guard try repository.cached(validate: { _ = try self.parseTrails($0) }) == prior else {
                 throw RecordingStoreError.corruptSession
@@ -115,45 +118,50 @@ import UIKit
               document.geoJson.contains("Cached trail fixture") else { throw RecordingStoreError.corruptSession }
         trailDocument = document
         model.showTrails(document: document, status: "Validated trails · \(phase)")
+        model.verifyTrails()
         print("TRAIL_CACHE_TEST_PASS:\(phase)")
         fflush(stdout)
     }
 
-    private func kotlinBytes(_ data: Data) -> KotlinByteArray {
+    nonisolated private static func kotlinBytes(_ data: Data) -> KotlinByteArray {
         let bytes = KotlinByteArray(size: Int32(data.count))
         for (index, byte) in data.enumerated() { bytes.set(index: Int32(index), value: Int8(bitPattern: byte)) }
         return bytes
     }
 
-    private func parseTrails(_ data: Data) throws -> IosTrailDocument {
-        try trailBridge.parse(bytes: kotlinBytes(data))
+    nonisolated private static func parseTrailData(_ data: Data) throws -> IosTrailDocument {
+        try IosTrailBridge().parse(bytes: kotlinBytes(data))
     }
 
-    private func cachedTrails() {
-        guard let repository = trailRepository else { return }
-        do {
-            var parsed: IosTrailDocument?
-            _ = try repository.cached { parsed = try self.parseTrails($0) }
-            if let parsed = parsed {
-                trailDocument = parsed
-                model.showTrails(document: parsed, status: "\(parsed.name) · cached")
-            }
-        } catch { model.setTrailStatus(status: "No saved trails") }
-    }
+    private func parseTrails(_ data: Data) throws -> IosTrailDocument { try Self.parseTrailData(data) }
 
-    private func refreshTrails() {
+    private func refreshTrails(loadCache: Bool = false) {
         guard trailTask == nil, let repository = trailRepository else { return }
-        model.setTrailStatus(status: "Refreshing trails…")
         trailTask = Task { [weak self] in
             guard let self = self else { return }
             defer { self.trailTask = nil }
-            do {
-                var parsed: IosTrailDocument?
-                _ = try await repository.refresh { parsed = try self.parseTrails($0) }
-                if let parsed = parsed {
+            if loadCache {
+                do {
+                    let parsed = try await Task.detached(priority: .utility) {
+                        var document: IosTrailDocument?
+                        _ = try repository.cached { document = try Self.parseTrailData($0) }
+                        guard let document = document else { throw RecordingStoreError.corruptSession }
+                        return document
+                    }.value
                     self.trailDocument = parsed
-                    self.model.showTrails(document: parsed, status: parsed.name)
-                }
+                    self.model.showTrails(document: parsed, status: "\(parsed.name) · cached")
+                } catch { self.model.setTrailStatus(status: "No saved trails") }
+            }
+            self.model.setTrailStatus(status: "Refreshing trails…")
+            do {
+                let parsed = try await Task.detached(priority: .utility) {
+                    var document: IosTrailDocument?
+                    _ = try await repository.refresh { document = try Self.parseTrailData($0) }
+                    guard let document = document else { throw RecordingStoreError.corruptSession }
+                    return document
+                }.value
+                self.trailDocument = parsed
+                self.model.showTrails(document: parsed, status: parsed.name)
             } catch {
                 self.model.setTrailStatus(status: self.trailDocument == nil ? "Trails unavailable — retry Refresh trails" : "Refresh failed — saved trails retained")
             }
@@ -169,8 +177,7 @@ import UIKit
             }
         } catch { show(error) }
         location.startForegroundUpdates()
-        cachedTrails()
-        refreshTrails()
+        refreshTrails(loadCache: true)
     }
 
     func refresh() {

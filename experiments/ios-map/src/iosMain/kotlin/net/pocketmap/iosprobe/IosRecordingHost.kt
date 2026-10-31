@@ -61,6 +61,8 @@ class IosRecordingHost(private val actions: IosPlatformActions,
     private var trails by mutableStateOf<IosTrailDocument?>(null)
     private var trailStatus by mutableStateOf("Trails not loaded")
     private var trailsVisible by mutableStateOf(true)
+    private var trailCheck by mutableStateOf(false)
+    fun verifyTrails() { trailCheck = true }
     private var zoomRequest by mutableStateOf(0)
     private val icons = mutableMapOf<String, ImageBitmap>()
 
@@ -136,21 +138,33 @@ class IosRecordingHost(private val actions: IosPlatformActions,
                 map.setCameraPosition(camera.copy(zoom = camera.zoom.coerceIn(2.0, 18.0)))
             }
         }
-        LaunchedEffect(mapSize, map, trails, trailsVisible) {
-            if (mapSize == IntSize.Zero || trails == null) return@LaunchedEffect
-            repeat(120) {
-                if (map.viewport != null) {
-                    val bounds = with(density) { DpRect(0.dp, 0.dp, mapSize.width.toDp(), mapSize.height.toDp()) }
-                    val features = map.queryRenderedFeatures(bounds, setOf("trail-lines") +
-                        trailArtwork.map { "trail-points-${it.key}" })
-                    val names = features.mapNotNull { it.properties?.get("name")?.toString() }.toSet()
-                    if (trailsVisible && names.containsAll(listOf("Cached trail fixture", "Icon 1763", "Icon 1899", "Icon 1205", "Icon 503").map { "\"$it\"" })) {
-                        actions.perform("trailRenderPass:${features.size}")
-                        return@LaunchedEffect
-                    }
-                }
-                delay(500)
+        LaunchedEffect(mapSize, map, trails, trailCheck) {
+            if (mapSize == IntSize.Zero || trails == null || !trailCheck) return@LaunchedEffect
+            suspend fun names(): Set<String> {
+                if (map.viewport == null) return emptySet()
+                val bounds = with(density) { DpRect(0.dp, 0.dp, mapSize.width.toDp(), mapSize.height.toDp()) }
+                return map.queryRenderedFeatures(bounds, setOf("trail-lines") +
+                    trailArtwork.map { "trail-points-${it.key}" })
+                    .mapNotNull { it.properties?.get("name")?.toString() }.toSet()
             }
+            val expected = listOf("Cached trail fixture", "Icon 1763", "Icon 1899", "Icon 1205", "Icon 503").map { "\"$it\"" }
+            suspend fun awaitVisible(): Boolean {
+                repeat(120) {
+                    if (names().containsAll(expected)) return true
+                    delay(500)
+                }
+                return false
+            }
+            check(awaitVisible()) { "Imported trail and icons did not render" }
+            actions.perform("TOGGLE_TRAILS")
+            delay(1000)
+            check(names().isEmpty()) { "Hide trails left imported features visible" }
+            delay(500)
+            check(names().isEmpty()) { "Hide trails did not remain hidden" }
+            actions.perform("TOGGLE_TRAILS")
+            actions.perform("ZOOM_TO_TRAILS")
+            check(awaitVisible()) { "Show/zoom trails did not restore imported features" }
+            actions.perform("trailRenderPass:${expected.size}:hide-show-zoom")
         }
         LaunchedEffect(mapSize, map, track) {
             if (mapSize.width == 0 || mapSize.height == 0 || (resources == null && track == EMPTY)) return@LaunchedEffect

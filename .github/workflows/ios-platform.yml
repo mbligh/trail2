@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
-      - name: Test recording recovery and Android file compatibility
+      - name: Test native recording maps and trail cache adapters
         run: swift test --package-path ios/TrailPlatform
       - name: Typecheck native iOS location APIs
         run: |

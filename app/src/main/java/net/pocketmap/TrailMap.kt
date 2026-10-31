@@ -137,17 +137,8 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         }
         return result
     }
-    private fun trailData(): String {
-        val features = if (!trailsVisible) emptyList() else trails?.features?.map { f ->
-            val coordinates = JSONArray(f.points.map { listOf(it.longitude, it.latitude) })
-            val geometry = when (f.kind) { "Point" -> coordinates.getJSONArray(0); "Polygon" -> JSONArray().put(closed(coordinates)).apply { f.holes.forEach { put(closed(JSONArray(it.map { p -> listOf(p.longitude, p.latitude) }))) } }; else -> coordinates }
-            val p = JSONObject().put("name", f.name).put("lineColor", color(f.style.lineColor)).put("lineOpacity", if (f.kind == "Polygon" && !f.style.outline) 0 else Color.alpha(f.style.lineColor) / 255.0)
-                .put("fillColor", color(f.style.fillColor)).put("fillOpacity", if (f.style.fill) Color.alpha(f.style.fillColor) / 255.0 else 0.0).put("width", f.style.width.toInt().coerceAtLeast(2))
-                .put("icon", iconKey(f)).put("scale", f.style.iconScale).put("anchor", if (f.style.iconId == "1763") "center" else "bottom")
-            feature(f.kind, geometry, p)
-        } ?: emptyList()
-        return collection(features).toString()
-    }
+    private fun trailData(): String = if (!trailsVisible || trails == null) collection(emptyList()).toString()
+        else net.pocketmap.shared.trails.SharedTrailGeoJson.encode(TrailKml.shared(trails!!))
     private fun recordingData(): String {
         val segments = mutableListOf<MutableList<RecordedTrack.Point>>()
         track.forEachIndexed { index, point ->
@@ -156,11 +147,6 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         }
         return collection(segments.filter { it.size >= 2 }.map { points -> feature("LineString", JSONArray(points.map { listOf(it.longitude, it.latitude) }), JSONObject().put("name", "Recorded trail")) }).toString()
     }
-    private fun closed(ring: JSONArray): JSONArray {
-        if (ring.length() > 0 && ring.getJSONArray(0).toString() != ring.getJSONArray(ring.length()-1).toString()) ring.put(ring.getJSONArray(0))
-        return ring
-    }
-    private fun color(value: Int) = String.format(java.util.Locale.US, "#%06x", value and 0xffffff)
     private fun feature(kind: String, coordinates: JSONArray, properties: JSONObject) = JSONObject().put("type", "Feature").put("properties", properties).put("geometry", JSONObject().put("type", kind).put("coordinates", coordinates))
     private fun collection(features: List<JSONObject>) = JSONObject().put("type", "FeatureCollection").put("features", JSONArray(features))
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

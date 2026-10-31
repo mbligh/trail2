@@ -22,5 +22,14 @@ object TrailKml {
                 Style(s.lineColor, s.width, s.iconId, s.iconColor, s.iconScale, s.fillColor, s.fill, s.outline))
         })
     }
+    internal fun shared(document: Document): net.pocketmap.shared.trails.SharedTrailKml.Document {
+        fun point(p: Coordinate) = net.pocketmap.shared.trails.SharedTrailKml.Coordinate(p.latitude, p.longitude)
+        return net.pocketmap.shared.trails.SharedTrailKml.Document(document.name, document.features.map { f ->
+            val s = f.style
+            net.pocketmap.shared.trails.SharedTrailKml.Feature(f.name, f.kind, f.points.map(::point),
+                f.holes.map { it.map(::point) }, net.pocketmap.shared.trails.SharedTrailKml.Style(
+                    s.lineColor, s.width, s.iconId, s.iconColor, s.iconScale, s.fillColor, s.fill, s.outline))
+        })
+    }
     internal fun color(text: String?, fallback: Int) = net.pocketmap.shared.trails.SharedTrailKml.color(text, fallback)
 }

@@ -860,3 +860,20 @@ and stable red trail pixels rather than accepting a blank startup frame.
 
 Validation is pending CI. Full iOS feature parity, distribution/signing and
 physical-device validation remain later work.
+
+
+## Shared trail map data (2026-10-31, validating)
+
+After connecting native iOS refresh/cache I/O, both hosts now use
+`SharedTrailGeoJson` for parsed KML geometry and MapLibre style properties.
+The Android compatibility adapter retains its existing API. The frozen previous
+Android map-data converter is a test oracle for all geometry, ring closure,
+transparency, icon anchor/scale and escaped label properties; the existing
+production renderer instrumentation exercises the new converter. Shared native
+tests additionally verify polygon/hole closure and disabled fill/outline.
+
+Android version 2.0.10 carries this next migration step and must pass automated
+release/emulator checks before a phone check of familiar trails, styles/taps,
+Hide/Show, Zoom to trails and Refresh trails. iOS fixture checks also call the
+same native Hide/Show and Zoom handlers, requiring actual rendered features to
+disappear and return before they emit success. No location or recording changes.
