@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.9 works on the phone. Android 2.0.10 is validated and published, awaiting the shared-map-data phone check. iOS native trail refresh/cache and map rendering pass simulator tests; the complete iOS application remains unfinished.
+Updated 2026-10-31: Android 2.0.11 fixes the reported frozen zoom header and is published, awaiting the phone recheck. The shared trail conversion and iOS trail refresh/cache checks remain validated; the complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -932,7 +932,7 @@ while the probe links with a 15.5 target. Simulator success does not establish
 support for that older minimum OS. These warnings predate this stage.
 
 
-## Zoom header regression fix (2026-10-31, validating)
+## Zoom header regression fix (2026-10-31)
 
 The user reports the header zoom number sticks at 15.0. The Android controller
 only notified the Activity on CameraMoved and style-load events, although the
@@ -944,4 +944,22 @@ retains the established MapLibre-to-display +1 zoom convention.
 Extend the existing production camera emulator test to assert the actual visible
 header text after programmatic zoom, Activity recreation, pinch-style scaleBy
 zoom in and zoom out. The map-state checks alone previously missed this stale
-header. Android 2.0.11 carries the fix; automated validation is pending.
+header. Android 2.0.11 carries the fix; automated validation passed (links below).
+
+
+Implementation `9847142681e3d652c3d435ad393da18545bbbcbb` is committed on main.
+The visible header now follows actual camera state rather than depending on the
+CameraMoved callback. That event-only notification path dates back to Android
+2.0.7; it was not added by the 2.0.10 map-data conversion.
+
+- APK unit/shared tests, lint, alignment, offline coverage and publishing passed:
+  https://github.com/mbligh/trail2/actions/runs/41221890632
+- Signed release checks and Play internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41221890607
+- All sixteen production emulator invocations passed, including the visible
+  14.5 → 15.5 → 14.5 header assertions and Activity recreation:
+  https://github.com/mbligh/trail2/actions/runs/41221890654
+
+**Phone recheck:** update through Play to **2.0.11** and pinch zoom in/out; the
+number in the header must follow the zoom. Leave the migration paused until the
+user confirms the reported regression is resolved. iOS source is unchanged.
