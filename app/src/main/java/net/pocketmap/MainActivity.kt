@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity(), LocationListener {
     private val recordingExecutor = Executors.newSingleThreadExecutor()
     private var recordingRequest: Boolean? = null
     private var pendingRecordingSummary: File? = null
+    private var recordingSummaryGeneration = 0
     private var recordingReceiverRegistered = false
     private val recordingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -453,6 +454,7 @@ class MainActivity : ComponentActivity(), LocationListener {
         if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)); return
         }
+        recordingSummaryGeneration++ // A new recording supersedes an unfinished old summary.
         recordingRequest = true
         recordingStatusText.value = "Starting recording…"
         try { startForegroundService(Intent(this, RecordingService::class.java)) }
@@ -464,6 +466,7 @@ class MainActivity : ComponentActivity(), LocationListener {
     }
 
     private fun showRecordingSummary(file: File) {
+        val generation = ++recordingSummaryGeneration
         val imperial = resources.configuration.locales[0].country.equals("US", ignoreCase = true)
         recordingExecutor.execute {
             val message = try {
@@ -472,7 +475,7 @@ class MainActivity : ComponentActivity(), LocationListener {
                 else "Your track is saved on this phone.\n\n" + RecordedTrack.displaySummary(RecordedTrack.summarize(points), imperial)
             } catch (_: Exception) { "Your track is saved on this phone. Could not read trip statistics." }
             runOnUiThread {
-                if (!destroyed && active && !RecordingService.running) {
+                if (!destroyed && active && !RecordingService.running && generation == recordingSummaryGeneration) {
                     android.app.AlertDialog.Builder(this).setTitle("Recording saved")
                         .setMessage(message)
                         .setPositiveButton("Share KML") { _, _ -> shareRecording(file, false) }
