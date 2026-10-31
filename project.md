@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30 through shared artwork migration; Android version 2.0.8 is in validation. iOS Metal rendering passed; native iOS recording/map integration is in validation.
+Updated 2026-10-30: Android 2.0.8 is validated and published, awaiting the physical-phone artwork check. Shared iOS rendering, native recording/export and bundled-map integration are simulator-validated; the complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -724,3 +724,44 @@ that the read-phase pixel assertion accepted a launch-transition frame. The chec
 now requires queried features from the actual recording layer, enough blue pixels
 for the saved track, and two consecutive ready screenshots before accepting the
 visual evidence. This tightened iOS gate is being rerun before final handoff.
+
+
+## Validated checkpoint and next physical-phone gate (2026-10-30)
+
+All implementation changes through `c12dc71cc5df54016686e1083a225b83e31d80c5` are
+committed directly on main. The working Android release is **2.0.8**.
+
+- Android APK build, unit tests, lint, alignment and publication passed:
+  https://github.com/mbligh/trail2/actions/runs/41140135752
+- Signed release tests/lint/alignment and Play internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41140135753
+- Fourteen production emulator tests plus focused portrait-gesture/cutout and
+  landscape checks passed (sixteen total). This includes the native-reference
+  artwork comparison, shared menus, map/cache/GPS behavior and one-second pin hold:
+  https://github.com/mbligh/trail2/actions/runs/41140135741
+- Ten Swift native adapter tests and the actual iOS SDK typecheck passed:
+  https://github.com/mbligh/trail2/actions/runs/41140402664
+- Final iOS device/simulator builds, five shared iOS calculation tests, synthetic
+  Metal rendering, native recording write/read across process relaunch, shared
+  statistics, GPX/KML XML generation, and first/cold bundled-map rendering passed:
+  https://github.com/mbligh/trail2/actions/runs/41147928795
+
+The strengthened recording check queried the actual recording layer in both
+processes, required two consecutive ready screenshots, and measured 13,051 blue
+pixels in both write and read phases. The new read screenshot was visually
+reviewed and shows the saved line, pin and position overlay; it is no longer a
+launch-transition frame. The cold offline map query found 68 rendered basemap
+features. Offline-map and original control-artwork screenshots were also reviewed.
+
+**Next gate:** update the physical Android phone through Play to 2.0.8. Check the
+original top-left map icon and the pin/report/recenter icons; drag so recenter turns
+gray, then press it to restore blue/following. Check the menus and, while recording,
+hold the blue pin for one second so its note prompt opens before releasing.
+Pause further Android migration until the user confirms that check.
+
+The iOS work is an isolated integration host, not a finished distributed app.
+Later work includes trail KML refresh/import, additional basemaps/layers and
+PMTiles/runtime cache adapters, native photo/report parity and production host
+packaging. Apple signing/TestFlight remain unconfigured. Simulator fixtures do
+not establish real iOS GNSS or locked-screen reception; no physical iOS test is
+requested from the user.
