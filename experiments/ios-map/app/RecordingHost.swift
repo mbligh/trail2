@@ -114,6 +114,11 @@ import UIKit
     }
 
     func perform(action: String) {
+        if action.hasPrefix("platformRenderPass:") {
+            print("IOS_PLATFORM_RENDER_PASS:" + action.dropFirst("platformRenderPass:".count))
+            fflush(stdout)
+            return
+        }
         if action.hasPrefix("offlineRenderPass:") {
             print("IOS_OFFLINE_RENDER_PASS:" + action.dropFirst("offlineRenderPass:".count))
             fflush(stdout)

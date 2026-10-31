@@ -86,14 +86,18 @@ class IosRecordingHost(private val actions: IosPlatformActions,
         LaunchedEffect(position, following) {
             if (following) position?.let { map.setCameraPosition(map.cameraPosition.copy(center = it)) }
         }
-        LaunchedEffect(mapSize, map) {
-            if (resources == null || mapSize.width == 0 || mapSize.height == 0) return@LaunchedEffect
+        LaunchedEffect(mapSize, map, track) {
+            if (mapSize.width == 0 || mapSize.height == 0 || (resources == null && track == EMPTY)) return@LaunchedEffect
             repeat(120) {
                 if (map.viewport != null) {
                     val bounds = with(density) { DpRect(0.dp, 0.dp, mapSize.width.toDp(), mapSize.height.toDp()) }
-                    val features = map.queryRenderedFeatures(bounds, null)
-                    if (features.any { it.properties?.containsKey("class") == true }) {
-                        actions.perform("offlineRenderPass:${features.size}")
+                    val features = map.queryRenderedFeatures(bounds,
+                        if (resources == null) setOf("trail-recording") else null)
+                    val ready = if (resources == null) features.isNotEmpty()
+                        else features.any { it.properties?.containsKey("class") == true }
+                    if (ready) {
+                        actions.perform(if (resources == null) "platformRenderPass:${features.size}"
+                            else "offlineRenderPass:${features.size}")
                         return@LaunchedEffect
                     }
                 }

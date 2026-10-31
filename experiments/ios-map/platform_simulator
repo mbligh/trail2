@@ -29,6 +29,7 @@ for phase in ('write', 'read'):
              'net.pocketmap.iosprobe', '--platform-self-test', phase], stdout=log, stderr=subprocess.STDOUT)
         try:
             deadline = time.monotonic() + 90
+            settled_frames = 0
             while time.monotonic() < deadline:
                 if app.poll() is not None:
                     raise RuntimeError(f'iOS platform host exited during {phase}; see {output}')
@@ -39,7 +40,11 @@ for phase in ('write', 'read'):
                 blue = sum(b > r + 50 and b > g + 35 for r, g, b in pixels)
                 white = sum(r > 245 and g > 245 and b > 245 for r, g, b in pixels)
                 console = output.read_text(errors='replace')
-                if f'PLATFORM_SELF_TEST_PASS:{phase}' in console and blue >= 150 and white > len(pixels) // 2:
+                ready = (f'PLATFORM_SELF_TEST_PASS:{phase}' in console
+                         and 'IOS_PLATFORM_RENDER_PASS:' in console
+                         and blue >= 5000 and white > len(pixels) // 2)
+                settled_frames = settled_frames + 1 if ready else 0
+                if settled_frames >= 2:
                     print(f'Native storage + shared UI passed {phase}: blue={blue}, white={white}', flush=True)
                     break
                 time.sleep(3)

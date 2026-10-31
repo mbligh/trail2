@@ -706,3 +706,21 @@ clears its in-memory acquisition state even if it cannot finalize metadata,
 retaining files and their recovery pointer. Tests inject an interrupted stop and
 a metadata-write failure as well as a parseable partial timestamp. Validation is
 pending the next native package run.
+
+
+### Final automated checkpoint and screenshot review
+
+Android 2.0.8 APK publishing (`41140135752`), signed Play internal upload
+(`41140135753`) and all sixteen emulator invocations (`41140135741`: fourteen
+full-suite tests plus gesture/cutout and landscape checks) passed. The original
+control-artwork reference comparison passed and its screenshot was reviewed.
+
+The iOS run `41140639691` built both native apps, passed shared iOS tests and
+rendered real bundled vector features (68 features on first and cold launches).
+The offline-map screenshot was visually reviewed, including road labels and the
+shared original control icons. File recovery, shared statistics and XML generation
+also passed in both platform self-test processes. However, screenshot review found
+that the read-phase pixel assertion accepted a launch-transition frame. The check
+now requires queried features from the actual recording layer, enough blue pixels
+for the saved track, and two consecutive ready screenshots before accepting the
+visual evidence. This tightened iOS gate is being rerun before final handoff.
