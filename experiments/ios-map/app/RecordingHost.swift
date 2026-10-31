@@ -58,24 +58,25 @@ import UIKit
             var clock = 0.0
             let recorder = RecordingCoordinator(store: store, clock: { clock })
             try recorder.start(at: Date(timeIntervalSince1970: 1000))
-            for (index, coordinates) in [(40.689, -74.777), (40.692, -74.771), (40.695, -74.765)].enumerated() {
-                clock = Double(index * 30)
+            let seconds = [0, 30, 150, 180]
+            for (index, coordinates) in [(40.689, -74.777), (40.691, -74.774), (40.693, -74.768), (40.695, -74.765)].enumerated() {
+                clock = Double(seconds[index])
                 let fix = RecordedFix(latitude: coordinates.0, longitude: coordinates.1,
-                                      time: Int64(1_000_000 + index * 30_000), altitude: 80, accuracy: 3)
+                                      time: Int64(1_000_000 + seconds[index] * 1000), altitude: 80, accuracy: 3)
                 try recorder.receive(fix, at: Date(timeIntervalSince1970: 1000 + clock))
             }
-            try recorder.addPin(text: "Gate, broken\n🐴 <&>", at: Date(timeIntervalSince1970: 1060))
-            displayed = try recorder.stop(at: Date(timeIntervalSince1970: 1061))
+            try recorder.addPin(text: "Gate, broken\n🐴 <&>", at: Date(timeIntervalSince1970: 1180))
+            displayed = try recorder.stop(at: Date(timeIntervalSince1970: 1181))
         } else {
             displayed = try store.sessions().first
         }
-        guard let session = displayed, try store.points(in: session).count == 3,
+        guard let session = displayed, try store.points(in: session).count == 4,
               try store.pins(in: session).first?.text == "Gate, broken\n🐴 <&>",
               try store.activeSession() == nil else {
             throw RecordingStoreError.corruptSession
         }
         let stats = try summary(session)
-        guard stats.distanceMeters > 100, stats.elapsedSeconds == 60 else {
+        guard stats.distanceMeters > 100, stats.elapsedSeconds == 180 else {
             throw RecordingStoreError.corruptSession
         }
         for contents in [RecordingExports.gpx(name: "Fixture", points: try store.points(in: session), pins: try store.pins(in: session), summary: stats),
@@ -83,6 +84,7 @@ import UIKit
             guard XMLParser(data: Data(contents.utf8)).parse() else { throw RecordingStoreError.corruptSession }
         }
         testFix = RecordedFix(latitude: 40.692, longitude: -74.771, time: 1_030_000)
+        model.verifyRecording()
         refresh()
         print("PLATFORM_SELF_TEST_PASS:\(phase)")
         fflush(stdout)
@@ -187,19 +189,12 @@ import UIKit
             let points = try displayed.map { try store.points(in: $0) } ?? []
             let pins = try displayed.map { try store.pins(in: $0) } ?? []
             let fix = testFix ?? location.latestFix
-            let lines = points.count >= 2 ? [["type": "Feature", "properties": [:],
-                    "geometry": ["type": "LineString", "coordinates": points.map { [$0.longitude, $0.latitude] }]]] as [[String: Any]] : []
-            let markers: [[String: Any]] = pins.map { pin in
-                ["type": "Feature", "properties": ["name": pin.text.isEmpty ? "Pin" : pin.text],
-                 "geometry": ["type": "Point", "coordinates": [pin.fix.longitude, pin.fix.latitude]]]
-            }
-            func collection(_ features: [[String: Any]]) throws -> String {
-                let data = try JSONSerialization.data(withJSONObject: ["type": "FeatureCollection", "features": features])
-                return String(decoding: data, as: UTF8.self)
-            }
+            let geometry = IosTrackBridge().recording(
+                points: points.map { IosRecordedPoint(latitude: $0.latitude, longitude: $0.longitude, time: $0.time) },
+                pins: pins.map { IosRecordedPin(latitude: $0.fix.latitude, longitude: $0.fix.longitude, text: $0.text) })
             model.update(status: location.message, recording: location.recorder.recording != nil,
                          hasFix: fix != nil, latitude: fix?.latitude ?? 0, longitude: fix?.longitude ?? 0,
-                         heading: location.heading ?? -1, track: try collection(lines), pins: try collection(markers))
+                         heading: location.heading ?? -1, track: geometry.track, pins: geometry.pins)
         } catch { show(error) }
     }
 

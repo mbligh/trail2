@@ -2,34 +2,10 @@ package net.pocketmap
 
 import net.pocketmap.shared.trails.SharedTrailGeoJson
 import org.json.JSONObject
-import org.json.JSONArray
 import org.junit.Assert.*
 import org.junit.Test
 
 class TrailGeoJsonParityTest {
-    private fun assertJsonEquals(expected: Any?, actual: Any?, path: String = "root") {
-        when (expected) {
-            is JSONObject -> {
-                assertTrue("$path must be an object", actual is JSONObject)
-                actual as JSONObject
-                val keys = expected.keys().asSequence().toSet()
-                assertEquals(path, keys, actual.keys().asSequence().toSet())
-                for (key in keys) assertJsonEquals(expected.get(key), actual.get(key), "$path.$key")
-            }
-            is JSONArray -> {
-                assertTrue("$path must be an array", actual is JSONArray)
-                actual as JSONArray
-                assertEquals(path, expected.length(), actual.length())
-                for (index in 0 until expected.length()) assertJsonEquals(expected.get(index), actual.get(index), "$path[$index]")
-            }
-            is Number -> {
-                assertTrue("$path must be numeric", actual is Number)
-                assertEquals(path, expected.toDouble(), (actual as Number).toDouble(), 0.0)
-            }
-            else -> assertEquals(path, expected, actual)
-        }
-    }
-
     @Test fun sharedConverterMatchesPreviousProductionGeometryAndStyleProperties() {
         val outer = listOf(TrailKml.Coordinate(40.0, -75.0), TrailKml.Coordinate(40.0, -74.0), TrailKml.Coordinate(41.0, -74.0))
         val hole = listOf(TrailKml.Coordinate(40.1, -74.9), TrailKml.Coordinate(40.1, -74.8), TrailKml.Coordinate(40.2, -74.8))

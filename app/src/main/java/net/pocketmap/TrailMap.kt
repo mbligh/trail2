@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import net.pocketmap.shared.recording.RecordingMapData
 import net.pocketmap.shared.map.MapArtwork
 import net.pocketmap.shared.map.TrailMapContent
 import net.pocketmap.shared.map.PositionOverlay
@@ -112,8 +113,8 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     }
     private fun updateData() {
         trailJson = trailData()
-        trackJson = recordingData()
-        pinJson = collection(pins.map { pin -> feature("Point", JSONArray().put(pin.longitude).put(pin.latitude), JSONObject().put("name", if (pin.text.isBlank()) "Pin" else "Pin\n${pin.text}")) }).toString()
+        trackJson = RecordingMapData.track(track)
+        pinJson = RecordingMapData.pins(pins.map { RecordingMapData.Pin(it.latitude, it.longitude, it.text) })
     }
     private fun iconKey(feature: TrailKml.Feature) = "trail-icon-${feature.style.iconId}-${feature.style.iconColor}"
     private fun trailImages(): List<MapArtwork> {
@@ -140,15 +141,6 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     }
     private fun trailData(): String = if (!trailsVisible || trails == null) collection(emptyList()).toString()
         else net.pocketmap.shared.trails.SharedTrailGeoJson.encode(TrailKml.shared(trails!!))
-    private fun recordingData(): String {
-        val segments = mutableListOf<MutableList<RecordedTrack.Point>>()
-        track.forEachIndexed { index, point ->
-            if (index == 0 || point.time - track[index-1].time > 90_000) segments.add(mutableListOf())
-            segments.last().add(point)
-        }
-        return collection(segments.filter { it.size >= 2 }.map { points -> feature("LineString", JSONArray(points.map { listOf(it.longitude, it.latitude) }), JSONObject().put("name", "Recorded trail")) }).toString()
-    }
-    private fun feature(kind: String, coordinates: JSONArray, properties: JSONObject) = JSONObject().put("type", "Feature").put("properties", properties).put("geometry", JSONObject().put("type", kind).put("coordinates", coordinates))
     private fun collection(features: List<JSONObject>) = JSONObject().put("type", "FeatureCollection").put("features", JSONArray(features))
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 

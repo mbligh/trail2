@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.IntSize
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -61,6 +62,8 @@ class IosRecordingHost(private val actions: IosPlatformActions,
     private var trails by mutableStateOf<IosTrailDocument?>(null)
     private var trailStatus by mutableStateOf("Trails not loaded")
     private var trailsVisible by mutableStateOf(true)
+    private var recordingCheck by mutableStateOf(false)
+    fun verifyRecording() { recordingCheck = true }
     private var trailCheck by mutableStateOf(false)
     fun verifyTrails() { trailCheck = true }
     private var zoomRequest by mutableStateOf(0)
@@ -166,17 +169,26 @@ class IosRecordingHost(private val actions: IosPlatformActions,
             check(awaitVisible()) { "Show/zoom trails did not restore imported features" }
             actions.perform("trailRenderPass:${expected.size}:hide-show-zoom")
         }
-        LaunchedEffect(mapSize, map, track) {
-            if (mapSize.width == 0 || mapSize.height == 0 || (resources == null && track == EMPTY)) return@LaunchedEffect
+        LaunchedEffect(mapSize, map, track, recordingCheck) {
+            if (mapSize.width == 0 || mapSize.height == 0 || (resources == null && (track == EMPTY || !recordingCheck))) return@LaunchedEffect
             repeat(120) {
                 if (map.viewport != null) {
                     val bounds = with(density) { DpRect(0.dp, 0.dp, mapSize.width.toDp(), mapSize.height.toDp()) }
                     val features = map.queryRenderedFeatures(bounds,
-                        if (resources == null) setOf("trail-recording") else null)
-                    val ready = if (resources == null) features.isNotEmpty()
-                        else features.any { it.properties?.containsKey("class") == true }
+                        if (resources == null) setOf("trail-recording", "trail-recording-pins") else null)
+                    suspend fun recordingAt(longitude: Double, latitude: Double): Boolean {
+                        val screen = map.screenLocationFromPosition(Position(longitude, latitude)) ?: return false
+                        return map.queryRenderedFeatures(DpRect(screen.x - 2.dp, screen.y - 2.dp,
+                            screen.x + 2.dp, screen.y + 2.dp), setOf("trail-recording")).isNotEmpty()
+                    }
+                    val ready = if (resources == null) {
+                        val names = features.mapNotNull { it.properties?.get("name")?.jsonPrimitive?.content }
+                        "Recorded trail" in names && "Pin\nGate, broken\n🐴 <&>" in names &&
+                            recordingAt(-74.7755, 40.690) && recordingAt(-74.7665, 40.694) &&
+                            !recordingAt(-74.771, 40.692)
+                    } else features.any { it.properties?.containsKey("class") == true }
                     if (ready) {
-                        actions.perform(if (resources == null) "platformRenderPass:${features.size}"
+                        actions.perform(if (resources == null) "platformRenderPass:segmented-recording-and-pin"
                             else "offlineRenderPass:${features.size}")
                         return@LaunchedEffect
                     }

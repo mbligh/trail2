@@ -1,9 +1,14 @@
 package net.pocketmap.iosprobe
 
 import net.pocketmap.shared.TrackStatistics
+import net.pocketmap.shared.recording.RecordingMapData
 
 /** Swift file I/O adapts the existing CSV to the exact shared calculation code. */
 class IosTrackBridge {
+    fun recording(points: List<IosRecordedPoint>, pins: List<IosRecordedPin>): IosRecordingGeometry =
+        IosRecordingGeometry(RecordingMapData.track(points.map { RecordingMapData.Point(it.latitude, it.longitude, it.time) }),
+            RecordingMapData.pins(pins.map { RecordingMapData.Pin(it.latitude, it.longitude, it.text) }))
+
     fun summarize(csv: String): IosTrackSummary {
         val points = csv.lineSequence().mapNotNull { line ->
             val p = line.split(',')
@@ -26,3 +31,8 @@ class IosTrackBridge {
 
 data class IosTrackSummary(val distanceMeters: Double, val elapsedSeconds: Long,
     val movingSeconds: Long, val ascentMeters: Double, val descentMeters: Double)
+
+/** Swift adapts already-validated native file records; no second CSV reader. */
+data class IosRecordedPoint(val latitude: Double, val longitude: Double, val time: Long)
+data class IosRecordedPin(val latitude: Double, val longitude: Double, val text: String)
+data class IosRecordingGeometry(val track: String, val pins: String)

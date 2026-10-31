@@ -40,7 +40,7 @@ class MapMigrationTest {
         MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.setBoolean(activity, value)
     }
     private fun awaitRendered(scenario: ActivityScenario<MainActivity>, description: String,
-        layerIds: Set<String>? = null, predicate: (List<org.maplibre.spatialk.geojson.Feature<org.maplibre.spatialk.geojson.Geometry, kotlinx.serialization.json.JsonObject?>>) -> Boolean) {
+        layerIds: Set<String>? = null, at: org.maplibre.spatialk.geojson.Position? = null, predicate: (List<org.maplibre.spatialk.geojson.Feature<org.maplibre.spatialk.geojson.Geometry, kotlinx.serialization.json.JsonObject?>>) -> Boolean) {
         val end = SystemClock.elapsedRealtime() + 30_000
         while (SystemClock.elapsedRealtime() < end) {
             var map: TrailMap? = null
@@ -48,10 +48,14 @@ class MapMigrationTest {
             val features = kotlinx.coroutines.runBlocking {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     val state = map?.mapState
-                    if (state?.viewport == null) null else state.queryRenderedFeatures(
-                        androidx.compose.ui.unit.DpRect(0.dp, 0.dp,
-                            (map!!.width / context.resources.displayMetrics.density).dp,
-                            (map!!.height / context.resources.displayMetrics.density).dp), layerIds)
+                    if (state?.viewport == null) null else {
+                        val center = at?.let { state.screenLocationFromPosition(it) }
+                        if (at != null && center == null) null else state.queryRenderedFeatures(
+                            if (center == null) androidx.compose.ui.unit.DpRect(0.dp, 0.dp,
+                                (map!!.width / context.resources.displayMetrics.density).dp,
+                                (map!!.height / context.resources.displayMetrics.density).dp)
+                            else androidx.compose.ui.unit.DpRect(center.x - 2.dp, center.y - 2.dp, center.x + 2.dp, center.y + 2.dp), layerIds)
+                    }
                 }
             }
             if (features != null && predicate(features)) return
@@ -155,6 +159,34 @@ class MapMigrationTest {
             Thread.sleep(500)
             instrumentation.waitForIdleSync()
             android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("screencap -p /data/local/tmp/maplibre-offline.png")).use { it.readBytes() }
+        }
+    }
+
+    @Test fun recordingGeometryLeavesGpsOutageBlankAndRetainsPinNote() {
+        context.getSharedPreferences("map", Context.MODE_PRIVATE).edit()
+            .putFloat("lat", 40.692f).putFloat("lon", -74.771f).putFloat("zoom", 14.5f).commit()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            await(scenario, "recording viewport") { it.mapState?.viewport != null }
+            val points = listOf(
+                RecordedTrack.Point(40.689, -74.777, 1_000_000, null, 3f),
+                RecordedTrack.Point(40.691, -74.774, 1_030_000, null, 3f),
+                RecordedTrack.Point(40.693, -74.768, 1_150_000, null, 3f),
+                RecordedTrack.Point(40.695, -74.765, 1_180_000, null, 3f))
+            scenario.onActivity { activity ->
+                isolateGps(activity); following(activity, false)
+                renderer(activity).apply {
+                    offline(this)
+                    showRecording(points, listOf(RecordedPins.Pin(40.695, -74.765, 1_180_000, null, 3f, "Gate, broken\n🐴 <&>")))
+                }
+            }
+            val recording = setOf("trail-recording")
+            awaitRendered(scenario, "first recording segment", recording, org.maplibre.spatialk.geojson.Position(-74.7755, 40.690)) { it.isNotEmpty() }
+            awaitRendered(scenario, "second recording segment", recording, org.maplibre.spatialk.geojson.Position(-74.7665, 40.694)) { it.isNotEmpty() }
+            awaitRendered(scenario, "no connector across the 120-second GPS outage", recording,
+                org.maplibre.spatialk.geojson.Position(-74.771, 40.692)) { it.isEmpty() }
+            awaitRendered(scenario, "pin note from shared recording geometry", setOf("trail-recording-pins")) { features ->
+                features.any { it.properties?.get("name")?.toString() == kotlinx.serialization.json.JsonPrimitive("Pin\nGate, broken\n🐴 <&>").toString() }
+            }
         }
     }
 

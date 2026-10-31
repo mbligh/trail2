@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: Android 2.0.11 fixes the reported frozen zoom header and is published, awaiting the phone recheck. The shared trail conversion and iOS trail refresh/cache checks remain validated; the complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.11 fixes the zoom header. Shared recording map geometry is the next migration stage, validating in Android 2.0.12 and the iOS simulator. The complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -963,3 +963,27 @@ CameraMoved callback. That event-only notification path dates back to Android
 **Phone recheck:** update through Play to **2.0.11** and pinch zoom in/out; the
 number in the header must follow the zoom. Leave the migration paused until the
 user confirms the reported regression is resolved. iOS source is unchanged.
+
+
+## Shared recording geometry (2026-10-31, validating)
+
+The user confirmed the 2.0.11 zoom fix works. Move blue recording-line and saved
+pin GeoJSON generation into `RecordingMapData` so Android and iOS share gap
+handling and pin labels. Preserve the existing Android renderer output: split
+only when adjacent fixes are more than 90 seconds apart, omit single-fix runs,
+retain point order, and label notes as `Pin` plus the original note.
+
+The native adapters continue to read their existing files and supply validated
+records; GPS acquisition, accuracy filters, storage, exports, timeout and zoom
+observation are unchanged. The iOS host previously joined all points into one
+line; it now preserves the same recording gaps as Android and uses the same pin
+labels. Kotlin/Swift bridge models transfer already-validated native points rather
+than adding another CSV reader.
+
+Tests compare the old frozen Android converter with the shared output, exercise
+90-second boundaries, singleton runs, duplicate/backward timestamps and escaped
+notes, and query actual rendered segments with a blank 120-second gap. iOS
+recording/relaunch fixtures now persist four fixes in two segments and an
+annotated pin, requiring both visible lines, no line over the outage, and the
+exact note after relaunch. Android 2.0.12 is pending automated validation before
+the next phone recording check.
