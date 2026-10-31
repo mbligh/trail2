@@ -8,6 +8,10 @@ import UIKit
     let location: TrailLocationController
     private(set) var model: IosRecordingHost!
     private(set) var controller: UIViewController!
+    private var trailRepository: TrailRepository!
+    private let trailBridge = IosTrailBridge()
+    private var trailDocument: IosTrailDocument?
+    private var trailTask: Task<Void, Never>?
     private var displayed: RecordingSession?
 
     private var testFix: RecordedFix?
@@ -34,7 +38,13 @@ import UIKit
             catch { fatalError("Cannot prepare offline map style: \(error)") }
         }
         model = IosRecordingHost(actions: self, resources: offlineResources, styleJson: style)
+        for id in ["1763", "1899", "1205", "503"] {
+            if let url = Bundle.main.resourceURL?.appendingPathComponent("trail-icons/mymaps_\(id).png"),
+               let data = try? Data(contentsOf: url) { model.installIcon(id: id, png: kotlinBytes(data)) }
+        }
         controller = model.viewController()
+        do { trailRepository = try TrailRepository(directory: store.directory.appendingPathComponent("map-cache")) }
+        catch { show(error) }
         location.onChange = { [weak self] in self?.refresh() }
         refresh()
     }
@@ -79,6 +89,77 @@ import UIKit
         fflush(stdout)
     }
 
+    func trailSelfTest(phase: String, url: URL) async throws {
+        trailRepository = try TrailRepository(directory: store.directory.appendingPathComponent("trail-test-cache"), url: url)
+        let repository = trailRepository!
+        var parsed: IosTrailDocument?
+        if phase == "write" {
+            _ = try await repository.refresh { parsed = try self.parseTrails($0) }
+        } else {
+            let prior = try repository.cached { parsed = try self.parseTrails($0) }
+            do {
+                _ = try await repository.refresh { _ = try self.parseTrails($0) }
+                throw RecordingStoreError.corruptSession
+            } catch is TrailDownloadError {
+                guard phase == "offline" else { throw RecordingStoreError.corruptSession }
+            } catch {
+                // The invalid phase must fail in the common parser, and both
+                // phases must retain the byte-for-byte previous valid cache.
+                guard phase == "invalid", !(error is RecordingStoreError) else { throw error }
+            }
+            guard try repository.cached(validate: { _ = try self.parseTrails($0) }) == prior else {
+                throw RecordingStoreError.corruptSession
+            }
+        }
+        guard let document = parsed, document.featureCount == 5,
+              document.geoJson.contains("Cached trail fixture") else { throw RecordingStoreError.corruptSession }
+        trailDocument = document
+        model.showTrails(document: document, status: "Validated trails · \(phase)")
+        print("TRAIL_CACHE_TEST_PASS:\(phase)")
+        fflush(stdout)
+    }
+
+    private func kotlinBytes(_ data: Data) -> KotlinByteArray {
+        let bytes = KotlinByteArray(size: Int32(data.count))
+        for (index, byte) in data.enumerated() { bytes.set(index: Int32(index), value: Int8(bitPattern: byte)) }
+        return bytes
+    }
+
+    private func parseTrails(_ data: Data) throws -> IosTrailDocument {
+        try trailBridge.parse(bytes: kotlinBytes(data))
+    }
+
+    private func cachedTrails() {
+        guard let repository = trailRepository else { return }
+        do {
+            var parsed: IosTrailDocument?
+            _ = try repository.cached { parsed = try self.parseTrails($0) }
+            if let parsed = parsed {
+                trailDocument = parsed
+                model.showTrails(document: parsed, status: "\(parsed.name) · cached")
+            }
+        } catch { model.setTrailStatus(status: "No saved trails") }
+    }
+
+    private func refreshTrails() {
+        guard trailTask == nil, let repository = trailRepository else { return }
+        model.setTrailStatus(status: "Refreshing trails…")
+        trailTask = Task { [weak self] in
+            guard let self = self else { return }
+            defer { self.trailTask = nil }
+            do {
+                var parsed: IosTrailDocument?
+                _ = try await repository.refresh { parsed = try self.parseTrails($0) }
+                if let parsed = parsed {
+                    self.trailDocument = parsed
+                    self.model.showTrails(document: parsed, status: parsed.name)
+                }
+            } catch {
+                self.model.setTrailStatus(status: self.trailDocument == nil ? "Trails unavailable — retry Refresh trails" : "Refresh failed — saved trails retained")
+            }
+        }
+    }
+
     func start() {
         do {
             if let recovered = try store.activeSession() {
@@ -88,6 +169,8 @@ import UIKit
             }
         } catch { show(error) }
         location.startForegroundUpdates()
+        cachedTrails()
+        refreshTrails()
     }
 
     func refresh() {
@@ -119,6 +202,11 @@ import UIKit
             fflush(stdout)
             return
         }
+        if action.hasPrefix("trailRenderPass:") {
+            print("IOS_TRAIL_RENDER_PASS:" + action.dropFirst("trailRenderPass:".count))
+            fflush(stdout)
+            return
+        }
         if action.hasPrefix("offlineRenderPass:") {
             print("IOS_OFFLINE_RENDER_PASS:" + action.dropFirst("offlineRenderPass:".count))
             fflush(stdout)
@@ -126,6 +214,10 @@ import UIKit
         }
         do {
             switch action {
+            case "REFRESH_TRAILS": refreshTrails()
+            case "TOGGLE_TRAILS": model.toggleTrails()
+            case "ZOOM_TO_TRAILS": model.zoomToTrails()
+            case "LEGEND": alert("Trails", "Line colors and point icons follow the My Maps Trails layer.")
             case "record":
                 if location.recorder.recording != nil {
                     displayed = try location.stopRecording()
@@ -156,7 +248,7 @@ import UIKit
             case "recenter": location.startForegroundUpdates()
             default:
                 if action.hasPrefix("label:") { alert("Pin", String(action.dropFirst(6))) }
-                else { alert("Not connected yet", "Trail loading and map layers are later iOS adapter stages.") }
+                else { alert("Not connected yet", "Additional map layers are later iOS adapter stages.") }
             }
             refresh()
         } catch { show(error) }

@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.8 works on the phone. Android 2.0.9 is validated and published, awaiting the shared-KML-parser phone check. Shared KML tests pass on JVM and iOS; the complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.8 works on the phone. The user confirmed Android 2.0.9 passes the shared-KML-parser phone check. iOS trail refresh/cache integration is now in progress. Shared KML tests pass on JVM and iOS; the complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -838,3 +838,25 @@ and after Refresh trails, check familiar line colors/point icons and names on
 tap, then Hide/Show trails and Zoom to trails. Pause the next migration stage
 until the user confirms this check. The next implementation stage is wiring
 iOS startup trail refresh and validated caching to this shared importer.
+
+
+## iOS trail refresh and validated cache (2026-10-31)
+
+The user confirmed the Android 2.0.9 phone checks pass. The next stage connects
+the iOS integration host to the common KML parser, using the same My Maps URL
+and original bundled marker artwork as Android. Startup displays a validated
+local cache and then refreshes it; Refresh trails, Hide/Show and Zoom to trails
+are connected. Download failures retain the previous trails and show a retry
+status. There is no change to the shipping Android implementation in this stage.
+
+Native URLSession streaming rejects non-200 responses, caps both declared and
+received bytes at 5 MiB, and bounds request/resource time. Downloads are parsed
+by common Kotlin before atomic cache replacement. Cache reads are also validated.
+Swift tests cover invalid data, HTTP errors, declared and streamed oversize,
+cache corruption and reopening. The simulator integration uses a local fixture
+server, actual KML styles and four original point icons, and repeated app launches
+with HTTP failure and invalid XML. It requires actual named rendered features
+and stable red trail pixels rather than accepting a blank startup frame.
+
+Validation is pending CI. Full iOS feature parity, distribution/signing and
+physical-device validation remain later work.

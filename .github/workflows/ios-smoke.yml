@@ -96,6 +96,7 @@ jobs:
           python experiments/ios-map/smoke_simulator.py
           python experiments/ios-map/platform_simulator
           python experiments/ios-map/offline_simulator
+          python experiments/ios-map/trails_simulator
       - uses: actions/upload-artifact@v6
         if: always()
         with:
