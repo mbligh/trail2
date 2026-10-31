@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.13 GPX/KML sharing works with pins and annotated pins. iOS recording selection and shared summary presentation are validating; Android 2.0.14 is the next phone-check version. The complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.13 GPX/KML sharing works with pins and annotated pins. Android 2.0.14 shares summary presentation and is validated/published, awaiting the stop-summary phone check. The iOS saved-recording picker passes simulator checks; the full iOS app remains unfinished.
 
 ## Product and identity
 
@@ -1111,7 +1111,7 @@ phone check; CI validates the chooser Intent and generated URI contents. Pause
 the next migration stage until confirmed. No iOS device test is requested.
 
 
-## Recording selection and shared summary text (2026-10-31, validating)
+## Recording selection and shared summary text (2026-10-31)
 
 The user confirmed the 2.0.13 GPX/KML receiving-app check passes with both plain
 and annotated pins. iOS share actions now show a dated recording picker instead
@@ -1131,6 +1131,46 @@ shared description/display text against its existing native formatter during
 both recording-relaunch phases, alongside picker, export and Metal checks.
 
 Android 2.0.14 carries the summary presentation migration; automatic validation
-is pending. GPS acquisition, saved records, statistics calculations, GPX/KML
+passed and both existing Android publishing channels completed. GPS acquisition, saved records, statistics calculations, GPX/KML
 structure and map geometry are unchanged. The next physical check is the saved
 recording summary after stopping (distance, elapsed/moving time, ascent/descent).
+
+
+## Recording selection and summary validated checkpoint (2026-10-31)
+
+Implementation `af3500dfa1337b43a4d744a922689bd31ee9775e` is committed on main.
+The user cleared 2.0.13 export sharing with both plain and annotated pins. Android
+2.0.14 is published to Play internal testing and the existing APK download site.
+
+- APK/shared JVM/unit tests, frozen summary and export comparisons, lint, offline
+  coverage, native alignment and download-site publication passed:
+  https://github.com/mbligh/trail2/actions/runs/41247205721
+- Signed release checks and Play internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41247205686
+- All eighteen emulator invocations passed (sixteen production checks and the
+  two focused gesture/landscape inset checks), including recording gaps, annotated
+  pins, exported content URIs and the live zoom-header regression:
+  https://github.com/mbligh/trail2/actions/runs/41247205783
+- Both iOS frameworks/apps, shared native tests, Metal rendering, picker/summary/
+  export/recording relaunch checks, offline maps and trail-cache checks passed:
+  https://github.com/mbligh/trail2/actions/runs/41247205687
+
+The iOS host now offers dated saved-recording rows for GPX/KML sharing and passes
+the chosen session explicitly to the exporter. Its handler-level simulator test
+selects an older session while a newer fixture is active, rejects a duplicate
+selection and verifies the active pointer and original track remain intact.
+`PLATFORM_PICKER_TEST_PASS:write` and `:read` are required alongside the export
+and actual rendered gap/pin markers. This tests the production row-selection
+handler; it does not claim automated physical touch testing of the iOS share sheet.
+
+Summary labels, duration layout and metric/imperial conversions now use common
+Kotlin. Decimal formatting stays with the original platform formatter. Android
+compares 72 complete summary/description strings with the frozen old formatter,
+and existing byte-for-byte GPX/KML comparisons still pass. iOS compares shared
+summary/display text with its native reference before and after app relaunch.
+No recording-file, location acquisition, statistics calculation or map changes.
+
+**Next phone gate:** update through Play to **2.0.14**, stop a short recording
+and check the saved-recording summary: distance, elapsed/moving time and
+ascent/descent should display as before. Pause further migration until confirmed.
+No new iOS device test is requested from the user.
