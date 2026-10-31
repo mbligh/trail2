@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.11 fixes the zoom header. Shared recording map geometry is the next migration stage, validating in Android 2.0.12 and the iOS simulator. The complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.11 fixes the zoom header. Android 2.0.12 shares recording line/pin geometry with iOS and is published, awaiting the next phone recording check. The complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -965,7 +965,7 @@ number in the header must follow the zoom. Leave the migration paused until the
 user confirms the reported regression is resolved. iOS source is unchanged.
 
 
-## Shared recording geometry (2026-10-31, validating)
+## Shared recording geometry (2026-10-31)
 
 The user confirmed the 2.0.11 zoom fix works. Move blue recording-line and saved
 pin GeoJSON generation into `RecordingMapData` so Android and iOS share gap
@@ -985,5 +985,50 @@ Tests compare the old frozen Android converter with the shared output, exercise
 notes, and query actual rendered segments with a blank 120-second gap. iOS
 recording/relaunch fixtures now persist four fixes in two segments and an
 annotated pin, requiring both visible lines, no line over the outage, and the
-exact note after relaunch. Android 2.0.12 is pending automated validation before
-the next phone recording check.
+exact note after relaunch. Android 2.0.12 passed automated validation and is
+ready for the next phone recording check (checkpoint below).
+
+
+## Recording geometry validated checkpoint (2026-10-31)
+
+Implementation through `3d5a4e92533f5a237d72d4a320204d4e7631a07a` is committed
+on main. Android 2.0.12 is published through both existing channels. The iOS
+artifact builds production commit `e5c4d976f2072d54c268cdbd7e5813bb0328f56c`;
+the follow-up only fixes the Android test camera after isolating emulator GPS.
+
+- Shared JVM tests, Android frozen-converter comparison, existing unit tests, lint,
+  offline coverage, native alignment and APK publishing passed:
+  https://github.com/mbligh/trail2/actions/runs/41223569616
+- Signed release checks and Play internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41223569688
+- All seventeen emulator invocations passed (fifteen production tests plus gesture
+  and landscape/cutout checks). The new renderer test queries both blue recording
+  segments, an empty gap and the exact annotated pin; the visible zoom-header
+  regression test remains in the suite:
+  https://github.com/mbligh/trail2/actions/runs/41223569637
+- Both iOS frameworks/apps, twelve shared native tests, Metal rendering, recording
+  and pin persistence across relaunch, offline maps and trail-cache checks passed:
+  https://github.com/mbligh/trail2/actions/runs/41223470048
+
+Both hosts now use the same recording geometry generator. Android's previous
+behavior is preserved by comparison with the frozen old generator. iOS now
+breaks blue lines at GPS gaps rather than joining all saved fixes. Its recording
+fixture explicitly verifies rendered hits on both sides and no recording feature
+in the middle of a 120-second gap, plus the exact multiline/emoji pin note,
+both before and after a cold app relaunch. Native storage readers validate
+records before converting them to the Kotlin bridge models. No file-format, GPS
+acquisition/filter, timeout, export, zoom-observation or control changes.
+
+**Next phone gate:** update through Play to **2.0.12**, record a short track,
+add a pin with a note, stop recording, and check the blue path and the note when
+tapping the pin. Pause further migration until that Android check is confirmed.
+There is no need to reproduce an intentional GPS outage on the phone; CI covers
+the gap boundary and renderer behavior. No iOS device test is requested.
+
+
+The iOS post-relaunch screenshot was visually reviewed: both blue segments, the
+intentional outage gap, the current-position dot and the saved pin render within
+the safe-area controls. Write and read phases each recorded 9,958 blue pixels
+and `IOS_PLATFORM_RENDER_PASS:segmented-recording-and-pin`. The downloaded iOS
+JUnit reports confirm twelve shared tests with zero failures/errors. All final
+workflow jobs completed successfully.
