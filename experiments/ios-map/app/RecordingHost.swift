@@ -79,6 +79,12 @@ import UIKit
         guard stats.distanceMeters > 100, stats.elapsedSeconds == 180 else {
             throw RecordingStoreError.corruptSession
         }
+        let text = presentation(stats)
+        guard text.exportDescription == stats.description, text.displaySummary == stats.displaySummary else {
+            throw RecordingStoreError.corruptSession
+        }
+        try RecordingPickerController.verifySelection(store: store, existing: session)
+        print("PLATFORM_PICKER_TEST_PASS:\(phase)")
         let exported = try exportRecording(session, name: "Fixture & <woods>")
         try RecordingExportValidation.verify(gpx: exported.gpx, kml: exported.kml,
             points: try store.points(in: session), pins: try store.pins(in: session), summary: stats)
@@ -223,7 +229,7 @@ import UIKit
             case "record":
                 if location.recorder.recording != nil {
                     displayed = try location.stopRecording()
-                    if let session = displayed { alert("Recording saved", try summary(session).displaySummary) }
+                    if let session = displayed { alert("Recording saved", presentation(try summary(session)).displaySummary) }
                 } else { try location.startRecording() }
             case "pin": try location.addPin()
             case "pinText":
@@ -244,8 +250,8 @@ import UIKit
                 let share = UIActivityViewController(activityItems: [text], applicationActivities: nil)
                 share.popoverPresentationController?.sourceView = controller.view
                 controller.present(share, animated: true)
-            case "SHARE_GPX": try shareRecording(format: "gpx")
-            case "SHARE_KML": try shareRecording(format: "kml")
+            case "SHARE_GPX": try chooseRecording(format: "gpx")
+            case "SHARE_KML": try chooseRecording(format: "kml")
             case "credits": alert("Map", "MapLibre Compose / Metal. © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors · Natural Earth. Bundled Tewksbury street map; other iOS basemaps and layers are not connected yet.")
             case "recenter": location.startForegroundUpdates()
             default:
@@ -274,11 +280,29 @@ import UIKit
         return try IosTrackBridge().exportRecording(name: name,
             points: try store.points(in: session).map(exportFix),
             pins: try store.pins(in: session).map { IosExportPin(fix: exportFix($0.fix), text: $0.text) },
-            summaryText: stats.description)
+            summaryText: presentation(stats).exportDescription)
     }
 
-    private func shareRecording(format: String) throws {
-        guard let session = displayed else { alert("No recording", "Record a track first."); return }
+    private func presentation(_ s: TrackExportStatistics) -> IosSummaryPresentation {
+        IosTrackBridge().presentation(summary: IosTrackSummary(distanceMeters: s.distanceMeters,
+            elapsedSeconds: s.elapsedSeconds, movingSeconds: s.movingSeconds, ascentMeters: s.ascentMeters,
+            descentMeters: s.descentMeters), formatter: DecimalFormatter())
+    }
+
+    private func chooseRecording(format: String) throws {
+        let sessions = try store.sessions()
+        guard !sessions.isEmpty else { alert("No recording", "Record a track first."); return }
+        guard controller.presentedViewController == nil else { return }
+        let picker = RecordingPickerController(sessions: sessions, active: location.recorder.recording?.id,
+            format: format) { [weak self] session in
+                do { try self?.shareRecording(session: session, format: format) }
+                catch { self?.show(error) }
+            }
+        controller.present(UINavigationController(rootViewController: picker), animated: true)
+    }
+
+    private func shareRecording(session: RecordingSession, format: String) throws {
+        guard !(try store.points(in: session)).isEmpty else { alert("No GPS points", "This recording has no saved GPS points yet."); return }
         let exported = try exportRecording(session, name: "Trail recording")
         let contents = format == "gpx" ? exported.gpx : exported.kml
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Trail-exports/" + UUID().uuidString)
@@ -296,5 +320,11 @@ import UIKit
         let prompt = UIAlertController(title: title, message: message, preferredStyle: .alert)
         prompt.addAction(UIAlertAction(title: "OK", style: .default))
         controller.present(prompt, animated: true)
+    }
+}
+
+private final class DecimalFormatter: NSObject, IosDecimalFormatter {
+    func format(value: Double, digits: Int32) -> String {
+        String(format: "%.*f", locale: Locale(identifier: "en_US_POSIX"), digits, value)
     }
 }

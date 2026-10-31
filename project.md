@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.12 works on the phone. Android 2.0.13 shares GPX/KML writers with iOS and is validated and published, awaiting the phone export-sharing check. The complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.13 GPX/KML sharing works with pins and annotated pins. iOS recording selection and shared summary presentation are validating; Android 2.0.14 is the next phone-check version. The complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -1109,3 +1109,28 @@ with a pin note as both GPX and KML to a receiving app. Confirm the attachment
 opens and the pin note remains. External receiver behavior still needs this
 phone check; CI validates the chooser Intent and generated URI contents. Pause
 the next migration stage until confirmed. No iOS device test is requested.
+
+
+## Recording selection and shared summary text (2026-10-31, validating)
+
+The user confirmed the 2.0.13 GPX/KML receiving-app check passes with both plain
+and annotated pins. iOS share actions now show a dated recording picker instead
+of always sharing the displayed/latest session. Selection passes the chosen
+session explicitly to the existing shared exporter without changing the live
+recording or map. Cancellation and duplicate taps cannot open multiple shares.
+The simulator's handler-level check selects an older recording while a newer
+fixture is active, checks row labels and verifies the active pointer and saved
+track are unchanged. UIKit dismisses the picker before presenting the share sheet.
+
+`TrackSummaryText` shares duration formatting, labels, unit conversion and export
+description layout across Android and iOS. Each platform retains its existing
+US/POSIX decimal formatter to preserve rounding. Android comparisons use the
+frozen previous implementation in metric and imperial units across duration
+boundaries. Shared tests verify conversions and formatter precision. iOS checks
+shared description/display text against its existing native formatter during
+both recording-relaunch phases, alongside picker, export and Metal checks.
+
+Android 2.0.14 carries the summary presentation migration; automatic validation
+is pending. GPS acquisition, saved records, statistics calculations, GPX/KML
+structure and map geometry are unchanged. The next physical check is the saved
+recording summary after stopping (distance, elapsed/moving time, ascent/descent).

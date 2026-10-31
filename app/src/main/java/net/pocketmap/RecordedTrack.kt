@@ -25,30 +25,10 @@ object RecordedTrack {
             result.ascentMeters, result.descentMeters)
     }
 
-    private fun duration(seconds: Long): String {
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        val secs = seconds % 60
-        return if (hours > 0) "%dh %02dm %02ds".format(java.util.Locale.US, hours, minutes, secs)
-               else "%dm %02ds".format(java.util.Locale.US, minutes, secs)
-    }
-
-    /** Human-readable fallback for importers that ignore custom GPX/KML properties. */
-    fun description(summary: Summary): String = java.lang.String.format(java.util.Locale.US,
-        "Distance: %.2f km; Elapsed: %s; Moving: %s; Ascent: %.0f m; Descent: %.0f m",
-        summary.distanceMeters / 1000.0, duration(summary.elapsedSeconds),
-        duration(summary.movingSeconds), summary.ascentMeters, summary.descentMeters)
-
-    fun displaySummary(summary: Summary, imperial: Boolean): String {
-        val units = if (imperial) "mi" else "km"
-        val distance = summary.distanceMeters / (if (imperial) 1609.344 else 1000.0)
-        val height = if (imperial) 3.280839895 else 1.0
-        val heightUnit = if (imperial) "ft" else "m"
-        return java.lang.String.format(java.util.Locale.US,
-            "Distance: %.2f %s\nElapsed time: %s\nMoving time (estimated): %s\nAscent: %.0f %s\nDescent: %.0f %s",
-            distance, units, duration(summary.elapsedSeconds), duration(summary.movingSeconds),
-            summary.ascentMeters * height, heightUnit, summary.descentMeters * height, heightUnit)
-    }
+    private fun decimal(value: Double, digits: Int) = java.lang.String.format(java.util.Locale.US, "%.$digits" + "f", value)
+    fun description(summary: Summary): String = net.pocketmap.shared.recording.TrackSummaryText.description(exportStats(summary), ::decimal)
+    fun displaySummary(summary: Summary, imperial: Boolean): String =
+        net.pocketmap.shared.recording.TrackSummaryText.display(exportStats(summary), imperial, ::decimal)
 
     internal fun exportFixes(points: List<Point>) = points.map {
         net.pocketmap.shared.recording.RecordingExportXml.Fix(it.latitude, it.longitude, it.time, it.altitude, it.accuracy?.toDouble())

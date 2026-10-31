@@ -1,11 +1,19 @@
 package net.pocketmap.iosprobe
 
 import net.pocketmap.shared.TrackStatistics
+import net.pocketmap.shared.recording.TrackSummaryText
 import net.pocketmap.shared.recording.RecordingMapData
 import net.pocketmap.shared.recording.RecordingExportXml
 
 /** Swift supplies validated native records to the common calculations and writers. */
+interface IosDecimalFormatter { fun format(value: Double, digits: Int): String }
+
 class IosTrackBridge {
+    fun presentation(summary: IosTrackSummary, formatter: IosDecimalFormatter): IosSummaryPresentation {
+        val s = TrackStatistics.Summary(summary.distanceMeters, summary.elapsedSeconds, summary.movingSeconds, summary.ascentMeters, summary.descentMeters)
+        return IosSummaryPresentation(TrackSummaryText.description(s, formatter::format), TrackSummaryText.display(s, true, formatter::format))
+    }
+
     fun recording(points: List<IosRecordedPoint>, pins: List<IosRecordedPin>): IosRecordingGeometry =
         IosRecordingGeometry(RecordingMapData.track(points.map { RecordingMapData.Point(it.latitude, it.longitude, it.time) }),
             RecordingMapData.pins(pins.map { RecordingMapData.Pin(it.latitude, it.longitude, it.text) }))
@@ -46,3 +54,5 @@ data class IosExportFix(val latitude: Double, val longitude: Double, val time: L
     val altitude: Double, val hasAltitude: Boolean, val accuracy: Double, val hasAccuracy: Boolean)
 data class IosExportPin(val fix: IosExportFix, val text: String)
 data class IosRecordingExports(val gpx: String, val kml: String)
+
+data class IosSummaryPresentation(val exportDescription: String, val displaySummary: String)
