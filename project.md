@@ -786,7 +786,9 @@ so an iOS caller can catch malformed input instead of terminating the process.
 Android's existing TrailKml types and call sites remain as a compatibility
 adapter, including cache validation before promotion. A frozen copy of the old
 DOM parser is test-only; parity tests compare every returned field against it.
-Common parser tests run on both JVM and iOS, including prefixed XML, character
+The production Android renderer regression now reads its trails and four original
+marker styles through the shared importer before checking rendered features,
+style reloads and taps. Common parser tests run on both JVM and iOS, including prefixed XML, character
 references, nested Trails folders without duplicate placemarks, styles/holes
 and malformed/oversized documents. Android 2.0.9 uses this shared parser while
 retaining GPS, recording, offline tiles, controls, signing and automatic publishing.

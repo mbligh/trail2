@@ -91,7 +91,26 @@ class MapMigrationTest {
                     TrailKml.Coordinate(40.69, -74.784 + index * 0.002)), emptyList(),
                     TrailKml.Style(iconId = icon, iconColor = 0xff009d57.toInt()))
             }
-            val completeDocument = document.copy(features = document.features + icons)
+            // Exercise the actual portable importer before renderer/style/tap checks.
+            val kml = buildString {
+                append("""<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Test trails</name>""")
+                for (icon in icons) {
+                    val id = icon.style.iconId
+                    append("""<Style id="icon-$id-normal"><IconStyle><color>ff579d00</color></IconStyle></Style>""")
+                    append("""<StyleMap id="mapped-$id"><Pair><key>normal</key><styleUrl>#icon-$id-normal</styleUrl></Pair></StyleMap>""")
+                }
+                append("<Folder><name>Trails</name>")
+                for (feature in document.features + icons) {
+                    append("<Placemark><name>${feature.name}</name>")
+                    if (feature.style.iconId.isNotEmpty()) append("<styleUrl>#mapped-${feature.style.iconId}</styleUrl>")
+                    append("<${feature.kind}><coordinates>")
+                    append(feature.points.joinToString(" ") { "${it.longitude},${it.latitude}" })
+                    append("</coordinates></${feature.kind}></Placemark>")
+                }
+                append("</Folder></Document></kml>")
+            }
+            val completeDocument = TrailKml.parse(kml.toByteArray())
+            assertEquals(document.copy(features = document.features + icons), completeDocument)
             val pin = RecordedPins.Pin(40.691, -74.78, 1000, null, 4f, "Broken gate")
             val points = listOf(RecordedTrack.Point(40.688,-74.782,1000,null,4f),RecordedTrack.Point(40.692,-74.778,31_000,null,3f))
             scenario.onActivity { renderer(it).apply { showTrails(completeDocument,true); showRecording(points,listOf(pin)) } }
