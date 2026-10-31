@@ -15,6 +15,7 @@ object SharedTrailKml {
                        val holes: List<List<Coordinate>>, val style: Style)
     data class Document(val name: String, val features: List<Feature>)
 
+    @Throws(Exception::class)
     fun parse(bytes: ByteArray): Document {
         require(bytes.size <= MAX_BYTES) { "Map file is too large" }
         val xml = bytes.decodeToString()

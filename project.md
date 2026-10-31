@@ -780,7 +780,8 @@ conversion, icon IDs/tints/scales and defaults retain their existing behavior.
 The five-MiB/200,000-coordinate limits and rejection of external declarations,
 network links and invalid coordinates remain. XML tree depth and node counts
 are also bounded (128 levels / 250,000 nodes). No network or file APIs live in
-the shared parser.
+the shared parser. Its exported parse method bridges exceptions to Swift NSError
+so an iOS caller can catch malformed input instead of terminating the process.
 
 Android's existing TrailKml types and call sites remain as a compatibility
 adapter, including cache validation before promotion. A frozen copy of the old
