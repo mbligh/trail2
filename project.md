@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.12 works on the phone. Shared GPX/KML recording exports are validating in Android 2.0.13 and the iOS simulator. The complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.12 works on the phone. Android 2.0.13 shares GPX/KML writers with iOS and is validated and published, awaiting the phone export-sharing check. The complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -1034,7 +1034,7 @@ JUnit reports confirm twelve shared tests with zero failures/errors. All final
 workflow jobs completed successfully.
 
 
-## Shared recording XML exports (2026-10-31, validating)
+## Shared recording XML exports (2026-10-31)
 
 The user cleared the Android 2.0.12 recording/pin check. Move GPX/KML track and
 pin XML generation into `RecordingExportXml`, preserving Android's accuracy-run
@@ -1059,7 +1059,53 @@ parsing of the actual linked Kotlin output in the simulator, before and after
 recording relaunch. These checks verify fields, gaps, pin style/text, extensions
 and fractional timestamp precision. Swift presentation tests remain in the package.
 
-Android 2.0.13 is pending automatic build, publishing and emulator checks, plus
+Android 2.0.13 passed automatic build, publishing and emulator checks, plus
 iOS native/simulator validation. The next phone gate is sharing a saved recording
 as GPX and KML to a receiving app. No GPS acquisition, recording-file format,
 accuracy filtering, timeout, map geometry or control changes are intended.
+
+
+## Recording exports validated checkpoint (2026-10-31)
+
+Implementation `4c991e0daa07f497a747d3c147d88b7447614d1c` is committed on main.
+The user cleared the 2.0.12 recording/pin gate. Android 2.0.13 is published to
+Play internal testing and the existing APK download site. Both hosts now use
+`RecordingExportXml` for GPX tracks, KML accuracy runs, pin waypoints/styles and
+summary extensions. The Android API and platform sharing adapters remain intact.
+
+- Shared JVM and Android unit tests, including byte equality with both frozen old
+  Android XML writers, lint, offline coverage, native alignment and APK publication:
+  https://github.com/mbligh/trail2/actions/runs/41239939966
+- Signed release checks and Play internal upload:
+  https://github.com/mbligh/trail2/actions/runs/41239939970
+- All eighteen emulator invocations passed (sixteen production tests plus gesture
+  and landscape/cutout checks). The new test intercepts the actual chooser, reads
+  each exported content URI and verifies parsed XML, MIME types, clip data and
+  read-grant flags without sending files to another app:
+  https://github.com/mbligh/trail2/actions/runs/41239939969
+- All eleven Swift adapter/presentation tests and native API typechecks passed:
+  https://github.com/mbligh/trail2/actions/runs/41239940074
+- Both iOS frameworks/apps, fifteen shared native tests, real Metal output,
+  recording/export/relaunch checks, offline maps and trail-cache checks passed:
+  https://github.com/mbligh/trail2/actions/runs/41239939978
+
+The iOS app emits `PLATFORM_EXPORT_TEST_PASS:write` and `:read` only after
+Foundation independently parses the linked Kotlin output and verifies GPX/KML
+namespaces, point counts/coordinates/elevations, 90-second gap segmentation,
+accuracy line style, blue pin style, exact multiline/emoji note, summary fields
+and fractional timestamp precision. These checks run against the actual saved
+recording before and after a cold relaunch; the existing gap/pin Metal check
+remains a separate requirement. Summary presentation stays native while both
+summary calculation and exports consume validated native records.
+
+Android output bytes match the prior writers for the regression fixtures,
+including subsecond and negative timestamps, absent elevations/accuracy, gaps,
+thresholds, notes and empty/single-fix recordings. Shared tests also exercise
+XML-invalid controls and unpaired surrogates; names and descriptions now get
+the same XML-safe handling as pin notes while valid emoji remain intact.
+
+**Next phone gate:** update through Play to **2.0.13** and share a saved recording
+with a pin note as both GPX and KML to a receiving app. Confirm the attachment
+opens and the pin note remains. External receiver behavior still needs this
+phone check; CI validates the chooser Intent and generated URI contents. Pause
+the next migration stage until confirmed. No iOS device test is requested.
