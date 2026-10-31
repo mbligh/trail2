@@ -1174,3 +1174,27 @@ No recording-file, location acquisition, statistics calculation or map changes.
 and check the saved-recording summary: distance, elapsed/moving time and
 ascent/descent should display as before. Pause further migration until confirmed.
 No new iOS device test is requested from the user.
+
+
+## Recording control responsiveness (2026-10-31, validating)
+
+The user reports slow circle-to-square feedback after pressing Record. The
+Activity previously learned recording state from its one-second polling tick,
+after foreground-service setup. It did not wait for a GPS fix. Service setup
+creates the notification and CSV file, saves its reference and registers GPS.
+The recent summary-text migration is not on the start path.
+
+Android 2.0.15 receives package-scoped start/stop acknowledgements from the
+service. The icon's fast path updates confirmed state without file reads or map
+conversion, while the existing tick refreshes point counts/overlays. Startup
+failures keep the circle and clear pending status; pending commands reject
+duplicate taps. Receivers follow the visible Activity lifecycle, with non-exported
+registration on newer Android versions and a polling/resume reconciliation fallback.
+
+Stopping now waits for service shutdown before reading the completed recording
+and calculates the summary on a dedicated worker, retaining the actual stopped
+file for its share button. Recording updates no longer rebuild the unrelated
+imported-trail GeoJSON. GPS sampling, accuracy policy and timeout stay unchanged.
+A production emulator test disables polling, invokes rapid duplicate taps, checks
+confirmed start/stop button semantics and verifies the saved-summary dialog. The
+existing map-layer and service tests cover preserved behavior. Validation pending.

@@ -24,6 +24,9 @@ import net.pocketmap.shared.ui.MapChoice
 import net.pocketmap.shared.ui.MapLayerChoice
 import net.pocketmap.shared.ui.TrailMenuAction
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.location.Location
@@ -64,6 +67,18 @@ class MainActivity : ComponentActivity(), LocationListener {
     private var pinEditor: android.widget.EditText? = null
     private var pinDialog: android.app.AlertDialog? = null
     private var lastRecordedPoint: RecordedTrack.Point? = null
+    private val recordingExecutor = Executors.newSingleThreadExecutor()
+    private var recordingRequest: Boolean? = null
+    private var pendingRecordingSummary: File? = null
+    private var recordingReceiverRegistered = false
+    private val recordingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (active && !destroyed && intent.action == RecordingService.STATE_CHANGED) {
+                recordingRequest = null
+                updateRecordingControls()
+            }
+        }
+    }
     private val recordingHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var displayedTrack = ""
     private var displayedLength = -1L
@@ -419,22 +434,15 @@ class MainActivity : ComponentActivity(), LocationListener {
     }
 
     private fun toggleRecording() {
+        // Do not send a second command while the service acknowledges the first.
+        if (recordingRequest != null) return
         if (RecordingService.running) {
+            recordingRequest = false
+            pendingRecordingSummary = latestRecording()
             lastRecordedPoint = null
             redrawMap()
-            stopService(Intent(this, RecordingService::class.java))
-            val points = latestRecording()?.let { RecordedTrack.read(it) } ?: emptyList()
-            val stats = RecordedTrack.summarize(points)
-            val imperial = resources.configuration.locales[0].country.equals("US", ignoreCase = true)
-            val message = if (points.size < 2) {
-                "Your track is saved on this phone. Not enough GPS fixes for trip statistics."
-            } else {
-                "Your track is saved on this phone.\n\n" + RecordedTrack.displaySummary(stats, imperial)
-            }
-            android.app.AlertDialog.Builder(this).setTitle("Recording saved")
-                .setMessage(message)
-                .setPositiveButton("Share KML") { _, _ -> latestRecording()?.let { shareRecording(it, false) } }
-                .setNegativeButton("Done", null).show()
+            if (!stopService(Intent(this, RecordingService::class.java))) recordingRequest = null
+            updateRecordingControls()
             return
         }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -445,7 +453,33 @@ class MainActivity : ComponentActivity(), LocationListener {
         if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)); return
         }
-        startForegroundService(Intent(this, RecordingService::class.java))
+        recordingRequest = true
+        recordingStatusText.value = "Starting recording…"
+        try { startForegroundService(Intent(this, RecordingService::class.java)) }
+        catch (_: Exception) {
+            recordingRequest = null
+            updateRecordingControls()
+            android.widget.Toast.makeText(this, "Could not start recording — check location permission", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showRecordingSummary(file: File) {
+        val imperial = resources.configuration.locales[0].country.equals("US", ignoreCase = true)
+        recordingExecutor.execute {
+            val message = try {
+                val points = RecordedTrack.read(file)
+                if (points.size < 2) "Your track is saved on this phone. Not enough GPS fixes for trip statistics."
+                else "Your track is saved on this phone.\n\n" + RecordedTrack.displaySummary(RecordedTrack.summarize(points), imperial)
+            } catch (_: Exception) { "Your track is saved on this phone. Could not read trip statistics." }
+            runOnUiThread {
+                if (!destroyed && active && !RecordingService.running) {
+                    android.app.AlertDialog.Builder(this).setTitle("Recording saved")
+                        .setMessage(message)
+                        .setPositiveButton("Share KML") { _, _ -> shareRecording(file, false) }
+                        .setNegativeButton("Done", null).show()
+                }
+            }
+        }
     }
     private fun recordings() = File(filesDir, "recordings").listFiles()?.filter { it.extension == "csv" }?.sortedByDescending { it.name } ?: emptyList()
     private fun latestRecording(): File? = prefs.getString("recorded_track", null)?.let { File(File(filesDir, "recordings"), it) }?.takeIf { it.exists() }
@@ -563,9 +597,26 @@ class MainActivity : ComponentActivity(), LocationListener {
         }
     }
 
-    private fun updateRecording() {
+    private fun updateRecordingControls() {
         val running = RecordingService.running
+        if (recordingRequest == running) recordingRequest = null
         recordingState.value = running
+        val count = if (prefs.getString("recorded_track", null) == displayedTrack) recordedPointCount else 0
+        recordingStatusText.value = when {
+            recordingRequest == true && !running -> "Starting recording…"
+            recordingRequest == false && running -> "Stopping recording…"
+            !running -> null
+            count == 0 -> "● Recording • waiting for GPS"
+            else -> "● Recording • $count points • every 30s"
+        }
+        if (!running) pendingRecordingSummary?.let { file ->
+            pendingRecordingSummary = null
+            showRecordingSummary(file)
+        }
+    }
+
+    private fun updateRecording() {
+        updateRecordingControls()
         val file = latestRecording()
         if (file != null && (file.name != displayedTrack || file.length() != displayedLength)) {
             displayedTrack = file.name; displayedLength = file.length()
@@ -576,9 +627,7 @@ class MainActivity : ComponentActivity(), LocationListener {
             redrawMap()
         }
         redrawMap() // Also remove the live segment after a notification stop or stale fix.
-        recordingStatusText.value = if (!running) null
-            else if (recordedPointCount == 0) "● Recording • waiting for GPS"
-            else "● Recording • $recordedPointCount points • every 30s"
+        updateRecordingControls()
     }
 
     private fun refreshTrails() {
@@ -699,11 +748,19 @@ class MainActivity : ComponentActivity(), LocationListener {
     override fun onStart() { super.onStart(); map.onStart() }
     override fun onStop() { map.onStop(); super.onStop() }
     override fun onLowMemory() { super.onLowMemory(); map.onLowMemory() }
-    override fun onResume() { super.onResume(); active = true; pinControlEnabled.value = true; phoneHeading.start(); map.onResume(); startLocation(); recordingHandler.removeCallbacks(recordingTick); recordingHandler.post(recordingTick) }
+    override fun onResume() { super.onResume(); active = true
+        val filter = IntentFilter(RecordingService.STATE_CHANGED)
+        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(recordingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        else @Suppress("DEPRECATION") registerReceiver(recordingReceiver, filter)
+        recordingReceiverRegistered = true
+        recordingRequest = null
+        updateRecordingControls()
+        pinControlEnabled.value = true; phoneHeading.start(); map.onResume(); startLocation(); recordingHandler.removeCallbacks(recordingTick); recordingHandler.post(recordingTick) }
     override fun onPause() {
         pinControlEnabled.value = false
         recentLocations.clear()
         active = false
+        if (recordingReceiverRegistered) { unregisterReceiver(recordingReceiver); recordingReceiverRegistered = false }
         phoneHeading.stop()
         recordingHandler.removeCallbacks(recordingTick)
         manager.removeUpdates(this)
@@ -711,5 +768,5 @@ class MainActivity : ComponentActivity(), LocationListener {
         map.onPause()
         super.onPause()
     }
-    override fun onDestroy() { destroyed = true; pinDialog?.dismiss(); trailExecutor.shutdownNow(); map.onDestroy(); super.onDestroy() }
+    override fun onDestroy() { destroyed = true; pinDialog?.dismiss(); trailExecutor.shutdownNow(); recordingExecutor.shutdownNow(); map.onDestroy(); super.onDestroy() }
 }

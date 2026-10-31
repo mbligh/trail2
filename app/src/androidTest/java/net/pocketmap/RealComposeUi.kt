@@ -54,6 +54,9 @@ internal class RealComposeUi(private val scenario: ActivityScenario<MainActivity
     fun text(value: String) = await("text $value") {
         nodes().any { node -> node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == value } == true }
     }
+    fun description(value: String) = await("description $value") {
+        nodes().any { it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(value) == true }
+    }
     fun bounds(tag: String): Rect {
         var result = Rect.Zero
         node(tag) { result = it.boundsInRoot }

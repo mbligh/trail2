@@ -93,11 +93,11 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     fun showTrails(document: TrailKml.Document, visible: Boolean) {
         trails = document; trailsVisible = visible
         artwork = listOf(pinImage()) + trailImages()
-        updateData()
+        trailJson = trailData()
     }
-    fun setTrailsVisible(visible: Boolean) { trailsVisible = visible; updateData() }
+    fun setTrailsVisible(visible: Boolean) { trailsVisible = visible; trailJson = trailData() }
     fun showRecording(points: List<RecordedTrack.Point>, recordedPins: List<RecordedPins.Pin>) {
-        track = points; pins = recordedPins; updateData()
+        track = points; pins = recordedPins; updateRecordingData()
     }
     fun setPosition(location: Location?, facing: Float?, last: RecordedTrack.Point?) {
         current = location?.let { Position(it.longitude, it.latitude) }
@@ -111,8 +111,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
         bitmap.density = resources.displayMetrics.densityDpi
         return MapArtwork("trail-pin", bitmap.asImageBitmap(), DpSize((bitmap.width / resources.displayMetrics.density).dp, (bitmap.height / resources.displayMetrics.density).dp))
     }
-    private fun updateData() {
-        trailJson = trailData()
+    private fun updateRecordingData() {
         trackJson = RecordingMapData.track(track)
         pinJson = RecordingMapData.pins(pins.map { RecordingMapData.Pin(it.latitude, it.longitude, it.text) })
     }

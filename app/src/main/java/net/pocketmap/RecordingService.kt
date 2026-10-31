@@ -15,6 +15,7 @@ class RecordingService : Service(), LocationListener {
     companion object {
         @Volatile var running = false
         @Volatile var latestGpsFix: Location? = null
+        const val STATE_CHANGED = "net.pocketmap.RECORDING_STATE_CHANGED"
         const val STOP = "net.pocketmap.STOP_RECORDING"
         private const val TIMEOUT = "net.pocketmap.RECORDING_TIMEOUT"
         private const val MAX_RECORDING_MILLIS = 4 * 60 * 60 * 1000L
@@ -59,7 +60,6 @@ class RecordingService : Service(), LocationListener {
             val directory = File(filesDir, "recordings").apply { mkdirs() }
             track = File(directory, "Trail-${Instant.now().toString().replace(':', '-')}.csv").apply { createNewFile() }
             getSharedPreferences("map", MODE_PRIVATE).edit().putString("recorded_track", track!!.name).apply()
-            running = true
             // elapsedRealtime includes screen-off/deep-sleep time and ignores clock changes.
             deadlineElapsedRealtime = SystemClock.elapsedRealtime() + MAX_RECORDING_MILLIS
             handler.postDelayed(timeout, MAX_RECORDING_MILLIS)
@@ -67,6 +67,8 @@ class RecordingService : Service(), LocationListener {
             // Android may defer this inexact alarm; the GPS callback enforces the cutoff too.
             getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, deadlineElapsedRealtime, timeoutIntent)
             manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5_000L, 0f, this)
+            running = true
+            publishState()
         } catch (_: Exception) {
             Toast.makeText(this, "Could not start recording — check location permission", Toast.LENGTH_LONG).show()
             stopSelf()
@@ -125,6 +127,9 @@ class RecordingService : Service(), LocationListener {
     override fun onProviderDisabled(provider: String) { }
     override fun onProviderEnabled(provider: String) { }
     @Deprecated("Legacy callback") override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) { }
+    private fun publishState() {
+        sendBroadcast(Intent(STATE_CHANGED).setPackage(packageName))
+    }
     override fun onDestroy() {
         running = false
         latestGpsFix = null
@@ -133,6 +138,7 @@ class RecordingService : Service(), LocationListener {
         getSystemService(AlarmManager::class.java).cancel(timeoutIntent)
         manager.removeUpdates(this)
         stopForeground(STOP_FOREGROUND_REMOVE)
+        publishState()
         super.onDestroy()
     }
     override fun onBind(intent: Intent?) = null
