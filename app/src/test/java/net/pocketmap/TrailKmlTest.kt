@@ -5,7 +5,12 @@ import org.junit.Test
 import java.io.File
 
 class TrailKmlTest {
-    private fun parse(body: String) = TrailKml.parse("""<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Test trails</name><Folder><name>Trails</name>$body</Folder></Document></kml>""".toByteArray())
+    private fun parse(body: String): TrailKml.Document {
+        val bytes = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Test trails</name><Folder><name>Trails</name>$body</Folder></Document></kml>""".toByteArray()
+        val result = TrailKml.parse(bytes)
+        assertEquals(LegacyTrailKml.parse(bytes).toString(), result.toString())
+        return result
+    }
     @Test fun resolvesNormalStyleAndLongitudeLatitudeOrder() {
         val doc = parse("""<name>Test trails</name>
           <Style id="green"><LineStyle><color>ff579d00</color><width>3.5</width></LineStyle></Style>
@@ -46,7 +51,9 @@ class TrailKmlTest {
     }
     @Test fun readsLiveMapExportWhenProvided() {
         val fixture = System.getenv("TRAIL_KML_SMOKE") ?: return
-        val doc = TrailKml.parse(File(fixture).readBytes())
+        val bytes = File(fixture).readBytes()
+        val doc = TrailKml.parse(bytes)
+        assertEquals(LegacyTrailKml.parse(bytes).toString(), doc.toString())
         assertEquals("TTA Trails", doc.name)
         assertEquals(108, doc.features.count { it.kind == "LineString" })
         assertEquals(10, doc.features.count { it.kind == "Point" })

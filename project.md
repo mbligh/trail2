@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-30: Android 2.0.8 is validated and published, awaiting the physical-phone artwork check. Shared iOS rendering, native recording/export and bundled-map integration are simulator-validated; the complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.8 works on the phone. Android 2.0.9 is validating the shared KML parser. Shared iOS rendering, native recording/export and bundled-map integration are simulator-validated; the complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -765,3 +765,33 @@ PMTiles/runtime cache adapters, native photo/report parity and production host
 packaging. Apple signing/TestFlight remain unconfigured. Simulator fixtures do
 not establish real iOS GNSS or locked-screen reception; no physical iOS test is
 requested from the user.
+
+
+## Shared KML parser (Android 2.0.9 validation)
+
+The user tested 2.0.8 and confirmed all requested checks work, clearing the
+shared-artwork phone gate on 2026-10-31.
+
+`shared/.../trails/SharedTrailKml.kt` now owns KML selection, geometry and style
+rules using xmlutil core 1.0.2's same strict multiplatform reader on Android/JVM/
+iOS. Only the Trails folder is selected; StyleMap normal resolution, inline
+styles, names, longitude/latitude order, multi-geometry, polygon holes, KML color
+conversion, icon IDs/tints/scales and defaults retain their existing behavior.
+The five-MiB/200,000-coordinate limits and rejection of external declarations,
+network links and invalid coordinates remain. XML tree depth and node counts
+are also bounded (128 levels / 250,000 nodes). No network or file APIs live in
+the shared parser.
+
+Android's existing TrailKml types and call sites remain as a compatibility
+adapter, including cache validation before promotion. A frozen copy of the old
+DOM parser is test-only; parity tests compare every returned field against it.
+Common parser tests run on both JVM and iOS, including prefixed XML, character
+references, nested Trails folders without duplicate placemarks, styles/holes
+and malformed/oversized documents. Android 2.0.9 uses this shared parser while
+retaining GPS, recording, offline tiles, controls, signing and automatic publishing.
+
+This stage makes the importer available in the shared iOS framework; wiring
+the iOS host's startup trail refresh/cache and original trail marker artwork is
+the following stage. Validation is pending CI. After checks and Play upload
+pass, verify on Android that startup/Refresh trails, line colors and point
+icons, names on tap, Hide/Show trails and Zoom to trails still work.
