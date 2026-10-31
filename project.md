@@ -798,3 +798,8 @@ the iOS host's startup trail refresh/cache and original trail marker artwork is
 the following stage. Validation is pending CI. After checks and Play upload
 pass, verify on Android that startup/Refresh trails, line colors and point
 icons, names on tap, Hide/Show trails and Zoom to trails still work.
+
+The parser uses strict UTF-8 decoding, retaining the old DOM reader's rejection
+of corrupted My Maps downloads rather than replacing invalid bytes and promoting
+a damaged document. Android parity tests verify both readers reject the same
+malformed UTF-8 fixture; common tests also cover a valid UTF-8 BOM.

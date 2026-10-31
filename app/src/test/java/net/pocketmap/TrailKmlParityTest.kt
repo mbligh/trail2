@@ -24,4 +24,12 @@ class TrailKmlParityTest {
             assertEquals(LegacyTrailKml.parse(xml).toString(), TrailKml.parse(xml).toString())
         }
     }
+    @Test fun bothReadersRejectMalformedUtf8InsteadOfPromotingCorruptCacheData() {
+        val bytes = "<kml><Folder><name>Trails</name><Placemark><name>".toByteArray() +
+            byteArrayOf(0xc3.toByte(), 0x28) +
+            "</name><Point><coordinates>-74,40</coordinates></Point></Placemark></Folder></kml>".toByteArray()
+        org.junit.Assert.assertThrows(Exception::class.java) { LegacyTrailKml.parse(bytes) }
+        org.junit.Assert.assertThrows(Exception::class.java) { TrailKml.parse(bytes) }
+    }
+
 }

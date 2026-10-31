@@ -56,6 +56,10 @@ class SharedTrailKmlTest {
         )
         invalid.forEach { xml -> assertFailsWith<Exception> { SharedTrailKml.parse(xml.encodeToByteArray()) } }
         assertFailsWith<IllegalArgumentException> { SharedTrailKml.parse(ByteArray(SharedTrailKml.MAX_BYTES + 1)) }
+        val corrupt = "<kml><Folder><name>Trails</name><Placemark><name>".encodeToByteArray() +
+            byteArrayOf(0xc3.toByte(), 0x28) +
+            "</name><Point><coordinates>-74,40</coordinates></Point></Placemark></Folder></kml>".encodeToByteArray()
+        assertFailsWith<Exception> { SharedTrailKml.parse(corrupt) }
     }
 
     @Test fun handlesPrefixedKmlAndBuiltInCharacterReferences() {
@@ -63,5 +67,6 @@ class SharedTrailKmlTest {
         val doc = SharedTrailKml.parse(xml.encodeToByteArray())
         assertEquals("A & B", doc.name)
         assertEquals("Gate <open> 🐴", doc.features.single().name)
+        assertEquals(doc, SharedTrailKml.parse(byteArrayOf(0xef.toByte(), 0xbb.toByte(), 0xbf.toByte()) + xml.encodeToByteArray()))
     }
 }

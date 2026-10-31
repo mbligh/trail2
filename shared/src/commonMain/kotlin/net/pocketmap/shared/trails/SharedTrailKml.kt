@@ -18,7 +18,7 @@ object SharedTrailKml {
     @Throws(Exception::class)
     fun parse(bytes: ByteArray): Document {
         require(bytes.size <= MAX_BYTES) { "Map file is too large" }
-        val xml = bytes.decodeToString()
+        val xml = bytes.decodeToString(throwOnInvalidSequence = true)
         require(!xml.contains("<!DOCTYPE", ignoreCase = true) && !xml.contains("<!ENTITY", ignoreCase = true)) { "External XML entities are not supported" }
         val root = readXml(xml)
         require(root.name == "kml") { "Expected a KML map" }
