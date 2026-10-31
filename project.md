@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.8 works on the phone. The user confirmed Android 2.0.9 passes the shared-KML-parser phone check. iOS trail refresh/cache integration is now in progress. Shared KML tests pass on JVM and iOS; the complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.9 works on the phone. Android 2.0.10 is validated and published, awaiting the shared-map-data phone check. iOS native trail refresh/cache and map rendering pass simulator tests; the complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -858,11 +858,11 @@ server, actual KML styles and four original point icons, and repeated app launch
 with HTTP failure and invalid XML. It requires actual named rendered features
 and stable red trail pixels rather than accepting a blank startup frame.
 
-Validation is pending CI. Full iOS feature parity, distribution/signing and
-physical-device validation remain later work.
+Validation passed; see the checkpoint below. Full iOS feature parity,
+distribution/signing and physical-device validation remain later work.
 
 
-## Shared trail map data (2026-10-31, validating)
+## Shared trail map data (2026-10-31)
 
 After connecting native iOS refresh/cache I/O, both hosts now use
 `SharedTrailGeoJson` for parsed KML geometry and MapLibre style properties.
@@ -872,8 +872,61 @@ transparency, icon anchor/scale and escaped label properties; the existing
 production renderer instrumentation exercises the new converter. Shared native
 tests additionally verify polygon/hole closure and disabled fill/outline.
 
-Android version 2.0.10 carries this next migration step and must pass automated
-release/emulator checks before a phone check of familiar trails, styles/taps,
+Android version 2.0.10 carries this next migration step and passed automated
+release/emulator checks. The next phone check covers familiar trails, styles/taps,
 Hide/Show, Zoom to trails and Refresh trails. iOS fixture checks also call the
 same native Hide/Show and Zoom handlers, requiring actual rendered features to
 disappear and return before they emit success. No location or recording changes.
+
+
+## Trail refresh and map-data validated checkpoint (2026-10-31)
+
+Implementation through `b7636587cdb43deb47b34eda829eed65a031b5e8` is committed
+on main. The user cleared the previous Android 2.0.9 gate. Android 2.0.10 now
+uses the same KML-to-MapLibre GeoJSON converter as iOS; geometry, labels, colors,
+opacity, icon keys/anchors/scales and ring closure match the frozen old converter
+across the regression fixtures. GPS, recording, sharing, cache download semantics
+and the Android controls are unchanged.
+
+- APK/JVM/Android unit tests (including converter parity), lint, offline coverage,
+  native alignment and download-site publishing passed:
+  https://github.com/mbligh/trail2/actions/runs/41211449708
+- Signed release checks and Play internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41211449674
+- All sixteen emulator invocations passed (fourteen production tests plus gesture
+  and landscape/cutout checks). The production map screenshot was visually reviewed:
+  https://github.com/mbligh/trail2/actions/runs/41211449640
+- Native Swift adapter tests and iOS API typechecks passed:
+  https://github.com/mbligh/trail2/actions/runs/41211109804
+- Both iOS frameworks/apps, shared native tests, real Metal output, recording and
+  bundled-map relaunch tests, and the new HTTP/KML/cache/visibility checks passed:
+  https://github.com/mbligh/trail2/actions/runs/41211109834
+
+The iOS host loads and validates cached trails on startup, then refreshes from
+the same My Maps URL as Android. File reads, shared parsing and refresh validation
+run away from the main UI actor. Bounded native downloads replace the private
+cache atomically only after shared parsing succeeds; an error retains the last
+document with a retry status. Refresh trails, Hide/Show, Zoom to trails and feature
+labels are connected. The simulator uses a local fixture server rather than
+claiming live Google My Maps availability; it renders the imported line and all
+four original marker styles, requires disappearance/reappearance through the
+actual native menu handlers, and cold-launches again after HTTP 503 and malformed
+KML responses while checking the previous cache remains byte-for-byte intact.
+
+**Next phone gate:** update through Play to **2.0.10**. Check familiar trail lines
+and point icons, names on tap, Refresh trails, Hide/Show and Zoom to trails. Pause
+the next migration stage until this Android rendering check is confirmed.
+The full iOS app still needs remaining map/layer/report adapters and distribution;
+no iOS device test is requested from the user.
+
+
+The final iOS screenshot was visually reviewed: all four original point styles,
+the imported red trail and the persisted blue recording render correctly below
+the safe-area header and above the bottom controls. Each write/offline/invalid
+phase reported the same 25,389 red pixels after Hide/Show and Zoom. All nine
+shared iOS tests and eleven native Swift adapter tests passed.
+
+Before iOS distribution, audit the existing Swift 6 actor-conformance warnings
+and deployment minimum: the toolchain reports an ICU object built for iOS 18.5
+while the probe links with a 15.5 target. Simulator success does not establish
+support for that older minimum OS. These warnings predate this stage.
