@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.8 works on the phone. Android 2.0.9 is validating the shared KML parser. Shared iOS rendering, native recording/export and bundled-map integration are simulator-validated; the complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.8 works on the phone. Android 2.0.9 is validated and published, awaiting the shared-KML-parser phone check. Shared KML tests pass on JVM and iOS; the complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -803,3 +803,38 @@ The parser uses strict UTF-8 decoding, retaining the old DOM reader's rejection
 of corrupted My Maps downloads rather than replacing invalid bytes and promoting
 a damaged document. Android parity tests verify both readers reject the same
 malformed UTF-8 fixture; common tests also cover a valid UTF-8 BOM.
+
+
+## Shared KML validated checkpoint (2026-10-31)
+
+Implementation through `4d13c735703ea6f47a3db0737fb72e9d440491a0` is committed
+directly on main. Android version **2.0.9** is published through both existing
+channels. The shared importer is ready for the iOS host's upcoming trail
+refresh/cache integration.
+
+- JVM shared tests and Android native-reader parity, encoding, unit tests, lint,
+  native alignment and APK publishing passed:
+  https://github.com/mbligh/trail2/actions/runs/41200768370
+- Signed Play bundle tests/lint/alignment and internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41200768364
+- All sixteen production emulator invocations passed, including the actual KML
+  importer feeding trails and four original marker styles into the renderer,
+  style reloads, labels/taps, controls, cache/GPS tests and system-bar/cutout bounds:
+  https://github.com/mbligh/trail2/actions/runs/41200768361
+- Both iOS shared frameworks and host apps built, the shared test suite including
+  the new KML cases passed on iOS, and all existing Metal/recording-relaunch/offline
+  map checks passed with the new dependency:
+  https://github.com/mbligh/trail2/actions/runs/41200768369
+
+The production Android screenshot was visually reviewed: imported marker artwork,
+map rendering and the shared controls remain correct. Synthetic fixtures cover
+style maps, inline style precedence, geometry/holes, folder selection, character
+references, malformed XML/UTF-8 and the BOM; comparison uses the independent frozen
+DOM reader. A final real-phone check is needed against the user's live/cached
+My Maps document.
+
+**Next phone gate:** update through Play to 2.0.9, verify trails load at startup
+and after Refresh trails, check familiar line colors/point icons and names on
+tap, then Hide/Show trails and Zoom to trails. Pause the next migration stage
+until the user confirms this check. The next implementation stage is wiring
+iOS startup trail refresh and validated caching to this shared importer.
