@@ -2,28 +2,32 @@ package net.pocketmap.iosprobe
 
 import net.pocketmap.shared.TrackStatistics
 import net.pocketmap.shared.recording.RecordingMapData
+import net.pocketmap.shared.recording.RecordingExportXml
 
-/** Swift file I/O adapts the existing CSV to the exact shared calculation code. */
+/** Swift supplies validated native records to the common calculations and writers. */
 class IosTrackBridge {
     fun recording(points: List<IosRecordedPoint>, pins: List<IosRecordedPin>): IosRecordingGeometry =
         IosRecordingGeometry(RecordingMapData.track(points.map { RecordingMapData.Point(it.latitude, it.longitude, it.time) }),
             RecordingMapData.pins(pins.map { RecordingMapData.Pin(it.latitude, it.longitude, it.text) }))
 
-    fun summarize(csv: String): IosTrackSummary {
-        val points = csv.lineSequence().mapNotNull { line ->
-            val p = line.split(',')
-            val lat = p.getOrNull(0)?.toDoubleOrNull() ?: return@mapNotNull null
-            val lon = p.getOrNull(1)?.toDoubleOrNull() ?: return@mapNotNull null
-            val sampleTime = p.getOrNull(2)?.toLongOrNull() ?: return@mapNotNull null
-            val sampleAltitude = p.getOrNull(3)?.toDoubleOrNull()
-            object : TrackStatistics.Sample {
-                override val latitude = lat
-                override val longitude = lon
-                override val time = sampleTime
-                override val altitude = sampleAltitude
-            }
-        }.toList()
-        val result = TrackStatistics.summarize(points)
+    private fun fixes(points: List<IosExportFix>) = points.map {
+        RecordingExportXml.Fix(it.latitude, it.longitude, it.time, if (it.hasAltitude) it.altitude else null,
+            if (it.hasAccuracy) it.accuracy else null)
+    }
+
+    @Throws(Exception::class)
+    fun exportRecording(name: String, points: List<IosExportFix>, pins: List<IosExportPin>, summaryText: String): IosRecordingExports {
+        val samples = fixes(points)
+        val stats = TrackStatistics.summarize(samples)
+        val markers = pins.map { RecordingExportXml.Pin(it.fix.latitude, it.fix.longitude, it.fix.time,
+            if (it.fix.hasAltitude) it.fix.altitude else null, it.text) }
+        return IosRecordingExports(
+            RecordingExportXml.addToGpx(RecordingExportXml.gpx(name, samples, stats, summaryText), markers),
+            RecordingExportXml.addToKml(RecordingExportXml.kml(name, samples, stats, summaryText), markers))
+    }
+
+    fun summarize(points: List<IosExportFix>): IosTrackSummary {
+        val result = TrackStatistics.summarize(fixes(points))
         return IosTrackSummary(result.distanceMeters, result.elapsedSeconds, result.movingSeconds,
             result.ascentMeters, result.descentMeters)
     }
@@ -36,3 +40,9 @@ data class IosTrackSummary(val distanceMeters: Double, val elapsedSeconds: Long,
 data class IosRecordedPoint(val latitude: Double, val longitude: Double, val time: Long)
 data class IosRecordedPin(val latitude: Double, val longitude: Double, val text: String)
 data class IosRecordingGeometry(val track: String, val pins: String)
+
+/** Explicit availability flags avoid nullable numeric bridging in Swift initializers. */
+data class IosExportFix(val latitude: Double, val longitude: Double, val time: Long,
+    val altitude: Double, val hasAltitude: Boolean, val accuracy: Double, val hasAccuracy: Boolean)
+data class IosExportPin(val fix: IosExportFix, val text: String)
+data class IosRecordingExports(val gpx: String, val kml: String)

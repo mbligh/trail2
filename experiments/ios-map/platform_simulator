@@ -41,6 +41,7 @@ for phase in ('write', 'read'):
                 white = sum(r > 245 and g > 245 and b > 245 for r, g, b in pixels)
                 console = output.read_text(errors='replace')
                 ready = (f'PLATFORM_SELF_TEST_PASS:{phase}' in console
+                         and f'PLATFORM_EXPORT_TEST_PASS:{phase}' in console
                          and 'IOS_PLATFORM_RENDER_PASS:segmented-recording-and-pin' in console
                          and blue >= 5000 and white > len(pixels) // 2)
                 settled_frames = settled_frames + 1 if ready else 0

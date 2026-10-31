@@ -2,7 +2,6 @@ package net.pocketmap
 
 import android.location.Location
 import java.io.File
-import java.time.Instant
 import java.util.Base64
 
 /**
@@ -72,54 +71,11 @@ object RecordedPins {
         }
     }
 
-    fun addToKml(kml: String, pins: List<Pin>): String {
-        if (pins.isEmpty()) return kml
-        val style = """
-            <Style id="recorded-pin">
-              <IconStyle>
-                <scale>1.1</scale>
-                <Icon><href>https://maps.google.com/mapfiles/kml/pushpin/blue-pushpin.png</href></Icon>
-              </IconStyle>
-            </Style>
-        """.trimIndent()
-        val placemarks = pins.joinToString("\n") { pin ->
-            val altitude = pin.altitude ?: 0.0
-            """
-            <Placemark>
-              <name>Pin</name>
-              ${if (pin.text.isNotEmpty()) "<description>${xml(pin.text)}</description>" else ""}
-              <styleUrl>#recorded-pin</styleUrl>
-              <TimeStamp><when>${Instant.ofEpochMilli(pin.time)}</when></TimeStamp>
-              <Point><coordinates>${pin.longitude},${pin.latitude},$altitude</coordinates></Point>
-            </Placemark>
-            """.trimIndent()
-        }
-        val insertion = "\n$style\n$placemarks\n"
-        return if (kml.contains("</Document>")) {
-            kml.replaceFirst("</Document>", insertion + "</Document>")
-        } else kml
+    private fun exportPins(pins: List<Pin>) = pins.map {
+        net.pocketmap.shared.recording.RecordingExportXml.Pin(it.latitude, it.longitude, it.time, it.altitude, it.text)
     }
-
-    fun addToGpx(gpx: String, pins: List<Pin>): String {
-        if (pins.isEmpty()) return gpx
-        val waypoints = pins.joinToString("\n") { pin ->
-            buildString {
-                append("""<wpt lat="${pin.latitude}" lon="${pin.longitude}">""")
-                pin.altitude?.let { append("<ele>$it</ele>") }
-                append("<time>${Instant.ofEpochMilli(pin.time)}</time>")
-                append("<name>Pin</name>")
-                if (pin.text.isNotEmpty()) append("<desc>${xml(pin.text)}</desc>")
-                append("<sym>Pin, Blue</sym></wpt>")
-            }
-        }
-        return if (gpx.contains("<trk>")) {
-            gpx.replaceFirst("<trk>", waypoints + "\n<trk>")
-        } else gpx
-    }
-
-    private fun xml(text: String) = buildString {
-        text.codePoints().forEach { c ->
-            if (c == 9 || c == 10 || c == 13 || c in 0x20..0xd7ff || c in 0xe000..0xfffd || c in 0x10000..0x10ffff) appendCodePoint(c)
-        }
-    }.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    fun addToKml(kml: String, pins: List<Pin>): String =
+        net.pocketmap.shared.recording.RecordingExportXml.addToKml(kml, exportPins(pins))
+    fun addToGpx(gpx: String, pins: List<Pin>): String =
+        net.pocketmap.shared.recording.RecordingExportXml.addToGpx(gpx, exportPins(pins))
 }

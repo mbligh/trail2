@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.11 fixes the zoom header. Android 2.0.12 shares recording line/pin geometry with iOS and is published, awaiting the next phone recording check. The complete iOS application remains unfinished.
+Updated 2026-10-31: the user confirmed Android 2.0.12 works on the phone. Shared GPX/KML recording exports are validating in Android 2.0.13 and the iOS simulator. The complete iOS application remains unfinished.
 
 ## Product and identity
 
@@ -1032,3 +1032,34 @@ the safe-area controls. Write and read phases each recorded 9,958 blue pixels
 and `IOS_PLATFORM_RENDER_PASS:segmented-recording-and-pin`. The downloaded iOS
 JUnit reports confirm twelve shared tests with zero failures/errors. All final
 workflow jobs completed successfully.
+
+
+## Shared recording XML exports (2026-10-31, validating)
+
+The user cleared the Android 2.0.12 recording/pin check. Move GPX/KML track and
+pin XML generation into `RecordingExportXml`, preserving Android's accuracy-run
+grouping/colors, 90-second gaps, summary extensions, blue pin style, elevations,
+notes and millisecond timestamps. JVM tests compare complete output bytes against
+the independent old Android writers. Shared native tests check parsed structure,
+thresholds, timestamps, metadata and XML escaping. Illegal XML 1.0 controls and
+unpaired surrogates are filtered consistently from names/notes; valid emoji stay.
+Kotlin's standard Instant provides portable ISO timestamps without a new dependency.
+
+Android keeps its existing file readers, summary formatting, share Intent, MIME
+types and content provider. A production emulator test intercepts the real chooser
+Intent, reads both generated content URIs and parses their XML, checking gaps,
+notes, timestamps, summaries, MIME types, clip data and URI read grants.
+
+The iOS application uses the same common writers and now receives grouped KML
+accuracy runs and blue pin styling. Its summaries and exports both use validated
+native records rather than a second CSV reader. Swift keeps localized summary
+presentation, files and the native share sheet; the unused Swift XML generator
+is removed. XML coverage moves from testing that old generator to Foundation
+parsing of the actual linked Kotlin output in the simulator, before and after
+recording relaunch. These checks verify fields, gaps, pin style/text, extensions
+and fractional timestamp precision. Swift presentation tests remain in the package.
+
+Android 2.0.13 is pending automatic build, publishing and emulator checks, plus
+iOS native/simulator validation. The next phone gate is sharing a saved recording
+as GPX and KML to a receiving app. No GPS acquisition, recording-file format,
+accuracy filtering, timeout, map geometry or control changes are intended.

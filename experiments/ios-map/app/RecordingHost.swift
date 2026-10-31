@@ -57,16 +57,16 @@ import UIKit
             }
             var clock = 0.0
             let recorder = RecordingCoordinator(store: store, clock: { clock })
-            try recorder.start(at: Date(timeIntervalSince1970: 1000))
+            try recorder.start(at: Date(timeIntervalSince1970: 1000.123))
             let seconds = [0, 30, 150, 180]
             for (index, coordinates) in [(40.689, -74.777), (40.691, -74.774), (40.693, -74.768), (40.695, -74.765)].enumerated() {
                 clock = Double(seconds[index])
                 let fix = RecordedFix(latitude: coordinates.0, longitude: coordinates.1,
-                                      time: Int64(1_000_000 + seconds[index] * 1000), altitude: 80, accuracy: 3)
-                try recorder.receive(fix, at: Date(timeIntervalSince1970: 1000 + clock))
+                                      time: Int64(1_000_123 + seconds[index] * 1000), altitude: 80, accuracy: 3)
+                try recorder.receive(fix, at: Date(timeIntervalSince1970: 1000.123 + clock))
             }
-            try recorder.addPin(text: "Gate, broken\n🐴 <&>", at: Date(timeIntervalSince1970: 1180))
-            displayed = try recorder.stop(at: Date(timeIntervalSince1970: 1181))
+            try recorder.addPin(text: "Gate, broken\n🐴 <&>", at: Date(timeIntervalSince1970: 1180.123))
+            displayed = try recorder.stop(at: Date(timeIntervalSince1970: 1181.123))
         } else {
             displayed = try store.sessions().first
         }
@@ -79,10 +79,10 @@ import UIKit
         guard stats.distanceMeters > 100, stats.elapsedSeconds == 180 else {
             throw RecordingStoreError.corruptSession
         }
-        for contents in [RecordingExports.gpx(name: "Fixture", points: try store.points(in: session), pins: try store.pins(in: session), summary: stats),
-                         RecordingExports.kml(name: "Fixture", points: try store.points(in: session), pins: try store.pins(in: session), summary: stats)] {
-            guard XMLParser(data: Data(contents.utf8)).parse() else { throw RecordingStoreError.corruptSession }
-        }
+        let exported = try exportRecording(session, name: "Fixture & <woods>")
+        try RecordingExportValidation.verify(gpx: exported.gpx, kml: exported.kml,
+            points: try store.points(in: session), pins: try store.pins(in: session), summary: stats)
+        print("PLATFORM_EXPORT_TEST_PASS:\(phase)")
         testFix = RecordedFix(latitude: 40.692, longitude: -74.771, time: 1_030_000)
         model.verifyRecording()
         refresh()
@@ -257,21 +257,30 @@ import UIKit
     }
 
     private func summary(_ session: RecordingSession) throws -> TrackExportStatistics {
-        let csv = try String(contentsOf: store.trackURL(session), encoding: .utf8)
-        let result = IosTrackBridge().summarize(csv: csv)
+        let result = IosTrackBridge().summarize(points: try store.points(in: session).map(exportFix))
         return TrackExportStatistics(distanceMeters: result.distanceMeters, elapsedSeconds: result.elapsedSeconds,
                                      movingSeconds: result.movingSeconds, ascentMeters: result.ascentMeters,
                                      descentMeters: result.descentMeters)
     }
 
+    private func exportFix(_ fix: RecordedFix) -> IosExportFix {
+        IosExportFix(latitude: fix.latitude, longitude: fix.longitude, time: fix.time,
+            altitude: fix.altitude ?? 0, hasAltitude: fix.altitude != nil,
+            accuracy: fix.accuracy ?? 0, hasAccuracy: fix.accuracy != nil)
+    }
+
+    private func exportRecording(_ session: RecordingSession, name: String) throws -> IosRecordingExports {
+        let stats = try summary(session)
+        return try IosTrackBridge().exportRecording(name: name,
+            points: try store.points(in: session).map(exportFix),
+            pins: try store.pins(in: session).map { IosExportPin(fix: exportFix($0.fix), text: $0.text) },
+            summaryText: stats.description)
+    }
+
     private func shareRecording(format: String) throws {
         guard let session = displayed else { alert("No recording", "Record a track first."); return }
-        let points = try store.points(in: session)
-        let pins = try store.pins(in: session)
-        let stats = try summary(session)
-        let contents = format == "gpx"
-            ? RecordingExports.gpx(name: "Trail recording", points: points, pins: pins, summary: stats)
-            : RecordingExports.kml(name: "Trail recording", points: points, pins: pins, summary: stats)
+        let exported = try exportRecording(session, name: "Trail recording")
+        let contents = format == "gpx" ? exported.gpx : exported.kml
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Trail-exports/" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let url = root.appendingPathComponent("trail." + format)
