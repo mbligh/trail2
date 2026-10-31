@@ -173,6 +173,8 @@ class MapMigrationTest {
                     kotlin.math.abs(it.zoomLevelDouble - 14.5) < 0.001
             }
             cameraMatches()
+            val ui = RealComposeUi(scenario)
+            ui.text("14.5")
             val config = MapConfiguration(context)
             scenario.onActivity { renderer(it).setBasemap(config.basemaps.first { b -> b.name == "hybrid" }) }
             cameraMatches()
@@ -183,6 +185,7 @@ class MapMigrationTest {
                 assertFalse("Following must survive recreation", MainActivity::class.java.getDeclaredField("following").apply { isAccessible = true }.getBoolean(it))
             }
             cameraMatches()
+            ui.text("14.5")
             scenario.onActivity { following(it, true) }
             val down = SystemClock.uptimeMillis()
             fun touch(action: Int, step: Int) {
@@ -214,7 +217,11 @@ class MapMigrationTest {
                 assertEquals(0.0, state.cameraPosition.pitch, 0.0001)
                 state.scaleBy(2.0, androidx.compose.ui.unit.DpOffset(160.dp, 220.dp))
             }
-            await(scenario, "zoom input retains display convention") { it.zoomLevelDouble > 15.0 }
+            await(scenario, "zoom input retains display convention") { kotlin.math.abs(it.zoomLevelDouble - 15.5) < 0.001 }
+            ui.text("15.5")
+            scenario.onActivity { renderer(it).mapState!!.scaleBy(0.5, androidx.compose.ui.unit.DpOffset(160.dp, 220.dp)) }
+            await(scenario, "zoom out returns to previous level") { kotlin.math.abs(it.zoomLevelDouble - 14.5) < 0.001 }
+            ui.text("14.5")
         }
     }
 

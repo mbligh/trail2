@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import net.pocketmap.shared.map.MapArtwork
 import net.pocketmap.shared.map.TrailMapContent
@@ -172,11 +173,16 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
                     when (event) {
                         is MapEvent.StyleLoadFailed -> onError(event.reason)
                         is MapEvent.SourceDataFailed -> onError(event.cause.message ?: "Unable to load map data")
-                        MapEvent.StyleLoaded -> { styleLoads++; onCameraChanged() }
-                        MapEvent.CameraMoved -> onCameraChanged()
+                        MapEvent.StyleLoaded -> styleLoads++
                         else -> Unit
                     }
                 }
+            }
+            // Camera state is synchronized by several backend events, including
+            // move-ended for immediate jumps/gesture steps. Observe the resulting
+            // state rather than reading it from only the CameraMoved event.
+            LaunchedEffect(state) {
+                snapshotFlow { state.cameraPosition }.collect { onCameraChanged() }
             }
             Box(Modifier.fillMaxSize()) {
                 MaplibreMap(state = state,

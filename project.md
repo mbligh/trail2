@@ -930,3 +930,18 @@ Before iOS distribution, audit the existing Swift 6 actor-conformance warnings
 and deployment minimum: the toolchain reports an ICU object built for iOS 18.5
 while the probe links with a 15.5 target. Simulator success does not establish
 support for that older minimum OS. These warnings predate this stage.
+
+
+## Zoom header regression fix (2026-10-31, validating)
+
+The user reports the header zoom number sticks at 15.0. The Android controller
+only notified the Activity on CameraMoved and style-load events, although the
+backend also synchronizes camera state at move-ended. Observe the actual Compose
+camera position with snapshotFlow, so the existing header formatter runs after
+the state changes for gestures, programmatic zoom and restored cameras. This
+retains the established MapLibre-to-display +1 zoom convention.
+
+Extend the existing production camera emulator test to assert the actual visible
+header text after programmatic zoom, Activity recreation, pinch-style scaleBy
+zoom in and zoom out. The map-state checks alone previously missed this stale
+header. Android 2.0.11 carries the fix; automated validation is pending.
