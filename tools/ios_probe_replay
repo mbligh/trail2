@@ -34,7 +34,7 @@ console_path = OUT / 'console.txt'
 console = console_path.open('w')
 process = subprocess.Popen(
     ['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console',
-     identifier, 'net.pocketmap.iosprobe'],
+     identifier, 'net.pocketmap.iosprobe', '--metal-probe'],
     stdout=console, stderr=subprocess.STDOUT)
 screenshot = OUT / 'ios-replay.png'
 try:
