@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.15 recording controls respond much better. The next stage shares location report text and adds the iOS fixed-location text editor; 2.0.16 validation is pending. The full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.15 recording controls respond much better. Android 2.0.16 shares location report text and adds the iOS fixed-location text editor; automated validation passed and the Android report phone check is next. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1244,7 +1244,7 @@ conversion are removed. Pause migration until the reported response issue is
 confirmed resolved. iOS source is unchanged by this fix.
 
 
-## Location report text and iOS editor — 2.0.16 in validation
+## Location report text and iOS editor — validated 2.0.16
 
 The user confirmed the 2.0.15 recording-response fix on their Android phone.
 `LocationReportText` now owns the coordinate/link layout in common code. Android
@@ -1258,13 +1258,24 @@ contract and satellite URL. iOS supplies its POSIX formatter to the same writer.
 The iOS report action captures a fresh fix (30-second limit, matching Android),
 opens a multiline native editor with accuracy, and shares the edited text after
 dismissing the editor. It guards duplicate actions and cancel, and never replaces
-the captured report from live fixes. Simulator write/read fixtures must check the
+the captured report from live fixes. Simulator write/read fixtures checked the
 actual linked common payload, multiline Unicode edits, duplicate share and cancel
 handlers (`PLATFORM_REPORT_TEST_PASS`). These are handler-level tests, not automated
 touches in an external share application. iOS camera attachment remains a later
 adapter stage. Android camera behavior is unchanged.
 
-Required validation: Android build/lint/common and unit tests, production emulator
-checks, Play publication, iOS device/simulator linking and Metal/native persistence
-checks. After successful CI, the next Android phone gate is location-report text,
-satellite link, editing and photo attachment/cancel/retake sharing.
+Implementation: `f22fb82b0361a067930488812cf0860df4156f22` on main.
+
+Validation passed:
+
+- [APK build and download-site deployment](https://github.com/mbligh/trail2/actions/runs/41299971819).
+- [Play internal-testing publication](https://github.com/mbligh/trail2/actions/runs/41299971823), version **2.0.16**.
+- [Production smoke tests](https://github.com/mbligh/trail2/actions/runs/41299971880): build/lint/common and Android unit tests, 18 production emulator tests including the new report chooser check, plus one portrait gesture/cutout and one landscape check (**20 emulator invocations**).
+- [iOS framework and Metal checks](https://github.com/mbligh/trail2/actions/runs/41299971862): iPhone/simulator frameworks, common tests on iOS, Swift host apps, synthetic Metal, report-editing handlers in write/read persistence fixtures, offline maps and trail-cache rendering across relaunch.
+
+**Next phone gate:** update through Play to **2.0.16**, open the report flag,
+check the coordinates and satellite map link, add a description and share. Also
+check photo capture/cancel/retake and photo-plus-text sharing once. The Android
+photo adapter itself was not changed, and real camera/receiving-app behavior is
+outside the emulator text chooser check. Pause at this Android regression gate;
+no iOS phone testing is requested.
