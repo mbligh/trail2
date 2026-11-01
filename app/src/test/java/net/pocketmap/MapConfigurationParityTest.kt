@@ -22,8 +22,20 @@ class MapConfigurationParityTest {
             val enabled = shared.overlays.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.map { it.id }.toSet()
             for (map in shared.basemaps) {
                 // Preserve source identities/definitions at the native tile-routing boundary.
-                val route: (String, JSONObject) -> JSONObject = { id, source -> source.put("testRoute", id) }
-                assertJsonEquals(legacy.style(map, enabled, route), shared.styleJson(map, enabled, route), "${map.name}:$enabled")
+                val oldSources = mutableMapOf<String, String>()
+                val newSources = mutableMapOf<String, String>()
+                // Production TileRepository copies each definition before rewriting it.
+                val oldStyle = legacy.style(map, enabled) { id, source ->
+                    oldSources[id] = source.toString()
+                    JSONObject(source.toString()).put("testRoute", id)
+                }
+                val newStyle = shared.styleJson(map, enabled) { id, source ->
+                    newSources[id] = source.toString()
+                    JSONObject(source.toString()).put("testRoute", id)
+                }
+                assertJsonEquals(oldStyle, newStyle, "${map.name}:$enabled")
+                // TileRepository hashes source.toString(): check exact cache identities too.
+                assertEquals("${map.name}:$enabled source cache identities", oldSources, newSources)
                 // Building another selection must not mutate stored definitions or earlier results.
                 assertJsonEquals(legacy.sources, shared.sources)
             }
