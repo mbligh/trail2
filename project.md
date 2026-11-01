@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.16 report sharing works. Android 2.0.17 shares basemap configuration/style composition and is validated/published, awaiting the map-controls phone check. The iOS report photo adapter and shared Bright style builder passed device builds and simulator checks. The full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.17 map controls work. The next stage connects iOS basemap selection, bounded online tile caching and map-view persistence, and shares the zoom conversion with Android; 2.0.18 validation is pending. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1338,3 +1338,54 @@ that imported trails and blue recording lines/pins remain after style switches.
 Pause migration at this Android regression gate. Real iOS camera capture and
 receiving-app behavior remain unverified until provisioned Apple hardware is
 available; no iOS phone test is requested from the user.
+
+
+## iOS map selection/cache/preferences and shared zoom — 2.0.18 in validation
+
+The user confirmed the 2.0.17 phone map-controls gate. The native iOS app now opens
+the real host by default; the synthetic Metal-only probe uses `--metal-probe`.
+Basemap choices/labels/attribution come from the shared registry. Bright, hybrid,
+NJ satellite, OSM raster and OpenTopoMap use the existing immutable bundled assets
+first. Missing configured tiles use URLSession and a persistent per-URL/source-
+definition cache. There are no bulk downloads. Contour/PMTiles overlay adapters
+remain unfinished on iOS, and uncached glyph ranges beyond bundled fonts are not
+fetched yet.
+
+`MapResourceCache` reuses the existing streamed download adapter with an 8 MiB
+resource cap (KML retains 5 MiB), at most four simultaneous downloads,
+HTTP 200/nonempty validation, 20-second request/
+40-second resource timeouts and atomic writes. The cache key includes the full
+resolved source definition and URL, preserving cacheVersion separation. Offline
+mode never starts a download. The Swift-to-Kotlin map loader now completes
+asynchronously, avoiding blocking the UI or a coroutine worker on network I/O.
+Network access is enabled in the normal app; existing offline fixtures keep it
+explicitly disabled. Raster fallback is restricted to known configured source IDs,
+validated XYZ coordinates and HTTPS templates; localhost HTTP overrides are only
+supplied by the opt-in simulator fixture.
+
+`MapViewPreferences` stores the selected basemap, displayed camera zoom/center and
+trail visibility in UserDefaults. Unknown basemaps or invalid/nonfinite camera
+values fall back safely. Map changes save immediately, and backgrounding saves
+the live camera/trail state. Style replacement preserves the existing camera,
+trails, recording and pins. The shared `MapZoom` contains the existing 256px UI to
+512px renderer conversion, now used by both Android and iOS. Common tests compare
+all displayed tenths from 3 through 19 and the renderer limits with the legacy
+formula. Android behavior is intended to stay the same.
+
+Native tests cover cache cold/offline relaunch, identity/version separation,
+HTTP errors, empty/oversized streaming responses, preference roundtrip and invalid
+camera values. The simulator's new `basemaps_simulator` serves solid raster fixture
+tiles locally. It switches all five basemaps through the same production action
+handler and queries actual imported-trail/recording/pin features after each style
+load, asserting the camera stays fixed. A cold relaunch must restore a nondefault
+camera and Topo choice, query those overlays and render the cached yellow raster
+with blue/red overlays while networking is disabled and the HTTP request count
+stays unchanged. Test settings use a dedicated UserDefaults suite; normal settings
+are not reset. This checks action handlers, not automated taps on the dropdown.
+
+Required validation: Android build/lint/common/unit tests, 20 emulator invocations
+including zoom/header/recreation checks, publication; native Swift tests/typecheck;
+iOS device/simulator linking, shared tests, Metal, recording/export/report/photo
+fixtures, offline maps, trail cache and new map-switch/cache relaunch fixture.
+Once green, the Android phone gate is pinch zoom/header, basemap switching and
+camera scale/center after restart in **2.0.18**. No iOS physical test is requested.

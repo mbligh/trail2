@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Switch all iOS styles, preserve overlays/camera, then render cached raster offline."""
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
+import json
+from pathlib import Path
+import subprocess
+import threading
+import time
+from PIL import Image
+
+OUT = Path(__file__).resolve().parent / 'build/smoke'
+COLORS = {'nj-orthos': (220, 130, 150), 'osm-raster': (150, 210, 170), 'topo-raster': (245, 220, 70)}
+TILES = {}
+for key, color in COLORS.items():
+    buffer = BytesIO()
+    Image.new('RGB', (256, 256), color).save(buffer, 'PNG')
+    TILES[key] = buffer.getvalue()
+
+
+class Handler(BaseHTTPRequestHandler):
+    requests = 0
+    def do_GET(self):
+        Handler.requests += 1
+        body = TILES.get(self.path.split('/')[1])
+        self.send_response(200 if body else 404)
+        self.send_header('Content-Type', 'image/png')
+        self.send_header('Content-Length', str(len(body or b'')))
+        self.end_headers()
+        self.wfile.write(body or b'')
+
+
+server = ThreadingHTTPServer(('localhost', 0), Handler)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], timeout=60))
+identifier = next(d['udid'] for runtime, values in devices['devices'].items() if '.iOS-' in runtime
+                  for d in values if 'iPhone' in d['name'] and d['state'] == 'Booted')
+try:
+    for phase in ('write', 'read'):
+        count = Handler.requests
+        output = OUT / f'basemaps-{phase}-console.txt'
+        with output.open('w') as log:
+            app = subprocess.Popen(['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console', identifier,
+                'net.pocketmap.iosprobe', '--basemap-self-test', phase, f'http://localhost:{server.server_port}'], stdout=log, stderr=subprocess.STDOUT)
+            try:
+                deadline = time.monotonic() + 150
+                settled = 0
+                while time.monotonic() < deadline:
+                    if app.poll() is not None:
+                        raise RuntimeError(f'Basemap app exited: {phase}; see {output}')
+                    console = output.read_text(errors='replace')
+                    if f'IOS_BASEMAP_ALL_PASS:{phase}' in console and 'IOS_MAP_CACHE_HIT:' in console:
+                        screenshot = OUT / f'basemaps-{phase}.png'
+                        subprocess.run(['xcrun', 'simctl', 'io', identifier, 'screenshot', str(screenshot)], check=True, timeout=60)
+                        image = Image.open(screenshot).convert('RGB')
+                        pixels = list(image.crop((0, image.height // 5, image.width, image.height * 4 // 5)).getdata())
+                        yellow = sum(r > 220 and g > 190 and b < 110 for r, g, b in pixels)
+                        blue = sum(b > r + 50 and b > g + 35 for r, g, b in pixels)
+                        red = sum(r > g + 60 and r > b + 60 for r, g, b in pixels)
+                        settled = settled + 1 if yellow > 10000 and blue > 500 and red > 500 else 0
+                        if settled >= 2:
+                            if phase == 'write':
+                                for name in ('bright', 'hybrid', 'njsatellite', 'openstreetmap', 'opentopomap'):
+                                    assert f'IOS_BASEMAP_RENDER_PASS:{name}' in console
+                                assert Handler.requests > count
+                            else:
+                                assert Handler.requests == count, 'Offline relaunch made a network request'
+                            print(f'iOS basemap/camera/cache passed {phase}: yellow={yellow}, blue={blue}, red={red}', flush=True)
+                            break
+                    time.sleep(1)
+                else:
+                    raise AssertionError(f'Basemap fixture failed: {phase}; see {output}')
+            finally:
+                subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'], check=False, timeout=30)
+                try: app.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    app.terminate(); app.wait(timeout=15)
+        print(output.read_text(errors='replace')[-30000:], flush=True)
+finally:
+    server.shutdown()

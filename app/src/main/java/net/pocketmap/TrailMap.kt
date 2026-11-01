@@ -1,5 +1,7 @@
 package net.pocketmap
 
+import net.pocketmap.shared.map.MapZoom
+
 import android.content.Context
 import android.graphics.*
 import android.location.Location
@@ -67,7 +69,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     var onCameraChanged: () -> Unit = {}
     var onDrag: () -> Unit = {}
     var onError: (String) -> Unit = {}
-    val zoomLevelDouble: Double get() = mapState?.cameraPosition?.zoom?.plus(1.0) ?: initialZoom
+    val zoomLevelDouble: Double get() = mapState?.cameraPosition?.zoom?.let(MapZoom::displayed) ?: initialZoom
     val mapCenter: LatLng get() = mapState?.cameraPosition?.center?.let { LatLng(it.latitude, it.longitude) } ?: initialCenter
     val controller get() = this
 
@@ -77,7 +79,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
     }
     fun setZoom(zoom: Double) {
         initialZoom = zoom
-        mapState?.let { it.setCameraPosition(it.cameraPosition.copy(zoom = (zoom - 1.0).coerceIn(2.0, 18.0))) }
+        mapState?.let { it.setCameraPosition(it.cameraPosition.copy(zoom = MapZoom.renderer(zoom))) }
     }
     fun setBasemap(value: Basemap) { selectedBasemap = value }
     fun setOverlays(ids: Set<String>) { enabled = ids.toSet() }
@@ -153,7 +155,7 @@ class TrailMap(context: Context, private val config: MapConfiguration, initial: 
                 catch (error: Exception) { onError(error.message ?: "Unable to load map"); BaseStyle.Empty }
             }
             val state = rememberMapState(runtime = runtime, baseStyle = style,
-                initialCameraPosition = CameraPosition(center = Position(initialCenter.longitude, initialCenter.latitude), zoom = (initialZoom - 1.0).coerceIn(2.0, 18.0)),
+                initialCameraPosition = CameraPosition(center = Position(initialCenter.longitude, initialCenter.latitude), zoom = MapZoom.renderer(initialZoom)),
                 content = { TrailMapContent(trailJson, trackJson, pinJson, artwork) { name, offset ->
                     val density = resources.displayMetrics.density
                     showLabel(name, (offset.x.value * density).toInt(), (offset.y.value * density).toInt())

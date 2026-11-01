@@ -16,9 +16,12 @@ import UIKit
     private var testFix: RecordedFix?
     private var offlineResources: OfflineResources?
 
-    init(testing: Bool = false) {
+    private var preferences: MapViewPreferences?
+    private var mapSettings = MapViewSettings()
+
+    init(testing: Bool = false, networkEnabled: Bool = false, basemapPhase: String? = nil, fixtureOrigin: String? = nil) {
         do {
-            if testing {
+            if testing || basemapPhase != nil {
                 let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                        appropriateFor: nil, create: true)
                 store = try RecordingStore(directory: root.appendingPathComponent("Trail/integration-fixture"))
@@ -31,12 +34,28 @@ import UIKit
         if testing {
             style = "{\"version\":8,\"sources\":{},\"layers\":[{\"id\":\"background\",\"type\":\"background\",\"paint\":{\"background-color\":\"#ffffff\"}}]}"
         } else {
-            let resources = OfflineResources()
+            let resources = OfflineResources(networkEnabled: networkEnabled, fixtureOrigin: fixtureOrigin)
+            let defaults: UserDefaults
+            if basemapPhase != nil {
+                defaults = UserDefaults(suiteName: "Trail-basemap-fixture")!
+                if basemapPhase == "write" { defaults.removePersistentDomain(forName: "Trail-basemap-fixture") }
+            } else { defaults = .standard }
+            let preferences = MapViewPreferences(defaults: defaults)
+            self.preferences = preferences
+            mapSettings = preferences.read(available: resources.basemaps.map { $0.id })
+            if basemapPhase == "write" {
+                mapSettings.latitude = 40.691; mapSettings.longitude = -74.773; mapSettings.zoom = 15
+            }
             offlineResources = resources
-            do { style = try resources.style() }
+            do { style = try resources.style(name: mapSettings.basemap) }
             catch { fatalError("Cannot prepare offline map style: \(error)") }
         }
         model = IosRecordingHost(actions: self, resources: offlineResources, styleJson: style)
+        if let resources = offlineResources {
+            model.configureMaps(choices: resources.basemaps, selected: mapSettings.basemap,
+                camera: IosMapCamera(latitude: mapSettings.latitude, longitude: mapSettings.longitude, zoom: mapSettings.zoom),
+                trailsVisible: mapSettings.trailsVisible)
+        }
         for id in ["1763", "1899", "1205", "503"] {
             if let url = Bundle.main.resourceURL?.appendingPathComponent("trail-icons/mymaps_\(id).png"),
                let data = try? Data(contentsOf: url) { model.installIcon(id: id, png: Self.kotlinBytes(data)) }
@@ -46,6 +65,32 @@ import UIKit
         catch { show(error) }
         location.onChange = { [weak self] in self?.refresh() }
         refresh()
+    }
+
+    func saveMapSettings() {
+        guard let preferences else { return }
+        let camera = model.currentCamera()
+        mapSettings.latitude = camera.latitude; mapSettings.longitude = camera.longitude; mapSettings.zoom = camera.zoom
+        mapSettings.trailsVisible = model.areTrailsVisible()
+        preferences.save(mapSettings)
+    }
+
+    func basemapSelfTest(phase: String) throws {
+        if phase == "read" {
+            guard mapSettings.basemap == "opentopomap", abs(mapSettings.latitude - 40.691) < 0.000001,
+                  abs(mapSettings.longitude + 74.773) < 0.000001, abs(mapSettings.zoom - 15) < 0.001 else {
+                throw RecordingStoreError.corruptSession
+            }
+        }
+        let document = try parseTrails(Data("<kml><Document><Folder><name>Trails</name><Placemark><name>Basemap trail</name><Style><LineStyle><color>ff0000ff</color><width>8</width></LineStyle></Style><LineString><coordinates>-74.779,40.695 -74.763,40.689</coordinates></LineString></Placemark></Folder></Document></kml>".utf8))
+        model.showTrails(document: document, status: "Basemap fixture")
+        let geometry = IosTrackBridge().recording(points: [
+            IosRecordedPoint(latitude: 40.689, longitude: -74.777, time: 0),
+            IosRecordedPoint(latitude: 40.694, longitude: -74.766, time: 30000)],
+            pins: [IosRecordedPin(latitude: 40.694, longitude: -74.766, text: "Basemap pin")])
+        model.update(status: "Basemap fixture", recording: false, hasFix: false, latitude: 0, longitude: 0,
+                     heading: -1, track: geometry.track, pins: geometry.pins)
+        model.verifyBasemaps(phase: phase)
     }
 
     func selfTest(phase: String) throws {
@@ -213,6 +258,24 @@ import UIKit
     }
 
     func perform(action: String) {
+        if action.hasPrefix("basemap:") {
+            let name = String(action.dropFirst("basemap:".count))
+            guard let resources = offlineResources, resources.basemaps.contains(where: { $0.id == name }) else { return }
+            do {
+                let style = try resources.style(name: name)
+                model.selectBasemap(name: name, style: style)
+                mapSettings.basemap = name
+                saveMapSettings()
+            } catch { show(error) }
+            return
+        }
+        if action.hasPrefix("basemapRenderPass:") {
+            print("IOS_BASEMAP_RENDER_PASS:" + action.dropFirst("basemapRenderPass:".count)); fflush(stdout); return
+        }
+        if action.hasPrefix("basemapAllPass:") {
+            saveMapSettings()
+            print("IOS_BASEMAP_ALL_PASS:" + action.dropFirst("basemapAllPass:".count)); fflush(stdout); return
+        }
         if action.hasPrefix("platformRenderPass:") {
             print("IOS_PLATFORM_RENDER_PASS:" + action.dropFirst("platformRenderPass:".count))
             fflush(stdout)
@@ -267,7 +330,9 @@ import UIKit
                 controller.present(UINavigationController(rootViewController: editor), animated: true)
             case "SHARE_GPX": try chooseRecording(format: "gpx")
             case "SHARE_KML": try chooseRecording(format: "kml")
-            case "credits": alert("Map", "MapLibre Compose / Metal. © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors · Natural Earth. Bundled Tewksbury street map; other iOS basemaps and layers are not connected yet.")
+            case "credits":
+                let choice = offlineResources?.basemaps.first { $0.id == mapSettings.basemap }
+                alert(choice?.label ?? "Map", (choice?.attribution ?? "MapLibre Compose / Metal") + "\n" + (choice?.attributionUrl ?? "") + "\nBright streets are bundled for Tewksbury. Other maps use downloaded tiles; cached tiles remain available offline.")
             case "recenter": location.startForegroundUpdates()
             default:
                 if action.hasPrefix("label:") { alert("Pin", String(action.dropFirst(6))) }

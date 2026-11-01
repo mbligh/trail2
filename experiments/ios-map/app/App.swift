@@ -12,9 +12,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ) -> Bool {
         let window = UIWindow(frame: UIScreen.main.bounds)
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--platform-host") || arguments.contains("--platform-self-test") || arguments.contains("--offline-map-test") || arguments.contains("--trail-cache-test") {
+        if !arguments.contains("--metal-probe") {
             let testing = arguments.contains("--platform-self-test") || arguments.contains("--trail-cache-test")
-            let host = RecordingHost(testing: testing)
+            let basemapFlag = arguments.firstIndex(of: "--basemap-self-test")
+            let phase = basemapFlag.flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
+            let origin = basemapFlag.flatMap { arguments.indices.contains($0 + 2) ? arguments[$0 + 2] : nil }
+            let normal = !testing && !arguments.contains("--offline-map-test") && basemapFlag == nil
+            let host = RecordingHost(testing: testing, networkEnabled: normal || phase == "write", basemapPhase: phase, fixtureOrigin: origin)
             recordingHost = host
             window.rootViewController = host.controller
             if arguments.contains("--platform-self-test") {
@@ -31,10 +35,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 catch { fatalError("Trail cache self-test failed: \(error)") }
             }
         }
-        if arguments.contains("--platform-host") { recordingHost?.start() }
+        if let flag = arguments.firstIndex(of: "--basemap-self-test"), arguments.count > flag + 1 {
+            do { try recordingHost?.basemapSelfTest(phase: arguments[flag + 1]) }
+            catch { fatalError("Basemap self-test failed: \(error)") }
+        } else if arguments.contains("--platform-host") || arguments.count == 1 { recordingHost?.start() }
         return true
     }
     func applicationDidEnterBackground(_ application: UIApplication) {
+        recordingHost?.saveMapSettings()
         recordingHost?.location.enteredBackground()
     }
     func applicationWillEnterForeground(_ application: UIApplication) {

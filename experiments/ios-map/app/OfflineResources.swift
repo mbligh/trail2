@@ -5,18 +5,26 @@ import TrailIosProbe
 /// SQLite readers serialize their own access; UI actions remain on the main actor.
 final class OfflineResources: NSObject, IosMapResourceReader {
     private let bundle: OfflineMapBundle
+    private let cache: MapResourceCache
+    private let networkEnabled: Bool
+    private let fixtureOrigin: String?
     private let configuration: IosMapConfiguration
 
-    override init() {
+    init(networkEnabled: Bool = false, fixtureOrigin: String? = nil, cacheDirectory: URL? = nil) {
+        self.networkEnabled = networkEnabled
+        self.fixtureOrigin = fixtureOrigin
         do {
             guard let root = Bundle.main.resourceURL else { throw MapArchiveError.sqlite("No app resource directory") }
             bundle = try OfflineMapBundle(directory: root.appendingPathComponent("mapAssets"))
+            let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            cache = try MapResourceCache(directory: cacheDirectory ?? caches.appendingPathComponent("Trail/map-resources"))
             configuration = IosMapConfiguration(reader: BundledMapAssets(root: root))
         } catch { fatalError("Cannot load bundled offline map: \(error)") }
         super.init()
     }
 
-    func style() throws -> String { try bundle.route(styleJson: configuration.style(name: "bright")) }
+    var basemaps: [IosBasemapOption] { configuration.basemaps }
+    func style(name: String = "bright") throws -> String { try bundle.route(styleJson: configuration.style(name: name)) }
 
     static func verifyConfiguration() throws {
         let resources = OfflineResources()
@@ -36,20 +44,28 @@ final class OfflineResources: NSObject, IosMapResourceReader {
         }
     }
 
-    func read(url: String) -> KotlinByteArray? {
-        do {
-            guard let data = try bundle.read(url: url) else { return nil }
-            let bytes = KotlinByteArray(size: Int32(data.count))
-            for (index, byte) in data.enumerated() { bytes.set(index: Int32(index), value: Int8(bitPattern: byte)) }
-            if url.hasPrefix("https://trail.ios.invalid/") {
-                print("IOS_OFFLINE_TILE_HIT:\(url)")
-                fflush(stdout)
+    func read(url: String, completion: IosResourceCompletion) {
+        Task {
+            do {
+                var data = try bundle.read(url: url)
+                if data == nil, let remote = bundle.remoteResource(url: url, fixtureOrigin: fixtureOrigin) {
+                    data = try await cache.read(url: remote.url, identity: remote.identity, networkEnabled: networkEnabled)
+                    if data != nil {
+                        print("IOS_MAP_CACHE_HIT:\(url)")
+                        fflush(stdout)
+                    }
+                }
+                guard let data else { completion.complete(bytes: nil); return }
+                let bytes = KotlinByteArray(size: Int32(data.count))
+                for (index, byte) in data.enumerated() { bytes.set(index: Int32(index), value: Int8(bitPattern: byte)) }
+                if url.hasPrefix("https://trail.ios.invalid/") {
+                    print("IOS_OFFLINE_TILE_HIT:\(url)"); fflush(stdout)
+                }
+                completion.complete(bytes: bytes)
+            } catch {
+                print("IOS_OFFLINE_RESOURCE_ERROR:\(error)"); fflush(stdout)
+                completion.complete(bytes: nil)
             }
-            return bytes
-        } catch {
-            print("IOS_OFFLINE_RESOURCE_ERROR:\(error)")
-            fflush(stdout)
-            return nil
         }
     }
 }

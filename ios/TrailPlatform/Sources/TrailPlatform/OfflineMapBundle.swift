@@ -67,6 +67,24 @@ public final class OfflineMapBundle {
         return String(decoding: try JSONSerialization.data(withJSONObject: style, options: [.sortedKeys]), as: UTF8.self)
     }
 
+    public func remoteResource(url: String, fixtureOrigin: String? = nil) -> (url: URL, identity: String)? {
+        guard let parsed = URL(string: url), parsed.host == "trail.ios.invalid" else { return nil }
+        let path = parsed.path.split(separator: "/")
+        guard path.count == 4, let z = Int(path[1]), let x = Int(path[2]), let y = Int(path[3]),
+              (0...30).contains(z), x >= 0, y >= 0, x < 1 << z, y < 1 << z,
+              let source = definitions[String(path[0])], let templates = source["tiles"] as? [String],
+              let first = templates.first else { return nil }
+        var template = first
+        if let fixtureOrigin, source["type"] as? String == "raster" {
+            template = fixtureOrigin + "/\(path[0])/{z}/{x}/{y}.png"
+        }
+        let value = template.replacingOccurrences(of: "{z}", with: String(z))
+            .replacingOccurrences(of: "{x}", with: String(x)).replacingOccurrences(of: "{y}", with: String(y))
+        guard let remote = URL(string: value), remote.scheme == "https" || (fixtureOrigin != nil && remote.host == "localhost"),
+              let identity = try? JSONSerialization.data(withJSONObject: source, options: [.sortedKeys]) else { return nil }
+        return (remote, String(decoding: identity, as: UTF8.self))
+    }
+
     public func read(url: String) throws -> Data? {
         if let relative = resources[url.removingPercentEncoding ?? url], let path = Self.safeFile(relative, root: root) {
             return try Data(contentsOf: path)

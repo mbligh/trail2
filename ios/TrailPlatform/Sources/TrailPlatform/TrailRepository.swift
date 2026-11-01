@@ -29,7 +29,7 @@ public final class TrailRepository {
     }
 
     public func refresh(validate: (Data) throws -> Void) async throws -> Data {
-        let bytes = try await BoundedTrailDownload.load(url: url, configuration: configuration)
+        let bytes = try await BoundedResourceDownload.load(url: url, configuration: configuration, maxBytes: Self.maxBytes)
         try validate(bytes)
         // Foundation's atomic replacement leaves the last validated map intact
         // on invalid responses, interrupted downloads and write failures.
@@ -38,14 +38,16 @@ public final class TrailRepository {
     }
 }
 
-private final class BoundedTrailDownload: NSObject, URLSessionDataDelegate {
+final class BoundedResourceDownload: NSObject, URLSessionDataDelegate {
     private var bytes = Data()
+    private var maxBytes = 0
     private var continuation: CheckedContinuation<Data, Error>?
     private var session: URLSession?
 
-    static func load(url: URL, configuration: URLSessionConfiguration) async throws -> Data {
+    static func load(url: URL, configuration: URLSessionConfiguration, maxBytes: Int) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
-            let download = BoundedTrailDownload()
+            let download = BoundedResourceDownload()
+            download.maxBytes = maxBytes
             download.continuation = continuation
             let queue = OperationQueue()
             queue.maxConcurrentOperationCount = 1
@@ -64,7 +66,7 @@ private final class BoundedTrailDownload: NSObject, URLSessionDataDelegate {
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             completionHandler(.cancel); finish(.failure(TrailDownloadError.response)); return
         }
-        guard response.expectedContentLength <= Int64(TrailRepository.maxBytes) else {
+        guard response.expectedContentLength <= Int64(maxBytes) else {
             completionHandler(.cancel); finish(.failure(TrailDownloadError.tooLarge)); return
         }
         completionHandler(.allow)
@@ -72,7 +74,7 @@ private final class BoundedTrailDownload: NSObject, URLSessionDataDelegate {
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard continuation != nil else { return }
-        guard bytes.count + data.count <= TrailRepository.maxBytes else {
+        guard bytes.count + data.count <= maxBytes else {
             dataTask.cancel(); finish(.failure(TrailDownloadError.tooLarge)); return
         }
         bytes.append(data)

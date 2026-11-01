@@ -23,9 +23,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.IntSize
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import net.pocketmap.shared.map.MapZoom
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import net.pocketmap.shared.map.MapArtwork
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeUIViewController
@@ -46,11 +48,27 @@ import org.maplibre.compose.style.BaseStyle
 import org.maplibre.spatialk.geojson.Position
 
 interface IosPlatformActions { fun perform(action: String) }
-interface IosMapResourceReader { fun read(url: String): ByteArray? }
+interface IosResourceCompletion { fun complete(bytes: ByteArray?) }
+interface IosMapResourceReader { fun read(url: String, completion: IosResourceCompletion) }
+data class IosMapCamera(val latitude: Double, val longitude: Double, val zoom: Double)
 
 /** iOS integration host with native storage and the common map renderer. */
 class IosRecordingHost(private val actions: IosPlatformActions,
-    private val resources: IosMapResourceReader?, private val styleJson: String) {
+    private val resources: IosMapResourceReader?, styleJson: String) {
+    private var styleJson by mutableStateOf(styleJson)
+    private var choices by mutableStateOf(listOf(IosBasemapOption("bright", "Bright", "", "")))
+    private var selectedBasemap by mutableStateOf("bright")
+    private var initialCamera = IosMapCamera(40.692, -74.771, 14.5)
+    private var camera = initialCamera
+    private var basemapCheck by mutableStateOf("")
+    fun configureMaps(choices: List<IosBasemapOption>, selected: String, camera: IosMapCamera, trailsVisible: Boolean) {
+        this.choices = choices; selectedBasemap = selected; initialCamera = camera; this.camera = camera
+        this.trailsVisible = trailsVisible
+    }
+    fun selectBasemap(name: String, style: String) { selectedBasemap = name; styleJson = style }
+    fun currentCamera() = camera
+    fun areTrailsVisible() = trailsVisible
+    fun verifyBasemaps(phase: String) { basemapCheck = phase }
     private var status by mutableStateOf("Location not started")
     private var recording by mutableStateOf(false)
     private var position by mutableStateOf<Position?>(null)
@@ -93,7 +111,13 @@ class IosRecordingHost(private val actions: IosPlatformActions,
     fun viewController() = ComposeUIViewController {
         val runtime = remember { createMapRuntime {
             resourceProvider = MapResourceProvider(accepts = { true }, load = { request ->
-                val bytes = withContext(Dispatchers.Default) { resources?.read(request.url) }
+                val bytes = suspendCancellableCoroutine<ByteArray?> { continuation ->
+                    val reader = resources
+                    if (reader == null) continuation.resume(null)
+                    else reader.read(request.url, object : IosResourceCompletion {
+                        override fun complete(bytes: ByteArray?) { if (continuation.isActive) continuation.resume(bytes) }
+                    })
+                }
                 if (bytes == null) MapResourceLoad.NoContent() else MapResourceLoad.Bytes(bytes)
             })
         } }
@@ -127,10 +151,45 @@ class IosRecordingHost(private val actions: IosPlatformActions,
         var pointers by remember { mutableStateOf(0) }
         var mapSize by remember { mutableStateOf(IntSize.Zero) }
         val density = LocalDensity.current
+        val style = remember(styleJson) { BaseStyle.Json(styleJson) }
         val map = rememberMapState(runtime = runtime,
-            baseStyle = BaseStyle.Json(styleJson),
-            initialCameraPosition = CameraPosition(center = Position(-74.771, 40.692), zoom = 13.5),
+            baseStyle = style,
+            initialCameraPosition = CameraPosition(center = Position(initialCamera.longitude, initialCamera.latitude), zoom = MapZoom.renderer(initialCamera.zoom)),
             content = { TrailMapContent(if (trailsVisible) trails?.geoJson ?: EMPTY else EMPTY, track, pins, artwork + trailArtwork) { name, _ -> actions.perform("label:$name") } })
+        var styleLoads by remember { mutableStateOf(0) }
+        LaunchedEffect(map) { map.events.collect { if (it == MapEvent.StyleLoaded) styleLoads++ } }
+        LaunchedEffect(map) {
+            snapshotFlow { map.cameraPosition }.collect {
+                camera = IosMapCamera(it.center.latitude, it.center.longitude, MapZoom.displayed(it.zoom))
+            }
+        }
+        LaunchedEffect(basemapCheck, mapSize) {
+            if (basemapCheck.isEmpty() || mapSize == IntSize.Zero) return@LaunchedEffect
+            val before = map.cameraPosition
+            val names = if (basemapCheck == "write") choices.map { it.id } else listOf("opentopomap")
+            for (name in names) {
+                val needsLoad = selectedBasemap != name
+                val generation = styleLoads
+                actions.perform("basemap:$name")
+                var ready = false
+                repeat(120) {
+                    if (!ready && map.viewport != null && (!needsLoad || styleLoads > generation)) {
+                        val bounds = with(density) { DpRect(0.dp, 0.dp, mapSize.width.toDp(), mapSize.height.toDp()) }
+                        val features = map.queryRenderedFeatures(bounds, setOf("trail-lines", "trail-recording", "trail-recording-pins"))
+                        val labels = features.mapNotNull { it.properties?.get("name")?.jsonPrimitive?.content }.toSet()
+                        ready = setOf("Basemap trail", "Recorded trail", "Pin\nBasemap pin").all { it in labels }
+                    }
+                    if (!ready) delay(250)
+                }
+                check(ready) { "Overlays did not survive basemap $name" }
+                val after = map.cameraPosition
+                check(kotlin.math.abs(before.zoom - after.zoom) < 0.001 &&
+                    kotlin.math.abs(before.center.latitude - after.center.latitude) < 0.000001 &&
+                    kotlin.math.abs(before.center.longitude - after.center.longitude) < 0.000001) { "Basemap changed camera" }
+                actions.perform("basemapRenderPass:$name")
+            }
+            actions.perform("basemapAllPass:$basemapCheck")
+        }
         LaunchedEffect(position, following) {
             if (following) position?.let { map.setCameraPosition(map.cameraPosition.copy(center = it)) }
         }
@@ -200,8 +259,8 @@ class IosRecordingHost(private val actions: IosPlatformActions,
         Box(Modifier.fillMaxSize().background(Color.White).windowInsetsPadding(WindowInsets.safeDrawing)) {
             TrailScreen(
                 status = status, trailStatus = trailStatus, recordingStatus = if (recording) "Recording" else null,
-                basemaps = listOf(MapChoice("bright", if (resources == null) "Offline test canvas" else "Bright")), selectedBasemap = "bright",
-                onBasemapSelected = {}, basemapIcon = { BasemapArtwork() }, zoomLabel = ((map.cameraPosition.zoom + 1) * 10).toInt().let { "${it / 10}.${it % 10}" },
+                basemaps = choices.map { MapChoice(it.id, it.label) }, selectedBasemap = selectedBasemap,
+                onBasemapSelected = { actions.perform("basemap:$it") }, basemapIcon = { BasemapArtwork() }, zoomLabel = (MapZoom.displayed(map.cameraPosition.zoom) * 10).toInt().let { "${it / 10}.${it % 10}" },
                 onMapCredits = { actions.perform("credits") }, trailsVisible = trailsVisible,
                 mapLayers = emptyList(), onLayerToggled = {}, onMenuAction = { actions.perform(it.name) },
                 map = {

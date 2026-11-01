@@ -32,7 +32,7 @@ console_path = OUTPUT / 'console.txt'
 console = console_path.open('w')
 launch = subprocess.Popen(
     ['xcrun', 'simctl', 'launch', '--terminate-running-process', '--console',
-     identifier, 'net.pocketmap.iosprobe'], stdout=console, stderr=subprocess.STDOUT)
+     identifier, 'net.pocketmap.iosprobe', '--metal-probe'], stdout=console, stderr=subprocess.STDOUT)
 
 try:
     # --console remains attached for the app lifetime, but does not promise a
