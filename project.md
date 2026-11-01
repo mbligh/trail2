@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: Android 2.0.15 fixes recording-control feedback latency and is validated/published, awaiting the phone response check. The iOS and shared-summary migration remains at the validated 2.0.14 checkpoint; the full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.15 recording controls respond much better. The next stage shares location report text and adds the iOS fixed-location text editor; 2.0.16 validation is pending. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1242,3 +1242,29 @@ response and the saved-summary dialog. Service startup and frame scheduling are
 still device-dependent; the built-in one-second status wait and redundant trail
 conversion are removed. Pause migration until the reported response issue is
 confirmed resolved. iOS source is unchanged by this fix.
+
+
+## Location report text and iOS editor — 2.0.16 in validation
+
+The user confirmed the 2.0.15 recording-response fix on their Android phone.
+`LocationReportText` now owns the coordinate/link layout in common code. Android
+keeps Locale.US formatting and its existing report editor/photo/share adapters;
+a frozen payload comparison covers hemispheres, bounds, signed zero, rounding,
+and a non-English default locale. An Android instrumentation check opens the real
+editor, changes the current fix, then verifies the chooser carries the original
+coordinates and edited Unicode text. Common tests check the six-decimal formatting
+contract and satellite URL. iOS supplies its POSIX formatter to the same writer.
+
+The iOS report action captures a fresh fix (30-second limit, matching Android),
+opens a multiline native editor with accuracy, and shares the edited text after
+dismissing the editor. It guards duplicate actions and cancel, and never replaces
+the captured report from live fixes. Simulator write/read fixtures must check the
+actual linked common payload, multiline Unicode edits, duplicate share and cancel
+handlers (`PLATFORM_REPORT_TEST_PASS`). These are handler-level tests, not automated
+touches in an external share application. iOS camera attachment remains a later
+adapter stage. Android camera behavior is unchanged.
+
+Required validation: Android build/lint/common and unit tests, production emulator
+checks, Play publication, iOS device/simulator linking and Metal/native persistence
+checks. After successful CI, the next Android phone gate is location-report text,
+satellite link, editing and photo attachment/cancel/retake sharing.

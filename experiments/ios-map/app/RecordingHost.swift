@@ -83,6 +83,9 @@ import UIKit
         guard text.exportDescription == stats.description, text.displaySummary == stats.displaySummary else {
             throw RecordingStoreError.corruptSession
         }
+        try LocationReportController.verifyEditing(message: reportMessage(
+            RecordedFix(latitude: 40.6727254, longitude: -74.7490004, time: 0, accuracy: 3)))
+        print("PLATFORM_REPORT_TEST_PASS:\(phase)")
         try RecordingPickerController.verifySelection(store: store, existing: session)
         print("PLATFORM_PICKER_TEST_PASS:\(phase)")
         let exported = try exportRecording(session, name: "Fixture & <woods>")
@@ -242,14 +245,19 @@ import UIKit
                 })
                 controller.present(prompt, animated: true)
             case "report":
+                guard controller.presentedViewController == nil else { return }
                 guard let fix = location.latestFix,
-                      Date().timeIntervalSince1970 - Double(fix.time) / 1000 <= 45 else {
+                      Date().timeIntervalSince1970 - Double(fix.time) / 1000 <= 30 else {
                     alert("Location unavailable", "Wait for a fresh location fix."); return
                 }
-                let text = "\(fix.latitude), \(fix.longitude)\nhttps://maps.google.com/?q=\(fix.latitude),\(fix.longitude)"
-                let share = UIActivityViewController(activityItems: [text], applicationActivities: nil)
-                share.popoverPresentationController?.sourceView = controller.view
-                controller.present(share, animated: true)
+                let editor = LocationReportController(message: reportMessage(fix), accuracy: fix.accuracy) { [weak self] text in
+                    guard let self else { return }
+                    let share = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+                    share.setValue("Trail location report", forKey: "subject")
+                    share.popoverPresentationController?.sourceView = self.controller.view
+                    self.controller.present(share, animated: true)
+                }
+                controller.present(UINavigationController(rootViewController: editor), animated: true)
             case "SHARE_GPX": try chooseRecording(format: "gpx")
             case "SHARE_KML": try chooseRecording(format: "kml")
             case "credits": alert("Map", "MapLibre Compose / Metal. © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors · Natural Earth. Bundled Tewksbury street map; other iOS basemaps and layers are not connected yet.")
@@ -260,6 +268,10 @@ import UIKit
             }
             refresh()
         } catch { show(error) }
+    }
+
+    private func reportMessage(_ fix: RecordedFix) -> String {
+        IosTrackBridge().locationReport(latitude: fix.latitude, longitude: fix.longitude, formatter: DecimalFormatter())
     }
 
     private func summary(_ session: RecordingSession) throws -> TrackExportStatistics {

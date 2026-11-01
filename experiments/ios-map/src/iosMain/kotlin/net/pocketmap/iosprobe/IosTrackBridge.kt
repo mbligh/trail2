@@ -9,6 +9,9 @@ import net.pocketmap.shared.recording.RecordingExportXml
 interface IosDecimalFormatter { fun format(value: Double, digits: Int): String }
 
 class IosTrackBridge {
+    fun locationReport(latitude: Double, longitude: Double, formatter: IosDecimalFormatter): String =
+        net.pocketmap.shared.LocationReportText.message(latitude, longitude, formatter::format)
+
     fun presentation(summary: IosTrackSummary, formatter: IosDecimalFormatter): IosSummaryPresentation {
         val s = TrackStatistics.Summary(summary.distanceMeters, summary.elapsedSeconds, summary.movingSeconds, summary.ascentMeters, summary.descentMeters)
         return IosSummaryPresentation(TrackSummaryText.description(s, formatter::format), TrackSummaryText.display(s, true, formatter::format))
