@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-10-31: the user confirmed Android 2.0.13 GPX/KML sharing works with pins and annotated pins. Android 2.0.14 shares summary presentation and is validated/published, awaiting the stop-summary phone check. The iOS saved-recording picker passes simulator checks; the full iOS app remains unfinished.
+Updated 2026-10-31: Android 2.0.15 fixes recording-control feedback latency and is validated/published, awaiting the phone response check. The iOS and shared-summary migration remains at the validated 2.0.14 checkpoint; the full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1176,7 +1176,7 @@ ascent/descent should display as before. Pause further migration until confirmed
 No new iOS device test is requested from the user.
 
 
-## Recording control responsiveness (2026-10-31, validating)
+## Recording control responsiveness (2026-10-31)
 
 The user reports slow circle-to-square feedback after pressing Record. The
 Activity previously learned recording state from its one-second polling tick,
@@ -1189,7 +1189,7 @@ service. The icon's fast path updates confirmed state without file reads or map
 conversion, while the existing tick refreshes point counts/overlays. Startup
 failures keep the circle and clear pending status; pending commands reject
 duplicate taps. Receivers follow the visible Activity lifecycle, with non-exported
-registration on newer Android versions and a polling/resume reconciliation fallback.
+registration through AndroidX compatibility on supported versions and a polling/resume reconciliation fallback.
 
 Stopping now waits for service shutdown before reading the completed recording
 and calculates the summary on a dedicated worker, retaining the actual stopped
@@ -1197,4 +1197,48 @@ file for its share button. Recording updates no longer rebuild the unrelated
 imported-trail GeoJSON. GPS sampling, accuracy policy and timeout stay unchanged.
 A production emulator test disables polling, invokes rapid duplicate taps, checks
 confirmed start/stop button semantics and verifies the saved-summary dialog. The
-existing map-layer and service tests cover preserved behavior. Validation pending.
+existing map-layer and service tests cover preserved behavior. Validation passed (checkpoint below).
+
+
+## Recording control response validated checkpoint (2026-10-31)
+
+Implementation through `0ca79d572b3997d3940c8ceb2dc31dacf78dbf79` is committed
+on main. Android 2.0.15 is published to Play internal testing and the existing
+APK download site. The one-second control poll predates recent migration work
+and appears in the original project import (`4906993`); summary formatting is
+only on the stop path, not between a start press and service setup.
+
+- Unit/shared tests, service regression checks, lint, offline coverage, native
+  alignment and APK/download-site publication passed:
+  https://github.com/mbligh/trail2/actions/runs/41255090436
+- Signed release checks and Play internal upload passed:
+  https://github.com/mbligh/trail2/actions/runs/41255090480
+- All nineteen emulator invocations passed (seventeen production tests plus
+  the two focused gesture/landscape inset checks):
+  https://github.com/mbligh/trail2/actions/runs/41255090503
+
+The new recording-response test removes all callbacks from the Activity's
+recording timer, invokes rapid duplicate start and stop taps, checks real button
+semantics against confirmed service state, verifies the recording file exists
+and waits for the post-shutdown summary dialog. This proves UI acknowledgement
+works without periodic polling; it does not claim a measured physical-phone
+latency. Existing GPS/timeout, geometry, pin, export, zoom and inset checks pass.
+
+Foreground notification, file creation and GPS registration still must succeed
+before showing recording as active. The UI fast path receives explicit service
+acknowledgements through a non-exported AndroidX receiver, reads actual state,
+shows starting/stopping status and rejects duplicate pending commands. Resume
+and the periodic point-refresh loop reconcile state if an event was missed.
+
+Stop summaries read the completed file on a separate worker after shutdown;
+newer recording commands invalidate older pending results. The dialog's share
+button retains that stopped file. Recording/pin refresh no longer serializes
+unchanged imported trails. Failed startup retains the circle. An initial lint
+failure on the legacy platform receiver branch was resolved with AndroidX's
+non-exported compatibility registration; the final checks above are green.
+
+**Phone recheck:** update through Play to **2.0.15** and compare start/stop button
+response and the saved-summary dialog. Service startup and frame scheduling are
+still device-dependent; the built-in one-second status wait and redundant trail
+conversion are removed. Pause migration until the reported response issue is
+confirmed resolved. iOS source is unchanged by this fix.
