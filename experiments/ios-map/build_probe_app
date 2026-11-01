@@ -37,6 +37,7 @@ test -s experiments/ios-map/build/mapAssets/offline-manifest.json
 ditto experiments/ios-map/build/mapAssets "$app/mapAssets"
 mkdir -p "$app/trail-icons"
 cp app/src/main/res/drawable-nodpi/mymaps_*.png "$app/trail-icons/"
+cp basemaps.json "$app/basemaps.json"
 cp experiments/ios-map/app/Info.plist "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string $platform" "$app/Info.plist"
@@ -44,7 +45,7 @@ sdk="$(xcrun --sdk "$sdk_name" --show-sdk-path)"
 xcrun --sdk "$sdk_name" swiftc -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
     -target "$triple" \
     -F "$framework" -framework TrailIosProbe \
-    -framework CoreLocation -framework UIKit -framework CoreFoundation -framework CoreGraphics \
+    -framework AVFoundation -framework CoreLocation -framework UIKit -framework CoreFoundation -framework CoreGraphics \
     -framework CoreText -framework Foundation -framework ImageIO \
     -framework Metal -framework QuartzCore -lc++ -lz -lsqlite3 \
     -Xlinker -ObjC \

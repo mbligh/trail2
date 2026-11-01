@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.15 recording controls respond much better. Android 2.0.16 shares location report text and adds the iOS fixed-location text editor; automated validation passed and the Android report phone check is next. The full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.16 report sharing works. The next stage adds iOS report photos and shares basemap configuration/style composition in Android and iOS; 2.0.17 validation is pending. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1279,3 +1279,46 @@ check photo capture/cancel/retake and photo-plus-text sharing once. The Android
 photo adapter itself was not changed, and real camera/receiving-app behavior is
 outside the emulator text chooser check. Pause at this Android regression gate;
 no iOS phone testing is requested.
+
+
+## iOS report photos and shared map configuration — 2.0.17 in validation
+
+The user confirmed the 2.0.16 location-report phone check. iOS report editing now
+has camera capture, a preview, retake and removal. Camera permission is requested
+only after Take photo; denial/unavailable camera keeps the editor and text flow.
+A cancelled retake keeps the prior attachment and edits. Successful capture
+normalizes orientation and creates a JPEG-backed image at most 2048 pixels on its
+long side, without forwarding camera metadata. Sharing passes the text and image
+to the native activity controller, which owns the image while the receiver uses it;
+there are no temporary attachment files or photo-library writes. The camera usage
+purpose is in Info.plist, and the host explicitly links AVFoundation.
+
+Simulator fixtures feed synthetic images through the real picker delegate and
+exercise cancelled retakes, replacement, removal, text preservation, size bounding,
+duplicate Share, blocked Share during capture and cancel. Both launch/relaunch
+phases require `PLATFORM_PHOTO_TEST_PASS`. These are handler checks, not physical
+camera capture, permission dialog automation or external receiving-app tests.
+
+`SharedMapConfiguration` now reads basemap/overlay metadata, merges source
+definitions, composes vector/raster styles and adds only enabled overlay sources
+and layers. Platform callbacks retain asset I/O and tile/cache routing. Android's
+Basemap name is an alias of the common value type; existing preferences, menus,
+attribution and cache routing are retained. A frozen pre-migration parser/builder
+compares the actual generated assets across five maps × both contour states
+(**10 combinations**), including ordering, source definitions and metadata.
+Common tests cover raster/vector construction, glyph fallback/preservation,
+disabled sources, immutable inputs and duplicate names/IDs/source rejection.
+
+The iOS Bright map now uses that same builder before native immutable MBTiles
+routing. Simulator fixtures also compose all five map choices and verify their
+sources remain local and contours stay disabled. The current iOS menu still offers
+Bright only; choosing other iOS basemaps and connecting overlays/online caches are
+later adapter stages. Native Swift tests compare old named-style routing with
+routing the same supplied style JSON. Both simulator phases require
+`PLATFORM_MAP_CONFIG_TEST_PASS`.
+
+Required validation: Android build/lint/tests, existing production emulator map
+switch/layer/persistence checks, Play publication, native Swift tests/typecheck,
+and iOS device/simulator builds, Metal and relaunch checks. Once green, the next
+Android phone gate is basemap selection, contour toggling, app restart and trails/
+recording overlays surviving style switches.

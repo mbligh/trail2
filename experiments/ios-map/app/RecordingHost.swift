@@ -83,8 +83,13 @@ import UIKit
         guard text.exportDescription == stats.description, text.displaySummary == stats.displaySummary else {
             throw RecordingStoreError.corruptSession
         }
+        try OfflineResources.verifyConfiguration()
+        print("PLATFORM_MAP_CONFIG_TEST_PASS:\(phase)")
         try LocationReportController.verifyEditing(message: reportMessage(
             RecordedFix(latitude: 40.6727254, longitude: -74.7490004, time: 0, accuracy: 3)))
+        try LocationReportController.verifyPhotos(message: reportMessage(
+            RecordedFix(latitude: 40.6727254, longitude: -74.7490004, time: 0, accuracy: 3)))
+        print("PLATFORM_PHOTO_TEST_PASS:\(phase)")
         print("PLATFORM_REPORT_TEST_PASS:\(phase)")
         try RecordingPickerController.verifySelection(store: store, existing: session)
         print("PLATFORM_PICKER_TEST_PASS:\(phase)")
@@ -250,9 +255,11 @@ import UIKit
                       Date().timeIntervalSince1970 - Double(fix.time) / 1000 <= 30 else {
                     alert("Location unavailable", "Wait for a fresh location fix."); return
                 }
-                let editor = LocationReportController(message: reportMessage(fix), accuracy: fix.accuracy) { [weak self] text in
+                let editor = LocationReportController(message: reportMessage(fix), accuracy: fix.accuracy) { [weak self] text, photo in
                     guard let self else { return }
-                    let share = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+                    var items: [Any] = [text]
+                    if let photo { items.append(photo) }
+                    let share = UIActivityViewController(activityItems: items, applicationActivities: nil)
                     share.setValue("Trail location report", forKey: "subject")
                     share.popoverPresentationController?.sourceView = self.controller.view
                     self.controller.present(share, animated: true)

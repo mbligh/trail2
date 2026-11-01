@@ -30,10 +30,17 @@ public final class OfflineMapBundle {
     }
 
     public func style(named name: String = "bright") throws -> String {
-        guard ["bright", "hybrid"].contains(name), let url = Self.safeFile("styles/\(name).json", root: root),
-              var style = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any],
-              let sources = style["sources"] as? [String: [String: Any]] else {
+        guard ["bright", "hybrid"].contains(name), let url = Self.safeFile("styles/\(name).json", root: root) else {
             throw MapArchiveError.sqlite("Offline style is unavailable")
+        }
+        return try route(styleJson: String(decoding: Data(contentsOf: url), as: UTF8.self))
+    }
+
+    /// Common code composes the style; native code resolves immutable local resources.
+    public func route(styleJson: String) throws -> String {
+        guard var style = try JSONSerialization.jsonObject(with: Data(styleJson.utf8)) as? [String: Any],
+              let sources = style["sources"] as? [String: [String: Any]] else {
+            throw MapArchiveError.sqlite("Invalid offline style")
         }
         var routed: [String: [String: Any]] = [:]
         for (id, original) in sources {
