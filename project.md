@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.17 map controls work. The next stage connects iOS basemap selection, bounded online tile caching and map-view persistence, and shares the zoom conversion with Android; 2.0.18 validation is pending. The full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.17 map controls work. Android 2.0.18 shares zoom conversion and is validated/published, awaiting the zoom/scale phone check. iOS basemap selection, bounded tile caching and saved map settings passed device builds and simulator checks. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1340,7 +1340,7 @@ receiving-app behavior remain unverified until provisioned Apple hardware is
 available; no iOS phone test is requested from the user.
 
 
-## iOS map selection/cache/preferences and shared zoom — 2.0.18 in validation
+## iOS map selection/cache/preferences and shared zoom — validated 2.0.18
 
 The user confirmed the 2.0.17 phone map-controls gate. The native iOS app now opens
 the real host by default; the synthetic Metal-only probe uses `--metal-probe`.
@@ -1383,9 +1383,29 @@ with blue/red overlays while networking is disabled and the HTTP request count
 stays unchanged. Test settings use a dedicated UserDefaults suite; normal settings
 are not reset. This checks action handlers, not automated taps on the dropdown.
 
-Required validation: Android build/lint/common/unit tests, 20 emulator invocations
-including zoom/header/recreation checks, publication; native Swift tests/typecheck;
-iOS device/simulator linking, shared tests, Metal, recording/export/report/photo
-fixtures, offline maps, trail cache and new map-switch/cache relaunch fixture.
-Once green, the Android phone gate is pinch zoom/header, basemap switching and
-camera scale/center after restart in **2.0.18**. No iOS physical test is requested.
+Implementation: `e9a54680079b1caefa4677647d455d9a74820e56` on main; diagnostic
+replay explicitly selects `--metal-probe` in
+`f16f358ea55106dddfe7e83f6cff82ee10799488`.
+
+Validation passed:
+
+- [APK build and download-site deployment](https://github.com/mbligh/trail2/actions/runs/41338252860).
+- [Play internal-testing publication](https://github.com/mbligh/trail2/actions/runs/41338252997), version **2.0.18**.
+- [Android production smoke tests](https://github.com/mbligh/trail2/actions/runs/41338252683): common/Android unit tests and lint; 18 production emulator tests plus one portrait gesture/cutout and one landscape check (**20 invocations**), including zoom/header/recreation and existing map-switching checks.
+- [Native Swift tests/typecheck](https://github.com/mbligh/trail2/actions/runs/41338252773): **13 tests**, including the bounded cache and preferences.
+- [iOS framework and simulator checks](https://github.com/mbligh/trail2/actions/runs/41338252783): device/simulator frameworks and apps, shared tests on iOS, synthetic Metal, recording/export/report/photo fixtures, bundled offline maps, trail cache/visibility and the new five-map switch/offline-raster relaunch check.
+- [Diagnostic replay](https://github.com/mbligh/trail2/actions/runs/41338405430) passed using the previously compiled probe; the main smoke workflow separately checks this stage's new binary.
+
+The first iOS smoke attempt did not launch the app: its console was empty, the
+screenshot showed SpringBoard with placeholder icons, and simctl terminate timed
+out. The failed Mac job was rerun without source changes or weaker checks, and the
+retry passed the functional checks. The new basemap write/read artifact screenshots
+were reviewed: yellow cached raster, red imported line, blue recording/pin, 15.0
+header and safe screen insets. The read phase permits no downloads and asserts
+the local HTTP server received no additional requests.
+
+**Next Android phone gate:** update through Play to **2.0.18**, pinch zoom and
+check the header responds; switch basemaps and restart, checking that zoom/scale
+stay consistent. Pause migration for this Android regression check. No iOS
+physical test is requested; real camera/device/background behavior and Apple
+provisioning remain later distribution checks.
