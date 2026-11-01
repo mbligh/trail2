@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.16 report sharing works. The next stage adds iOS report photos and shares basemap configuration/style composition in Android and iOS; 2.0.17 validation is pending. The full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.16 report sharing works. Android 2.0.17 shares basemap configuration/style composition and is validated/published, awaiting the map-controls phone check. The iOS report photo adapter and shared Bright style builder passed device builds and simulator checks. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1281,7 +1281,7 @@ outside the emulator text chooser check. Pause at this Android regression gate;
 no iOS phone testing is requested.
 
 
-## iOS report photos and shared map configuration — 2.0.17 in validation
+## iOS report photos and shared map configuration — validated 2.0.17
 
 The user confirmed the 2.0.16 location-report phone check. iOS report editing now
 has camera capture, a preview, retake and removal. Camera permission is requested
@@ -1306,6 +1306,8 @@ Basemap name is an alias of the common value type; existing preferences, menus,
 attribution and cache routing are retained. A frozen pre-migration parser/builder
 compares the actual generated assets across five maps × both contour states
 (**10 combinations**), including ordering, source definitions and metadata.
+It also compares the exact JSON source strings supplied to the platform router,
+because those bytes participate in the existing cache hashes.
 Common tests cover raster/vector construction, glyph fallback/preservation,
 disabled sources, immutable inputs and duplicate names/IDs/source rejection.
 
@@ -1317,8 +1319,22 @@ later adapter stages. Native Swift tests compare old named-style routing with
 routing the same supplied style JSON. Both simulator phases require
 `PLATFORM_MAP_CONFIG_TEST_PASS`.
 
-Required validation: Android build/lint/tests, existing production emulator map
-switch/layer/persistence checks, Play publication, native Swift tests/typecheck,
-and iOS device/simulator builds, Metal and relaunch checks. Once green, the next
-Android phone gate is basemap selection, contour toggling, app restart and trails/
-recording overlays surviving style switches.
+Implementation: `d0e2d117fa99d648bbfbb9e3567ea1d9401e5b0c`, with Android
+comparison-test adaptations in `9f859a86d0d11f48bd8cd905b68defe50072cb21` and
+`adc5ea85b5774acaf4f8e34cccc56254e8348bcb`, all on main. The latter commits
+change Android tests only; the validated iOS source is unchanged.
+
+Validation passed:
+
+- [APK build and download-site deployment](https://github.com/mbligh/trail2/actions/runs/41303503755).
+- [Play internal-testing publication](https://github.com/mbligh/trail2/actions/runs/41303503540), version **2.0.17**.
+- [Android production smoke checks](https://github.com/mbligh/trail2/actions/runs/41303503592): common/Android unit tests, configuration/cache-identity comparisons and lint; 18 production emulator tests plus one portrait gesture/cutout and one landscape check (**20 emulator invocations**).
+- [Native Swift adapters](https://github.com/mbligh/trail2/actions/runs/41302854088): **11 tests**, plus iOS API typecheck.
+- [iOS framework and simulator checks](https://github.com/mbligh/trail2/actions/runs/41302854134): device/simulator frameworks and apps, common tests on iOS, Metal, photo/report/configuration handlers in both persistence phases, offline maps, and trail cache/visibility across relaunch. No new Swift host warnings beyond the previously documented actor-conformance/ICU deployment-target warnings.
+
+**Next phone gate:** update through Play to **2.0.17**, switch between basemaps,
+toggle contours, then restart the app and check those settings persisted. Check
+that imported trails and blue recording lines/pins remain after style switches.
+Pause migration at this Android regression gate. Real iOS camera capture and
+receiving-app behavior remain unverified until provisioned Apple hardware is
+available; no iOS phone test is requested from the user.
