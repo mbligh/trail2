@@ -31,7 +31,8 @@ class LegacyMapConfiguration(private val readAsset: (String) -> String) {
     }
 
     fun style(basemap: Basemap, enabled: Set<String>, route: (String, JSONObject) -> JSONObject): JSONObject {
-        val result = if (basemap.style != null) JSONObject(readAsset(basemap.style))
+        val style = basemap.style
+        val result = if (style != null) JSONObject(readAsset(style))
         else JSONObject().put("version", 8).put("sources", JSONObject().put(basemap.source!!, sources.getJSONObject(basemap.source)))
             .put("layers", JSONArray().put(JSONObject().put("id", "basemap").put("type", "raster").put("source", basemap.source)))
         val styleSources = result.getJSONObject("sources")
