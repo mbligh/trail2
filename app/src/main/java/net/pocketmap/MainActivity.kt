@@ -753,8 +753,8 @@ class MainActivity : ComponentActivity(), LocationListener {
     override fun onLowMemory() { super.onLowMemory(); map.onLowMemory() }
     override fun onResume() { super.onResume(); active = true
         val filter = IntentFilter(RecordingService.STATE_CHANGED)
-        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(recordingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        else @Suppress("DEPRECATION") registerReceiver(recordingReceiver, filter)
+        androidx.core.content.ContextCompat.registerReceiver(this, recordingReceiver, filter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         recordingReceiverRegistered = true
         recordingRequest = null
         updateRecordingControls()
