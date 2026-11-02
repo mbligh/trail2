@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Check real shared legend colors on Metal, then its dismiss handler."""
+import json
+import shutil
+from pathlib import Path
+import subprocess
+import time
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent
+OUT = ROOT / 'build/smoke'
+devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json'],timeout=60))
+identifier = next(d['udid'] for runtime,values in devices['devices'].items() if '.iOS-' in runtime
+                  for d in values if 'iPhone' in d['name'] and d['state'] == 'Booted')
+output = OUT / 'legend-console.txt'
+colors = [(219,68,54),(248,151,27),(244,235,55),(0,157,87)]
+with output.open('w') as log:
+    app = subprocess.Popen(['xcrun','simctl','launch','--terminate-running-process','--console',identifier,
+        'net.pocketmap.iosprobe','--legend-self-test'],stdout=log,stderr=subprocess.STDOUT)
+    try:
+        shown = False
+        settled = 0
+        deadline = time.monotonic()+90
+        while time.monotonic() < deadline:
+            if app.poll() is not None: raise RuntimeError(f'Legend host exited; see {output}')
+            dismissed = 'IOS_LEGEND_DISMISS_PASS' in output.read_text(errors='replace')
+            screenshot = OUT / 'legend-current.png'
+            subprocess.run(['xcrun','simctl','io',identifier,'screenshot',str(screenshot)],check=True,timeout=60)
+            image = Image.open(screenshot).convert('RGB')
+            crop = image.crop((image.width//10,image.height//5,image.width*9//10,image.height*4//5))
+            histogram = crop.getcolors(maxcolors=crop.width*crop.height)
+            counts = [sum(count for count,pixel in histogram if max(abs(a-b) for a,b in zip(pixel,color)) <= 3) for color in colors]
+            if not dismissed and min(counts) > 400:
+                shutil.copyfile(screenshot, OUT / 'legend-shown.png')
+                shown = True
+                print(f'iOS shared legend colors passed: {counts}',flush=True)
+            if dismissed and shown and max(counts) < 100:
+                shutil.copyfile(screenshot, OUT / 'legend-dismissed.png')
+                settled += 1
+                if settled >= 2:
+                    print('iOS shared legend dismissed back to map',flush=True)
+                    break
+            time.sleep(1)
+        else: raise AssertionError(f'Legend render/dismiss failed; shown={shown}; see {output}')
+    finally:
+        subprocess.run(['xcrun','simctl','terminate',identifier,'net.pocketmap.iosprobe'],check=False,timeout=30)
+        try: app.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            app.terminate(); app.wait(timeout=15)

@@ -39,6 +39,7 @@ import net.pocketmap.shared.ui.BasemapArtwork
 import net.pocketmap.shared.ui.ReportArtwork
 import net.pocketmap.shared.ui.PinArtwork
 import net.pocketmap.shared.ui.RecenterArtwork
+import net.pocketmap.shared.ui.TrailLegendDialog
 import net.pocketmap.shared.ui.TrailScreen
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.interaction.MapInteractions
@@ -56,6 +57,11 @@ data class IosMapCamera(val latitude: Double, val longitude: Double, val zoom: D
 /** iOS integration host with native storage and the common map renderer. */
 class IosRecordingHost(private val actions: IosPlatformActions,
     private val resources: IosMapResourceReader?, styleJson: String) {
+    private var legendShown by mutableStateOf(false)
+    private var legendCheck by mutableStateOf(false)
+    fun showLegend() { legendShown = true }
+    private fun dismissLegend() { legendShown = false }
+    fun verifyLegend() { showLegend(); legendCheck = true }
     private var styleJson by mutableStateOf(styleJson)
     private var choices by mutableStateOf(listOf(IosBasemapOption("bright", "Bright", "", "")))
     private var selectedBasemap by mutableStateOf("bright")
@@ -306,6 +312,13 @@ class IosRecordingHost(private val actions: IosPlatformActions,
             }
             println("IOS_OFFLINE_RENDER_TIMEOUT")
         }
+        LaunchedEffect(legendCheck) {
+            if (legendCheck) {
+                delay(15_000)
+                dismissLegend()
+                actions.perform("legendDismissPass")
+            }
+        }
         Box(Modifier.fillMaxSize().background(Color.White).windowInsetsPadding(WindowInsets.safeDrawing)) {
             TrailScreen(
                 status = status, trailStatus = trailStatus, recordingStatus = if (recording) "Recording" else null,
@@ -330,6 +343,7 @@ class IosRecordingHost(private val actions: IosPlatformActions,
                 onRecenter = { following = true; actions.perform("recenter") },
                 reportIcon = { ReportArtwork() }, pinIcon = { PinArtwork() }, recenterIcon = { RecenterArtwork(following) }
             )
+            if (legendShown) TrailLegendDialog(onDismiss = ::dismissLegend)
         }
     }
 

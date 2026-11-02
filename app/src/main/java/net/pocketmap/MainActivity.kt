@@ -19,6 +19,7 @@ import net.pocketmap.shared.ui.BasemapArtwork
 import net.pocketmap.shared.ui.ReportArtwork
 import net.pocketmap.shared.ui.PinArtwork
 import net.pocketmap.shared.ui.RecenterArtwork
+import net.pocketmap.shared.ui.TrailLegendDialog
 import net.pocketmap.shared.ui.TrailScreen
 import net.pocketmap.shared.ui.MapChoice
 import net.pocketmap.shared.ui.MapLayerChoice
@@ -35,7 +36,6 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
-import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.concurrent.Executors
 import java.io.File
@@ -43,6 +43,7 @@ import java.io.File
 class MainActivity : ComponentActivity(), LocationListener {
     private lateinit var basemaps: List<Basemap>
     private lateinit var selectedBasemap: Basemap
+    private val legendShown = mutableStateOf(false)
     private val selectedBasemapName = mutableStateOf("bright")
     private val zoomLabel = mutableStateOf("")
     private val layerSelections = mutableStateOf<Set<String>>(emptySet())
@@ -166,6 +167,7 @@ class MainActivity : ComponentActivity(), LocationListener {
                     pinIcon = { PinArtwork() },
                     recenterIcon = { RecenterArtwork(followingState.value) }
                 )
+                if (legendShown.value) TrailLegendDialog(onDismiss = { legendShown.value = false })
             }
         }
         showAttribution()
@@ -190,40 +192,7 @@ class MainActivity : ComponentActivity(), LocationListener {
         savedInstanceState?.getBundle("pinDraft")?.let { showPinText(it) }
     }
 
-    private fun showLegend() {
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), dp(8))
-        }
-        val rows = listOf(
-            Color.rgb(219, 68, 54) to "Blocked",
-            Color.rgb(248, 151, 27) to "Unknown",
-            Color.rgb(244, 235, 55) to "TTA trail",
-            Color.rgb(0, 157, 87) to "Public trail"
-        )
-        for ((color, label) in rows) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(6), 0, dp(6))
-            }
-            row.addView(android.view.View(this).apply {
-                setBackgroundColor(color)
-            }, LinearLayout.LayoutParams(dp(48), dp(5)))
-            row.addView(TextView(this).apply {
-                text = label
-                textSize = 16f
-            }, LinearLayout.LayoutParams(-2, -2).apply {
-                marginStart = dp(12)
-            })
-            content.addView(row, LinearLayout.LayoutParams(-1, -2))
-        }
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Legend")
-            .setView(content)
-            .setPositiveButton("Done", null)
-            .show()
-    }
+    private fun showLegend() { legendShown.value = true }
 
     private fun showAttribution() {
         zoomLabel.value = formatZoom(map.zoomLevelDouble)

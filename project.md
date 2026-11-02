@@ -1603,3 +1603,25 @@ unchanged executable bytes and ZIP permissions. Keep probe identities available
 for all existing simulator automation. This still uses a debug Kotlin framework,
 needs Apple provisioning/signing for installation, and is not an App Store
 submission archive. `ios/README.md` records reproduction and hardware limitations.
+
+
+## Shared trail legend — Android 2.0.21, awaiting CI
+
+Replace Android's native legend construction and iOS's generic explanatory alert
+with one common Compose dialog. Preserve the four original label/RGB pairs:
+Blocked 219/68/54; Unknown 248/151/27; TTA trail 244/235/55; Public trail 0/157/87.
+The dialog has textual labels, 48 by 5 dp swatches, Done and normal platform
+back/outside dismissal. The existing menu action still opens it through each
+host, without changing map/camera/cache/recording state.
+
+Android instrumentation opens the real menu, verifies the four labels and actual
+swatch pixels against frozen native values, dismisses with Done, reopens and
+dismisses with system Back. iOS's opt-in fixture shows the same component over a
+blank map, checks rendered colors, and runs the shared dismissal callback back
+to the map; it does not claim an automated iOS menu tap or physical interaction.
+The iOS suite also retains bundled/remote contour replay and unsigned packaging.
+
+After all CI and publication checks pass, the next physical Android gate is
+2.0.21: open Menu → Legend, check all four rows, dismiss with Done and Back, and
+confirm the map and recording controls still respond. No iOS hardware check is
+requested from the user. Apple provisioning and hardware validation remain open.

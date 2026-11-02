@@ -13,7 +13,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let window = UIWindow(frame: UIScreen.main.bounds)
         let arguments = ProcessInfo.processInfo.arguments
         if !arguments.contains("--metal-probe") {
-            let testing = arguments.contains("--platform-self-test") || arguments.contains("--trail-cache-test")
+            let testing = arguments.contains("--platform-self-test") || arguments.contains("--trail-cache-test") || arguments.contains("--legend-self-test")
             let basemapFlag = arguments.firstIndex(of: "--basemap-self-test")
             let layerFlag = arguments.firstIndex(of: "--layer-self-test")
             let mapFlag = layerFlag ?? basemapFlag
@@ -37,6 +37,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 catch { fatalError("Trail cache self-test failed: \(error)") }
             }
         }
+        if arguments.contains("--legend-self-test") { recordingHost?.model.verifyLegend() }
         if let flag = arguments.firstIndex(of: "--layer-self-test"), arguments.count > flag + 1 {
             do { try recordingHost?.layerSelfTest(phase: arguments[flag + 1]) }
             catch { fatalError("Layer self-test failed: \(error)") }

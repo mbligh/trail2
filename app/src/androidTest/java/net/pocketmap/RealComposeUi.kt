@@ -18,16 +18,37 @@ import org.junit.Assert.fail
  * MapLibre's physical engine must retain the real main dispatcher throughout UI tests.
  */
 internal class RealComposeUi(private val scenario: ActivityScenario<MainActivity>) {
-    private fun nodes(): List<SemanticsNode> {
-        val result = mutableListOf<SemanticsNode>()
-        fun semantics(node: SemanticsNode) { result.add(node); node.children.forEach(::semantics) }
+    private fun positionedNodes(): List<Pair<SemanticsNode, androidx.compose.ui.geometry.Offset>> {
+        val result = mutableListOf<Pair<SemanticsNode, androidx.compose.ui.geometry.Offset>>()
+        fun semantics(node: SemanticsNode, origin: androidx.compose.ui.geometry.Offset) {
+            result.add(node to origin); node.children.forEach { semantics(it, origin) }
+        }
         fun views(view: View) {
-            if (view is ViewRootForTest) semantics(view.semanticsOwner.unmergedRootSemanticsNode)
+            if (view is ViewRootForTest) {
+                val location = IntArray(2)
+                view.getLocationOnScreen(location)
+                semantics(view.semanticsOwner.unmergedRootSemanticsNode,
+                    androidx.compose.ui.geometry.Offset(location[0].toFloat(), location[1].toFloat()))
+            }
             if (view is ViewGroup) for (index in 0 until view.childCount) views(view.getChildAt(index))
         }
         // Dropdowns have separate windows. These instrumentation tests run on API 35.
         check(android.os.Build.VERSION.SDK_INT >= 29)
         if (android.os.Build.VERSION.SDK_INT >= 29) WindowInspector.getGlobalWindowViews().forEach(::views)
+        return result
+    }
+
+    private fun nodes() = positionedNodes().map { it.first }
+
+    fun screenBounds(tag: String): Rect {
+        var result = Rect.Zero
+        await("screen bounds $tag") {
+            val entry = positionedNodes().firstOrNull { it.first.config.getOrNull(SemanticsProperties.TestTag) == tag }
+            if (entry == null) false else {
+                result = entry.first.boundsInRoot.translate(entry.second)
+                result.width > 0 && result.height > 0
+            }
+        }
         return result
     }
 
@@ -53,6 +74,9 @@ internal class RealComposeUi(private val scenario: ActivityScenario<MainActivity
     }
     fun text(value: String) = await("text $value") {
         nodes().any { node -> node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == value } == true }
+    }
+    fun absent(tag: String) = await("absent $tag") {
+        nodes().none { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
     }
     fun description(value: String) = await("description $value") {
         nodes().any { it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(value) == true }

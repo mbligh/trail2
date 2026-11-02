@@ -284,6 +284,9 @@ import UIKit
     }
 
     private func handle(action: String) {
+        if action == "legendDismissPass" {
+            print("IOS_LEGEND_DISMISS_PASS"); fflush(stdout); return
+        }
         if action.hasPrefix("layer:") {
             let id = String(action.dropFirst("layer:".count))
             guard let resources = offlineResources, resources.layers.contains(where: { $0.id == id }) else { return }
@@ -343,7 +346,7 @@ import UIKit
             case "REFRESH_TRAILS": refreshTrails()
             case "TOGGLE_TRAILS": model.toggleTrails()
             case "ZOOM_TO_TRAILS": model.zoomToTrails()
-            case "LEGEND": alert("Trails", "Line colors and point icons follow the My Maps Trails layer.")
+            case "LEGEND": model.showLegend()
             case "record":
                 if location.recorder.recording != nil {
                     displayed = try location.stopRecording()
