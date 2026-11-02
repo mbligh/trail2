@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: Android 2.0.22 and optimized iOS Release apps are validated. The user requested anonymous public IPA hosting through GitHub Pages. A shared publisher now prepares both app downloads from independently successful builds; publication and anonymous-download checks are pending.
+Updated 2026-11-02: The unsigned iPhone IPA is publicly downloadable through GitHub Pages without a GitHub login. Successful iOS and Android builds automatically trigger one shared publisher, preserving both downloads. Initial publication, Android-triggered refresh, iOS-triggered refresh and anonymous checksum checks passed. Android/iOS app version remains 2.0.22; Apple signing/provisioning is still required for iPhone installation.
 
 ## Product and identity
 
@@ -1722,7 +1722,7 @@ Apple distribution step requires provisioning/signing and actual tester hardware
 physical GPS/background recording/camera behavior is still unverified.
 
 
-## Public iPhone IPA through GitHub Pages — implementation awaiting CI
+## Public iPhone IPA through GitHub Pages — validated
 
 The user requested public IPA copying as part of the iOS build. Publish the stable
 URL `https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa`, its `.sha256` file,
@@ -1755,3 +1755,47 @@ successful build from the API. The workflow also checks both deployed files via
 anonymous HTTP and compares sizes/SHA with prepared artifacts. Both download
 locations must work before this stage is considered validated. No app feature or
 version-name change is needed; Android/iOS publishing remain independently built.
+
+
+### Public download publication validation
+
+Implementation: `24b50822550ca22f2a689328218cb34f37b785c2`, with rerun preservation
+guard `b4b980d5881695cf2cc1e5f91d8f5d3279daf988`.
+
+- [Public download page](https://mbligh.github.io/trail2/)
+- [Unsigned iPhone IPA](https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa)
+- [IPA SHA-256](https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa.sha256)
+- [Public source-build metadata](https://mbligh.github.io/trail2/build-info.json)
+
+[Initial publication](https://github.com/mbligh/trail2/actions/runs/41509635289)
+passed, bootstrapping the validated 2.0.22 IPA from the existing larger iOS
+artifact. Independently downloaded it without credentials: HTTP 200,
+application/octet-stream, 23,811,219 bytes, matching the published SHA. The
+landing page had the iPhone download link and resolved version placeholders.
+
+The [new APK build](https://github.com/mbligh/trail2/actions/runs/41509635429)
+successfully triggered [another publication](https://github.com/mbligh/trail2/actions/runs/41510287779),
+updating Android while preserving the existing IPA and checksum. The rerun
+preservation guard passed [its publication](https://github.com/mbligh/trail2/actions/runs/41515497759)
+with **five regression tests**, including a previously successful build
+temporarily disappearing from the success API during a rerun.
+
+The [fresh iOS build](https://github.com/mbligh/trail2/actions/runs/41509635442)
+passed its complete Release simulator suite and uploaded the compact
+`Trail2-ios-ipa` artifact (ID 13177781865). Its first Mac attempt passed the
+recording write assertions but timed out in `simctl terminate` during cleanup;
+retrying the Mac job unchanged passed. The failed-attempt publication was
+correctly skipped, retaining the existing public IPA.
+
+The successful retry automatically triggered the
+[iOS publication](https://github.com/mbligh/trail2/actions/runs/41520860032).
+It selected the new iOS build **41509635442** and retained Android build
+**41509635429**. All five publisher tests passed, followed by anonymous HTTP
+downloads matching both prepared artifacts:
+
+- APK: `c3d3f0f043df0f9c40e501566834f2762edc88ff7adffb796a1dc20c05e45761`
+- IPA: `48d66552e1795f15a71abad492e96471fe7005c4593b1068bb617e983dc5255e`
+
+The public URLs now update automatically after successful platform builds.
+The IPA remains unsigned; hosting does not provide signing or direct OTA
+installation. Apple provisioning and physical iPhone validation remain open.
