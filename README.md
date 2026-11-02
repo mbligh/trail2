@@ -16,7 +16,7 @@ source namespace remains `net.pocketmap`.
 - **Bright** is the default vector map, based on the same OpenFreeMap style as
   `mbligh/mapping/public/maplibre-demo`; business/POI labels are suppressed.
 - **NJ Satellite + roads/trails/labels** layers the same vector linework/labels over
-  NJ 2020 imagery. Plain satellite, OSM raster and OpenTopoMap remain available.
+  NJ 2020 imagery. Plain satellite and OSM raster remain available; contours are an independent overlay.
 - The APK includes every vector tile intersecting **Tewksbury Township, NJ**, even
   tiles that only partly intersect the official boundary, at source zooms 0–14.
   Higher zooms enlarge those vectors. Fonts and symbols are bundled too: a fresh

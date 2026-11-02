@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the validated unsigned device host with the Trail 2 app identity.
+"""Package the validated unsigned Release device host with the Trail 2 app identity.
 
 This is a development device package. It still needs Apple provisioning and
 signing before installation and is not an App Store submission archive.
@@ -22,6 +22,7 @@ version = re.search(r'versionName = "([0-9.]+)"',(ROOT / 'app/build.gradle.kts')
 original = plistlib.loads((source / 'Info.plist').read_bytes())
 assert original['CFBundleSupportedPlatforms'] == ['iPhoneOS']
 assert original['MinimumOSVersion'] == '18.5'
+assert original.get('TrailBuildConfiguration') == 'release', 'Build the device host with Release frameworks and Swift -O first'
 assert not (source / 'mapAssets/maps/ios-contours.pmtiles').exists(), 'Simulator fixture leaked into device package'
 assert not (source / 'embedded.mobileprovision').exists(), 'Expected unsigned input'
 binary = source / original['CFBundleExecutable']

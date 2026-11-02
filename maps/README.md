@@ -22,7 +22,7 @@ above the basemap and below Trail's data, and survive basemap changes.
 fonts and sprites. It selects **intersecting tiles**, including partial boundary
 tiles, at every configured zoom. Streets use source zooms 0–14, then overzoom.
 `offline-manifest.json` records coverage, counts, and SHA-256 hashes. A clean install
-in airplane mode has a complete street map. Satellite/OSM raster/OpenTopoMap use
+in airplane mode has a complete street map. Satellite/OSM raster use
 online/runtime caches unless archives are uploaded or authorized sources are added
 to `offline-maps.json`. Do not bulk-download public OSM raster tiles.
 

@@ -74,20 +74,20 @@ jobs:
         run: ./gradlew --no-daemon --build-cache :shared:linkDebugFrameworkIosSimulatorArm64
       - name: Run shared tests on iOS
         run: ./gradlew --no-daemon --build-cache :shared:iosSimulatorArm64Test
-      - name: Link Metal simulator probe
-        run: ./gradlew --no-daemon --build-cache :iosProbe:linkDebugFrameworkIosSimulatorArm64
-      - name: Link Metal iPhone probe
-        run: ./gradlew --no-daemon --build-cache :iosProbe:linkDebugFrameworkIosArm64
+      - name: Link optimized Metal simulator framework
+        run: ./gradlew --no-daemon --build-cache :iosProbe:linkReleaseFrameworkIosSimulatorArm64
+      - name: Link optimized Metal iPhone framework
+        run: ./gradlew --no-daemon --build-cache :iosProbe:linkReleaseFrameworkIosArm64
       - uses: actions/download-artifact@v6
         with:
           name: Trail-iOS-map-assets
           path: experiments/ios-map/build/mapAssets/
       - name: Install image tooling
         run: python -m pip install Pillow==11.3.0
-      - name: Build simulator and unsigned device probes without Apple credentials
+      - name: Build optimized simulator and unsigned device apps without Apple credentials
         run: |
-          bash experiments/ios-map/build_probe_app simulator
-          bash experiments/ios-map/build_probe_app device
+          bash experiments/ios-map/build_probe_app simulator release
+          bash experiments/ios-map/build_probe_app device release
       - name: Package Trail 2 unsigned device app with production identity
         run: python ios/package_device
       - name: Package app bundles with executable permissions

@@ -98,7 +98,7 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
                 val key = identity + source.optString("cacheVersion")
                 val cacheFile = File(context.filesDir, "map-cache/${hash(id + key)}.mbtiles")
                 // Preserve the three original sources' existing offline runtime caches.
-                val legacyName = when (id) { "nj-orthos" -> "njsatellite"; "osm-raster" -> "openstreetmap"; "topo-raster" -> "opentopomap"; else -> null }
+                val legacyName = when (id) { "nj-orthos" -> "njsatellite"; "osm-raster" -> "openstreetmap"; else -> null }
                 val legacy = legacyName?.let { File(context.filesDir, "maps/$it-cache.mbtiles") }
                 val migrated = File(context.filesDir, "map-cache/legacy-$id-migrated")
                 if (!migrated.exists() && legacy?.exists() == true) {

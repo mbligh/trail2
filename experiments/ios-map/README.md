@@ -18,20 +18,21 @@ python -m pip install shapely==2.1.2 Pillow==11.3.0
 python tools/prepare_maps --output experiments/ios-map/build/mapAssets
 ./gradlew :shared:linkDebugFrameworkIosArm64 \
   :shared:linkDebugFrameworkIosSimulatorArm64 :shared:iosSimulatorArm64Test \
-  :iosProbe:linkDebugFrameworkIosSimulatorArm64 :iosProbe:linkDebugFrameworkIosArm64
-bash experiments/ios-map/build_probe_app simulator
-bash experiments/ios-map/build_probe_app device
+  :iosProbe:linkReleaseFrameworkIosSimulatorArm64 :iosProbe:linkReleaseFrameworkIosArm64
+bash experiments/ios-map/build_probe_app simulator release
+bash experiments/ios-map/build_probe_app device release
 python ios/package_device
 python experiments/ios-map/smoke_simulator.py
 ```
 
+Both app hosts use Kotlin/Native Release frameworks and Swift `-O`.
 The simulator app is ad-hoc signed without an Apple account. The device app and
 Trail 2 IPA remain unsigned. These framework dependencies support ARM64 devices
 and Apple Silicon simulators; an Intel Mac cannot run this simulator build.
 The host requires iOS 18.5 because of the linked rendering dependency.
 
 The iOS smoke workflow runs actual Metal pixel checks plus recording/export/
-report/photo, offline map, trail refresh/visibility, five-basemap/cache, remote
+report/photo, offline map, trail refresh/visibility, four-basemap/cache, remote
 contour range/cache, bundled contour/relaunch and legend checks. Inner app ZIPs
 preserve executable permissions. Frameworks, the unsigned IPA, logs and screenshots
 are retained in the `Trail-iOS-simulator-check` Actions artifact.

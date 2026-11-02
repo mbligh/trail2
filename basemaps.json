@@ -36,16 +36,6 @@
       ],
       "archive": "maps/openstreetmap.mbtiles",
       "attribution": "\u00a9 OpenStreetMap contributors"
-    },
-    "topo-raster": {
-      "type": "raster",
-      "tileSize": 256,
-      "maxzoom": 17,
-      "tiles": [
-        "https://a.tile.opentopomap.org/{z}/{x}/{y}.png"
-      ],
-      "archive": "maps/opentopomap.mbtiles",
-      "attribution": "\u00a9 OpenStreetMap contributors, SRTM \u00b7 \u00a9 OpenTopoMap (CC BY-SA 3.0)"
     }
   },
   "basemaps": [
@@ -76,13 +66,6 @@
       "source": "osm-raster",
       "attribution": "\u00a9 OpenStreetMap contributors",
       "attributionUrl": "https://www.openstreetmap.org/copyright"
-    },
-    {
-      "name": "opentopomap",
-      "label": "OpenTopoMap",
-      "source": "topo-raster",
-      "attribution": "\u00a9 OpenStreetMap contributors, SRTM \u00b7 \u00a9 OpenTopoMap (CC BY-SA 3.0)",
-      "attributionUrl": "https://opentopomap.org/about#verwendung"
     }
   ],
   "overlays": [

@@ -22,8 +22,11 @@ after replacing/rebuilding that dependency and validating the older OS.
 `ios/package_device` packages the existing compiled device host. It verifies the
 Mach-O device platform/minimum, source plist, icon, background-location declaration,
 absence of simulator contour fixtures, unchanged executable bytes and ZIP execute
-permissions. It leaves the source app intact. The Kotlin framework is currently a
-debug framework; package naming does not imply a release-optimized binary.
+permissions. It leaves the source app intact. Both simulator and device hosts use optimized Kotlin/Native Release frameworks
+and Swift `-O`. The complete simulator suite exercises the optimized app.
+`TrailBuildConfiguration=release` in the built plist records the variant; the IPA
+packager refuses a Debug host. `build_probe_app` defaults to Release and accepts
+an explicit `debug` second argument for development after linking Debug frameworks.
 
 The IPA needs Apple provisioning and signing before installation. No signing
 certificates, profiles, Apple account, App Store Connect setup or TestFlight upload
@@ -34,6 +37,6 @@ Simulator handler tests do not establish these physical-device behaviors.
 
 To reproduce on an ARM64 Mac with the workflow's Xcode and JDK toolchains, follow
 `.github/workflows/ios-smoke.yml`; prepare the offline seed bundle first, link both
-`iosProbe` frameworks, then run `build_probe_app` for simulator/device followed by
+`iosProbe` Release frameworks, then run `build_probe_app` for simulator/device followed by
 `python ios/package_device`. Pillow is used to render the existing Android vector
 icon into an asset catalog; no separate iOS artwork is maintained.

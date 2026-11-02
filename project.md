@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: The user confirmed Android 2.0.20 works. Android 2.0.21 now shares the four-color legend with iOS and is validated/published, awaiting its Legend phone check. iOS bundled/remote PMTiles, native actor boundaries and branded unsigned device packaging passed the full simulator suite. Apple provisioning and physical iPhone validation remain open.
+Updated 2026-11-02: The user confirmed Android 2.0.21's shared Legend works. Remove OpenTopoMap in 2.0.22 and retain the independent contour overlay. Both platforms keep Bright, hybrid, NJ satellite and OpenStreetMap. Next iOS work moves the simulator/device host to optimized Release frameworks. These changes await build/publication validation.
 
 ## Product and identity
 
@@ -39,8 +39,7 @@ as possible. Underlying tile appearance may change. Retain:
 
 Use MapLibre Compose 0.20.0 with its native OpenGL runtime. Follow the mapping repository's MapLibre demo:
 OpenFreeMap **Bright**, POI/business labels removed; NJ 2020 satellite hybrid retains
-vector lines/labels with white text halos. Keep standalone satellite, OSM raster and
-OpenTopoMap choices. Bright is default; migrate the previous OSM street default to
+vector lines/labels with white text halos. Keep standalone satellite and OSM raster choices; contours are an independent overlay. Bright is default; migrate the previous OSM street default to
 Bright once, retaining other explicit choices.
 
 `basemaps.json` contains configured sources, basemap choices and overlay groups.
@@ -1650,3 +1649,47 @@ The `Trail-iOS-simulator-check` artifact contains the branded
 submission archive), device/simulator app ZIPs, logs and screenshots. No Apple
 signing or physical iPhone behavior is claimed. The physical Android gate above
 is the next step before further shared UI changes.
+
+
+## OpenTopoMap removal — 2.0.22, validation pending
+
+The user confirmed 2.0.21's Legend and requested removal of OpenTopoMap because
+Trail has its own contour overlay. Remove the OpenTopoMap basemap, raster source,
+archive reference and its source-specific credits/cache-name branch. Keep Bright,
+hybrid, NJ satellite and OpenStreetMap. Contour configuration and all other
+source identities stay intact. Existing unreferenced private cache files need
+not be deleted.
+
+Existing Android and iOS saved-selection fallback selects Bright when a map no
+longer exists, preserving camera and contour preferences. Regression checks now
+cover an actual saved OpenTopoMap selection on each platform. Adapt the iOS
+basemap rendering/relaunch fixture to finish on OpenStreetMap and check its green
+synthetic cached raster instead of the removed yellow topographic fixture.
+Historical validation sections above describe the earlier five-choice builds;
+the current shipping configuration has four choices.
+
+
+## Optimized iOS app builds — implementation awaiting CI
+
+Move the Metal simulator/device host to Kotlin/Native Release frameworks and
+Swift `-O`. Run all existing real simulator rendering, native-handler and
+persistence/relaunch checks on that optimized app, including shared PMTiles gzip
+and error bridging. Keep shared standalone framework linking/calculation tests
+as additional checks. `build_probe_app` defaults to Release, accepts an explicit
+Debug variant, checks its selected framework before building, and clears only its
+fixed generated app directory to prevent stale package resources across variants.
+Resource syncing receives the matching Xcode configuration.
+
+Record `TrailBuildConfiguration` in the host plist. The branded unsigned IPA
+packager requires Release, preventing accidental repackaging of a Debug host as
+the device artifact. Artifact names, app identities, iOS 18.5 minimum and signing
+requirements stay consistent. The earlier debug-package limitations above are
+historical; optimization is not validated until the new Mac CI completes.
+
+Local status: configuration edits and saved-map fallback regressions are committed;
+offline packaging unit checks pass (generated real asset verification is skipped
+without the generated map bundle). This workspace cannot download Gradle from
+services.gradle.org and has no Apple SDK, so Android/Apple compile and render
+results must come from CI. GitHub operations are available again; publish the
+prepared changes and monitor Android publication, saved-map migration checks and
+the optimized iOS simulator suite before marking this stage validated.

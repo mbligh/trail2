@@ -2,6 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 kind="${1:-simulator}"
+configuration="${2:-release}"
+case "$configuration" in
+    release) swift_options=(-O); xcode_configuration=Release ;;
+    debug) swift_options=(-Onone -g); xcode_configuration=Debug ;;
+    *) echo "Configuration must be release or debug" >&2; exit 2 ;;
+esac
 case "$kind" in
     simulator)
         target=iosSimulatorArm64
@@ -17,15 +23,23 @@ case "$kind" in
         triple=arm64-apple-ios18.5
         app="experiments/ios-map/build/TrailIosProbe-device.app"
         ;;
-    *) echo "Usage: $0 [simulator|device]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [simulator|device] [release|debug]" >&2; exit 2 ;;
 esac
-framework="experiments/ios-map/build/bin/$target/debugFramework"
+framework="experiments/ios-map/build/bin/$target/${configuration}Framework"
+if [ ! -s "$framework/TrailIosProbe.framework/TrailIosProbe" ]; then
+    echo "Missing $configuration framework: $framework/TrailIosProbe.framework" >&2
+    echo "Link the matching iosProbe framework with Gradle before building the host." >&2
+    exit 1
+fi
+# Rebuild only this generated app directory; stale simulator fixtures or icon
+# metadata from another configuration must not leak into the next package.
+rm -rf "$app"
 mkdir -p "$app"
 # Direct swiftc linking does not run Xcode's embedAndSign task. Run the same
 # Compose resource sync explicitly so transitive MapLibre strings reach the app.
 BUILT_PRODUCTS_DIR="$PWD/$(dirname "$app")" \
 UNLOCALIZED_RESOURCES_FOLDER_PATH="$(basename "$app")" \
-PLATFORM_NAME="$sdk_name" ARCHS=arm64 \
+PLATFORM_NAME="$sdk_name" ARCHS=arm64 CONFIGURATION="$xcode_configuration" \
     ./gradlew --no-daemon :iosProbe:syncComposeResourcesForIos
 required_resource="$app/compose-resources/composeResources/org.maplibre.compose.generated/values/strings.commonMain.cvr"
 if [ ! -s "$required_resource" ]; then
@@ -42,7 +56,7 @@ cp experiments/ios-map/app/Info.plist "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string $platform" "$app/Info.plist"
 sdk="$(xcrun --sdk "$sdk_name" --show-sdk-path)"
-xcrun --sdk "$sdk_name" swiftc -warnings-as-errors -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
+xcrun --sdk "$sdk_name" swiftc -warnings-as-errors "${swift_options[@]}" -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
     -target "$triple" \
     -F "$framework" -framework TrailIosProbe \
     -framework AVFoundation -framework CoreLocation -framework UIKit -framework CoreFoundation -framework CoreGraphics \
@@ -56,12 +70,13 @@ icon_info="experiments/ios-map/build/icon-info-$kind.plist"
 xcrun actool experiments/ios-map/build/AppIcons.xcassets --compile "$app" \
     --platform "$sdk_name" --target-device iphone --minimum-deployment-target 18.5 \
     --app-icon AppIcon --output-partial-info-plist "$icon_info"
-python - "$app/Info.plist" "$icon_info" <<'PLIST'
+python - "$app/Info.plist" "$icon_info" "$configuration" <<'PLIST'
 import plistlib, sys
 from pathlib import Path
 path = Path(sys.argv[1])
 info = plistlib.loads(path.read_bytes())
 info.update(plistlib.loads(Path(sys.argv[2]).read_bytes()))
+info["TrailBuildConfiguration"] = sys.argv[3]
 path.write_bytes(plistlib.dumps(info))
 PLIST
 # Device artifacts deliberately remain unsigned until a real team/profile is supplied.

@@ -10,7 +10,7 @@ import time
 from PIL import Image
 
 OUT = Path(__file__).resolve().parent / 'build/smoke'
-COLORS = {'nj-orthos': (220, 130, 150), 'osm-raster': (150, 210, 170), 'topo-raster': (245, 220, 70)}
+COLORS = {'nj-orthos': (220, 130, 150), 'osm-raster': (150, 210, 170)}
 TILES = {}
 for key, color in COLORS.items():
     buffer = BytesIO()
@@ -54,18 +54,18 @@ try:
                         subprocess.run(['xcrun', 'simctl', 'io', identifier, 'screenshot', str(screenshot)], check=True, timeout=60)
                         image = Image.open(screenshot).convert('RGB')
                         pixels = list(image.crop((0, image.height // 5, image.width, image.height * 4 // 5)).getdata())
-                        yellow = sum(r > 220 and g > 190 and b < 110 for r, g, b in pixels)
+                        raster = sum(abs(r-150) <= 3 and abs(g-210) <= 3 and abs(b-170) <= 3 for r, g, b in pixels)
                         blue = sum(b > r + 50 and b > g + 35 for r, g, b in pixels)
                         red = sum(r > g + 60 and r > b + 60 for r, g, b in pixels)
-                        settled = settled + 1 if yellow > 10000 and blue > 500 and red > 500 else 0
+                        settled = settled + 1 if raster > 10000 and blue > 500 and red > 500 else 0
                         if settled >= 2:
                             if phase == 'write':
-                                for name in ('bright', 'hybrid', 'njsatellite', 'openstreetmap', 'opentopomap'):
+                                for name in ('bright', 'hybrid', 'njsatellite', 'openstreetmap'):
                                     assert f'IOS_BASEMAP_RENDER_PASS:{name}' in console
                                 assert Handler.requests > count
                             else:
                                 assert Handler.requests == count, 'Offline relaunch made a network request'
-                            print(f'iOS basemap/camera/cache passed {phase}: yellow={yellow}, blue={blue}, red={red}', flush=True)
+                            print(f'iOS basemap/camera/cache passed {phase}: raster={raster}, blue={blue}, red={red}', flush=True)
                             break
                     time.sleep(1)
                 else:

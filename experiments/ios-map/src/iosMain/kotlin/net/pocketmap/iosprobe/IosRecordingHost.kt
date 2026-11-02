@@ -178,7 +178,7 @@ class IosRecordingHost(private val actions: IosPlatformActions,
         LaunchedEffect(basemapCheck, mapSize) {
             if (basemapCheck.isEmpty() || mapSize == IntSize.Zero) return@LaunchedEffect
             val before = map.cameraPosition
-            val names = if (basemapCheck == "write") choices.map { it.id } else listOf("opentopomap")
+            val names = if (basemapCheck == "write") choices.map { it.id } else listOf("openstreetmap")
             for (name in names) {
                 val needsLoad = selectedBasemap != name
                 val generation = styleLoads

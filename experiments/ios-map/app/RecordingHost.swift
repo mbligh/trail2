@@ -82,7 +82,7 @@ import UIKit
 
     func basemapSelfTest(phase: String) throws {
         if phase == "read" {
-            guard mapSettings.basemap == "opentopomap", abs(mapSettings.latitude - 40.691) < 0.000001,
+            guard mapSettings.basemap == "openstreetmap", abs(mapSettings.latitude - 40.691) < 0.000001,
                   abs(mapSettings.longitude + 74.773) < 0.000001, abs(mapSettings.zoom - 15) < 0.001 else {
                 throw RecordingStoreError.corruptSession
             }

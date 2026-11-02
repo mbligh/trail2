@@ -77,7 +77,7 @@ final class OfflineResources: NSObject, IosMapResourceReader {
 
     static func verifyConfiguration() throws {
         let resources = OfflineResources()
-        guard resources.configuration.basemapNames == ["bright", "hybrid", "njsatellite", "openstreetmap", "opentopomap"] else {
+        guard resources.configuration.basemapNames == ["bright", "hybrid", "njsatellite", "openstreetmap"] else {
             throw RecordingStoreError.corruptSession
         }
         for name in resources.configuration.basemapNames {

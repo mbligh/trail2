@@ -34,6 +34,41 @@ class ComposeHeaderTest {
         }
     }
 
+    @Test fun removedBasemapFallsBackWithoutDiscardingCameraOrLayers() {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
+        val original = prefs.all
+        try {
+            prefs.edit().putString("basemap", "opentopomap").putBoolean("maplibre_migrated", true)
+                .putFloat("lat", 40.691f).putFloat("lon", -74.773f).putFloat("zoom", 15f)
+                .putBoolean("overlay_contours", true).commit()
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                val ui = RealComposeUi(scenario)
+                ui.description("Choose basemap: bright")
+                assertEquals("bright", prefs.getString("basemap", ""))
+                scenario.onActivity { activity ->
+                    assertEquals(listOf("bright", "hybrid", "njsatellite", "openstreetmap"), MapConfiguration(activity).basemaps.map { it.name })
+                }
+                assertEquals(40.691f, prefs.getFloat("lat", 0f), 0f)
+                assertEquals(-74.773f, prefs.getFloat("lon", 0f), 0f)
+                assertEquals(15f, prefs.getFloat("zoom", 0f), 0f)
+                assertEquals(true, prefs.getBoolean("overlay_contours", false))
+            }
+        } finally {
+            val edit = prefs.edit().clear()
+            original.forEach { (key, value) -> when (value) {
+                is String -> edit.putString(key, value)
+                is Boolean -> edit.putBoolean(key, value)
+                is Float -> edit.putFloat(key, value)
+                is Int -> edit.putInt(key, value)
+                is Long -> edit.putLong(key, value)
+                is Set<*> -> edit.putStringSet(key, value.filterIsInstance<String>().toSet())
+                else -> Unit
+            } }
+            edit.commit()
+        }
+    }
+
     @Test fun trailVisibilityMenuLabelUpdatesAfterAction() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val ui = RealComposeUi(scenario)

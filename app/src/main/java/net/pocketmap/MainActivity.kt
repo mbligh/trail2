@@ -246,11 +246,7 @@ class MainActivity : ComponentActivity(), LocationListener {
             setPadding(dp(20), dp(16), dp(20), dp(16))
             text = android.text.Html.fromHtml(
                 selectedBasemap.attribution +
-                    (selectedBasemap.attributionUrl?.let { "<br><br><a href=\"$it\">Source and licence details</a>" } ?: "") +
-                    if (selectedBasemap.name == "opentopomap")
-                        "<br><br><a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap · ODbL</a>" +
-                        "<br><a href=\"https://creativecommons.org/licenses/by-sa/3.0/\">Map style · CC BY-SA 3.0</a>"
-                    else "",
+                    (selectedBasemap.attributionUrl?.let { "<br><br><a href=\"$it\">Source and licence details</a>" } ?: ""),
                 android.text.Html.FROM_HTML_MODE_LEGACY)
             movementMethod = android.text.method.LinkMovementMethod.getInstance()
         }
