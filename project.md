@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.18 zoom/scale works. The next stage shares the PMTiles v3 decoder and verifies native iOS gzip/range bridging; 2.0.19 validation is pending. Connecting the iOS contour HTTP-range/cache/menu adapters remains unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.18 zoom/scale works. Android 2.0.19 shares the PMTiles v3 reader and is validated/published, awaiting the contour phone check. Native Apple range/gzip bridge fixtures passed; connecting iOS HTTP ranges, archive caching and the contour switch remains unfinished.
 
 ## Product and identity
 
@@ -1411,7 +1411,7 @@ physical test is requested; real camera/device/background behavior and Apple
 provisioning remain later distribution checks.
 
 
-## Shared PMTiles v3 reader and native Apple gzip — 2.0.19 in validation
+## Shared PMTiles v3 reader and native Apple gzip — validated 2.0.19
 
 The user confirmed the 2.0.18 phone gate. The next iOS map-layer prerequisite is
 removing Android-only archive traversal. `SharedPmtilesArchive` now owns v3 header
@@ -1446,9 +1446,24 @@ safe exception propagation for malformed archives. Launch/relaunch checks requir
 HTTP range adapter, PMTiles disk cache, contour rendering or contour menu control
 is claimed yet. Those adapters follow after the Android decoder phone gate.
 
-Required validation: Android build/lint/unit/common tests and production emulator
-suite, Play publication, native Swift tests/typecheck, iOS framework/device/simulator
-builds and all Metal/recording/report/photo/map/cache fixtures. Once green, update
-through Play to **2.0.19** and check contours while zooming, including a previously
-viewed area offline; trails/recording/pins should remain intact. No iOS physical
-phone check is requested.
+Implementation: `90e755484ae0772b5a22261d75a0d0a3dbda5559` on main. The
+isolated Compose project also compiles the exact common source via its generated
+production-source task, with CI triggers covering common PMTiles changes, in
+`a9463af3a87c94dd287a3ed8f3fe3af843f117e2`. The latter changes only probe wiring;
+production Android and iOS code is unchanged from the validated implementation.
+
+Validation passed:
+
+- [APK build and download-site deployment](https://github.com/mbligh/trail2/actions/runs/41365510066).
+- [Play internal-testing publication](https://github.com/mbligh/trail2/actions/runs/41365510025), version **2.0.19**.
+- [Production Android smoke tests](https://github.com/mbligh/trail2/actions/runs/41365509979): shared/JVM and Android unit tests, frozen-reader byte/range comparisons and lint; 18 production emulator tests plus one portrait gesture/cutout and one landscape check (**20 emulator invocations**).
+- [Isolated Compose API/rendering probe](https://github.com/mbligh/trail2/actions/runs/41365670794): eight initial emulator tests plus real NJ contour online warm-up/cold offline replay and satellite/hybrid online/offline checks (**12 invocations**). This verifies the migrated reader against actual contour data and retained range-cache bytes.
+- [Native Swift tests/typecheck](https://github.com/mbligh/trail2/actions/runs/41365509991): **13 tests**, including bounded gzip output.
+- [iOS framework and simulator checks](https://github.com/mbligh/trail2/actions/runs/41365510019): device/simulator builds, shared tests on iOS, synthetic Metal, native PMTiles/gzip/exception bridging in both launch phases, existing recording/export/report/photo fixtures, bundled offline maps, trail cache/visibility and five-map/cache relaunch checks.
+
+**Next Android phone gate:** update through Play to **2.0.19**, enable contours and
+check them while zooming. After viewing an area online, reopen the same cached view
+offline and verify the contour lines remain; imported trails and recording/pin
+overlays should remain intact. Pause migration at this decoder regression gate.
+The next implementation stage is iOS HTTP ranges, coherent archive caching and
+layer controls. No iOS physical phone check is requested.
