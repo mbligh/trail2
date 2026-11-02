@@ -31,5 +31,6 @@ final class MBTilesArchiveTests: XCTestCase {
         XCTAssertThrowsError(try MBTilesArchive(url: root.appendingPathComponent("missing.mbtiles")))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("missing.mbtiles").path))
         XCTAssertThrowsError(try MBTilesArchive.uncompressed(gzip.dropLast()))
+        XCTAssertThrowsError(try MBTilesArchive.uncompressed(gzip, maxBytes: 4))
     }
 }

@@ -128,6 +128,8 @@ import UIKit
         guard text.exportDescription == stats.description, text.displaySummary == stats.displaySummary else {
             throw RecordingStoreError.corruptSession
         }
+        try PmtilesValidation.verify()
+        print("PLATFORM_PMTILES_TEST_PASS:\(phase)")
         try OfflineResources.verifyConfiguration()
         print("PLATFORM_MAP_CONFIG_TEST_PASS:\(phase)")
         try LocationReportController.verifyEditing(message: reportMessage(

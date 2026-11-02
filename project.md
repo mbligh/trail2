@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.17 map controls work. Android 2.0.18 shares zoom conversion and is validated/published, awaiting the zoom/scale phone check. iOS basemap selection, bounded tile caching and saved map settings passed device builds and simulator checks. The full iOS app is unfinished.
+Updated 2026-11-01: The user confirmed Android 2.0.18 zoom/scale works. The next stage shares the PMTiles v3 decoder and verifies native iOS gzip/range bridging; 2.0.19 validation is pending. Connecting the iOS contour HTTP-range/cache/menu adapters remains unfinished.
 
 ## Product and identity
 
@@ -1409,3 +1409,46 @@ check the header responds; switch basemaps and restart, checking that zoom/scale
 stay consistent. Pause migration for this Android regression check. No iOS
 physical test is requested; real camera/device/background behavior and Apple
 provisioning remain later distribution checks.
+
+
+## Shared PMTiles v3 reader and native Apple gzip — 2.0.19 in validation
+
+The user confirmed the 2.0.18 phone gate. The next iOS map-layer prerequisite is
+removing Android-only archive traversal. `SharedPmtilesArchive` now owns v3 header
+parsing, little-endian fields, directory varints/delta IDs, run lengths, contiguous
+offsets, root/leaf traversal, Hilbert XYZ tile IDs and the existing zoom/compression
+limits. Platform callbacks supply byte ranges and gzip; HTTP/file/cache I/O is not
+moved into common code. Android's `PmtilesArchive` is now a thin adapter retaining
+its constructor/properties/get API and IOException behavior for archive failures.
+Existing RangeCache/TileRepository/Compose route identities stay unchanged.
+
+Valid archives are compared against a frozen pre-migration Android reader: eight
+root/leaf × raw/gzip directory × raw/gzip tile cases, repeated runs, multi-byte
+lengths, out-of-bounds/missing zooms and exact requested range sequences. Hilbert
+IDs are compared at every coordinate through z6 plus high-zoom edges through z26.
+Common tests independently check known z1 ordering, sparse runs, malformed headers,
+varints, offsets and range lengths, unsupported modes and the inflater contract.
+
+Malformed data now fails before overflowing signed offsets or allocating inflated
+blobs beyond the limit: checked offset addition, bounded signed varints and exact
+range lengths. Android gzip is read in chunks and capped at 16 MiB during inflation,
+replacing the old unbounded read followed by a size check. Swift's existing bounded
+zlib helper accepts an output cap (MBTiles keeps its 32 MiB default; PMTiles asks
+for 16 MiB). A native test verifies an inflated payload exceeding a caller cap is
+rejected. The supported archive subset remains v3, raw/gzip, max zoom 26 and at
+most four directory levels.
+
+`IosPmtilesArchive` bridges native range/gzip callbacks to that exact common reader.
+The iOS host fixtures decode eight in-memory raw/gzip/root/leaf archives using real
+native zlib and validate bytes, metadata, missing coordinates, unchanged input and
+safe exception propagation for malformed archives. Launch/relaunch checks require
+`PLATFORM_PMTILES_TEST_PASS`. These fixtures establish the decoder/bridge; no iOS
+HTTP range adapter, PMTiles disk cache, contour rendering or contour menu control
+is claimed yet. Those adapters follow after the Android decoder phone gate.
+
+Required validation: Android build/lint/unit/common tests and production emulator
+suite, Play publication, native Swift tests/typecheck, iOS framework/device/simulator
+builds and all Metal/recording/report/photo/map/cache fixtures. Once green, update
+through Play to **2.0.19** and check contours while zooming, including a previously
+viewed area offline; trails/recording/pins should remain intact. No iOS physical
+phone check is requested.

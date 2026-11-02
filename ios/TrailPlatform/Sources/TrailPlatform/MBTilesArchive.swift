@@ -59,7 +59,7 @@ public final class MBTilesArchive {
         return try Self.uncompressed(data)
     }
 
-    static func uncompressed(_ data: Data) throws -> Data {
+    static func uncompressed(_ data: Data, maxBytes: Int = 32 * 1024 * 1024) throws -> Data {
         guard data.count >= 2, data[data.startIndex] == 0x1f, data[data.startIndex + 1] == 0x8b else { return data }
         guard data.count <= 16 * 1024 * 1024 else { throw MapArchiveError.oversizedTile }
         var stream = z_stream()
@@ -80,7 +80,7 @@ public final class MBTilesArchive {
                 }
                 guard status == Z_OK || status == Z_STREAM_END else { throw MapArchiveError.invalidGzip }
                 let count = buffer.count - Int(stream.avail_out)
-                guard result.count + count <= 32 * 1024 * 1024 else { throw MapArchiveError.oversizedTile }
+                guard result.count + count <= maxBytes else { throw MapArchiveError.oversizedTile }
                 result.append(contentsOf: buffer.prefix(count))
                 if status == Z_STREAM_END {
                     guard stream.avail_in == 0 else { throw MapArchiveError.invalidGzip }
