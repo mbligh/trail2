@@ -56,6 +56,7 @@ if [ "$kind" = simulator ]; then
     # retain ATS defaults and production downloads use HTTPS.
     /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$app/Info.plist"
     /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$app/Info.plist"
+    python experiments/ios-map/make_local_archive "$app/mapAssets/maps/ios-contours.pmtiles"
     codesign --force --sign - "$app"
 fi
 xcrun vtool -show-build "$app/TrailIosProbe"

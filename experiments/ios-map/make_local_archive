@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""Bundle the deterministic contour archive in simulator builds only."""
+import importlib.util
+from pathlib import Path
+import sys
+source = Path(__file__).resolve().parent.parent / 'maplibre-compose/tools/make_contour_fixture.py'
+spec = importlib.util.spec_from_file_location('contour_fixture', source)
+fixture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fixture)
+fixture.make(Path(sys.argv[1]), update_assets=False)

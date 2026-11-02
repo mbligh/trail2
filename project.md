@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: The user confirmed Android 2.0.19 contours work offline. Android 2.0.20 shares stricter HTTP range/cache validation and is validated/published, awaiting the cache phone check. iOS contour controls, asynchronous ETag-coherent ranges and cached offline rendering passed device builds and simulator checks. The full iOS app is unfinished.
+Updated 2026-11-02: The user confirmed Android 2.0.20 works, clearing its physical-phone gate. iOS remote contour controls and cached offline rendering are validated. Work now adds bounded bundled PMTiles reads and no-network simulator rendering/relaunch checks. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1558,3 +1558,25 @@ lines and the existing trails/recording/pins remain. This checks compatibility w
 on-device caches after stricter range validation. Pause migration at this gate;
 no iOS physical test is requested. Uploaded local PMTiles support, distribution
 identity/signing and real Apple hardware testing remain later iOS work.
+
+
+## Bundled PMTiles on iOS — implementation awaiting CI
+
+Android 2.0.20 was confirmed working by the user; its phone gate is cleared.
+This stage changes only iOS. Local `pmtiles://asset://maps/...pmtiles` sources
+resolve within the immutable map bundle, rejecting parent traversal, encoded
+traversal, absolute paths and escaping symlinks. A pinned read-only file descriptor
+provides bounded (at most 16 MiB) seek/read operations on a Swift actor, reusing
+the common PMTiles parser, directory checks and native bounded gzip adapter.
+It never downloads or loads the complete archive, and uses no HTTP range cache.
+The shared contour controls and per-session renderer routing cover both local and
+remote archives.
+
+Native regression checks cover a sparse 512 MiB file, range boundaries, a
+truncated file, and an atomic replacement retaining the original descriptor.
+Simulator packages alone receive a deterministic synthetic local archive; device
+packages do not include this fixture. The layer integration runner repeats
+hide/show, basemap changes and saved-state relaunch using the local source with
+networking disabled. It asserts contour/trail/pin pixels, zero fixture HTTP
+requests, and an unchanged archive hash. Prior remote range/cache replay remains
+in CI. Apple distribution identity/signing and physical Apple testing remain open.

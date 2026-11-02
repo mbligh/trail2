@@ -4,6 +4,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import importlib.util
 import json
+import sys
+import hashlib
 from pathlib import Path
 import re
 import subprocess
@@ -12,7 +14,11 @@ import time
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
+LOCAL = '--local' in sys.argv
 OUT = ROOT / 'build/smoke'
+BUNDLED = ROOT / 'build/TrailIosProbe.app/mapAssets/maps/ios-contours.pmtiles'
+original = hashlib.sha256(BUNDLED.read_bytes()).digest() if LOCAL else None
+prefix = 'local-layers' if LOCAL else 'layers'
 spec = importlib.util.spec_from_file_location('contour_fixture', ROOT.parent / 'maplibre-compose/tools/make_contour_fixture.py')
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
@@ -57,10 +63,10 @@ identifier = next(d['udid'] for runtime,values in devices['devices'].items() if 
 try:
     for phase in ('write','read'):
         count = Handler.requests
-        output = OUT / f'layers-{phase}-console.txt'
+        output = OUT / f'{prefix}-{phase}-console.txt'
         with output.open('w') as log:
             app = subprocess.Popen(['xcrun','simctl','launch','--terminate-running-process','--console',identifier,
-                'net.pocketmap.iosprobe','--layer-self-test',phase,f'http://localhost:{server.server_port}'],stdout=log,stderr=subprocess.STDOUT)
+                'net.pocketmap.iosprobe','--layer-self-test',phase,('asset://maps/ios-contours.pmtiles' if LOCAL else f'http://localhost:{server.server_port}')],stdout=log,stderr=subprocess.STDOUT)
             try:
                 deadline = time.monotonic()+180
                 disabled = False
@@ -73,7 +79,7 @@ try:
                         # Initial disabled style omits the entire archive source.
                         disabled = True
                     if f'IOS_LAYER_ALL_PASS:{phase}' in console and 'IOS_PMTILES_HIT:' in console:
-                        screenshot = OUT / f'layers-{phase}.png'
+                        screenshot = OUT / f'{prefix}-{phase}.png'
                         subprocess.run(['xcrun','simctl','io',identifier,'screenshot',str(screenshot)],check=True,timeout=60)
                         image = Image.open(screenshot).convert('RGB')
                         pixels = list(image.crop((0,image.height//5,image.width,image.height*4//5)).getdata())
@@ -83,10 +89,14 @@ try:
                         settled = settled+1 if magenta > 1000 and blue > 500 and red > 500 else 0
                         if settled >= 2:
                             if phase == 'write':
-                                assert disabled and Handler.ranges > 0
+                                assert disabled
+                                if not LOCAL: assert Handler.ranges > 0
                             else:
                                 assert Handler.requests == count, 'Offline relaunch made an HTTP request'
-                            print(f'iOS contour/cache/layer passed {phase}: magenta={magenta}, blue={blue}, red={red}',flush=True)
+                            if LOCAL:
+                                assert Handler.requests == 0, 'Bundled archive used HTTP'
+                                assert hashlib.sha256(BUNDLED.read_bytes()).digest() == original
+                            print(f'iOS {prefix} contour/cache/layer passed {phase}: magenta={magenta}, blue={blue}, red={red}',flush=True)
                             break
                     time.sleep(1)
                 else:

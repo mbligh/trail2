@@ -104,6 +104,8 @@ jobs:
         run: python experiments/ios-map/basemaps_simulator
       - name: Verify contour HTTP ranges layer toggles and cold offline replay
         run: python experiments/ios-map/layers_simulator
+      - name: Verify bundled local PMTiles layer controls without HTTP
+        run: python experiments/ios-map/layers_simulator --local
       - uses: actions/upload-artifact@v6
         if: always()
         with:

@@ -21,7 +21,13 @@ final class OfflineMapBundleTests: XCTestCase {
         XCTAssertEqual(sqlite3_open(root.appendingPathComponent("maps/seed.mbtiles").path, &db), SQLITE_OK)
         XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE metadata(name TEXT,value TEXT); INSERT INTO metadata VALUES('maxzoom','14'); CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB); INSERT INTO tiles VALUES(2,1,2,x'010203');", nil, nil, nil), SQLITE_OK)
         sqlite3_close(db)
+        try write("maps/local.pmtiles", "archive")
+        try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("maps/escape.pmtiles").path, withDestinationPath: root.deletingLastPathComponent().appendingPathComponent("outside.pmtiles").path)
         let bundle = try OfflineMapBundle(directory: root)
+        XCTAssertEqual(bundle.archiveURL("asset://maps/local.pmtiles"), root.appendingPathComponent("maps/local.pmtiles"))
+        for invalid in ["asset://../outside.pmtiles", "asset://%2e%2e/outside.pmtiles", "asset:///outside.pmtiles", "asset://maps/escape.pmtiles", "asset://maps/missing.pmtiles", "https://remote.invalid/archive.pmtiles", "asset://fonts/test.pbf"] {
+            XCTAssertNil(bundle.archiveURL(invalid), invalid)
+        }
         let style = try bundle.style()
         let rawStyle = try String(contentsOf: root.appendingPathComponent("styles/bright.json"), encoding: .utf8)
         XCTAssertEqual(try bundle.route(styleJson: rawStyle), style)

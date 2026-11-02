@@ -5,20 +5,37 @@ import TrailIosProbe
 /// so no network wait blocks a renderer thread or the main actor.
 actor NativePmtilesSource {
     private let url: URL
+    private let local: LocalArchiveReader?
     private let identity: String
     private let cache: ArchiveRangeCache
     private let networkEnabled: Bool
     private var snapshot: ArchiveSnapshot?
-    private var opening: Task<ArchiveSnapshot, Error>?
+    private var header: Data?
+    private var opening: Task<Data, Error>?
     init(url: URL, identity: String, cache: ArchiveRangeCache, networkEnabled: Bool) {
+        self.local = nil
         self.url = url; self.identity = identity; self.cache = cache; self.networkEnabled = networkEnabled
     }
-    private func open() async throws -> ArchiveSnapshot {
-        if let snapshot { return snapshot }
+    init(localURL: URL, cache: ArchiveRangeCache) throws {
+        self.url = localURL; self.identity = ""; self.cache = cache; self.networkEnabled = false
+        self.local = try LocalArchiveReader(url: localURL)
+    }
+    private func loadHeader() async throws -> Data {
+        if let local {
+            let data = try await local.read(offset: 0, length: 127)
+            try Self.validateHeader(data)
+            return data
+        }
+        let value = try await cache.open(url: url, identity: identity, networkEnabled: networkEnabled, validateHeader: Self.validateHeader)
+        snapshot = value
+        return value.header
+    }
+    private func open() async throws -> Data {
+        if let header { return header }
         if let opening { return try await opening.value }
-        let task = Task { try await cache.open(url: url, identity: identity, networkEnabled: networkEnabled, validateHeader: Self.validateHeader) }
+        let task = Task { try await loadHeader() }
         opening = task
-        do { let value = try await task.value; snapshot = value; opening = nil; return value }
+        do { let value = try await task.value; header = value; opening = nil; return value }
         catch { opening = nil; throw error }
     }
     nonisolated private static func validateHeader(_ data: Data) throws {
@@ -27,19 +44,24 @@ actor NativePmtilesSource {
     }
     func metadata(route: String) async throws -> Data {
         let value = try await open()
-        let metadata = try IosPmtilesArchive(reader: ArchiveBuffer(header: value.header)).metadata()
+        let metadata = try IosPmtilesArchive(reader: ArchiveBuffer(header: value)).metadata()
         return try JSONSerialization.data(withJSONObject: ["tilejson":"3.0.0", "minzoom":metadata.minZoom,
             "maxzoom":metadata.maxZoom, "tiles":[route + "/{z}/{x}/{y}"]])
     }
     func tile(z: Int32, x: Int32, y: Int32) async throws -> Data? {
         let value = try await open()
-        let buffer = ArchiveBuffer(header: value.header)
+        let buffer = ArchiveBuffer(header: value)
         let archive = IosPmtilesArchive(reader: buffer)
         for _ in 0..<8 {
             buffer.missing = nil
             let result = try archive.tile(z: z, x: x, y: y)
             guard let (offset, length) = buffer.missing else { return result.map(PmtilesBytes.data) }
-            guard let data = try await cache.read(url: url, snapshot: value, offset: offset, length: length, networkEnabled: networkEnabled) else { return nil }
+            let data: Data
+            if let local { data = try await local.read(offset: offset, length: length) }
+            else {
+                guard let snapshot, let bytes = try await cache.read(url: url, snapshot: snapshot, offset: offset, length: length, networkEnabled: networkEnabled) else { return nil }
+                data = bytes
+            }
             try buffer.install(data, offset: offset, length: length)
         }
         throw ArchiveRangeError.response

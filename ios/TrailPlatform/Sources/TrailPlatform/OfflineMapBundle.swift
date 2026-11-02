@@ -29,6 +29,16 @@ public final class OfflineMapBundle {
         return file.path.hasPrefix(root.path + "/") ? file : nil
     }
 
+    /// Resolve assets inside the immutable bundle, including symlink containment.
+    /// PMTiles callers open a range reader instead of reading the complete file.
+    public func archiveURL(_ address: String) -> URL? {
+        guard address.hasPrefix("asset://"),
+              let relative = String(address.dropFirst(8)).removingPercentEncoding,
+              let url = Self.safeFile(relative, root: root),
+              url.pathExtension == "pmtiles", FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
     public func style(named name: String = "bright") throws -> String {
         guard ["bright", "hybrid"].contains(name), let url = Self.safeFile("styles/\(name).json", root: root) else {
             throw MapArchiveError.sqlite("Offline style is unavailable")

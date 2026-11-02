@@ -20,7 +20,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             let phase = mapFlag.flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
             let origin = mapFlag.flatMap { arguments.indices.contains($0 + 2) ? arguments[$0 + 2] : nil }
             let normal = !testing && !arguments.contains("--offline-map-test") && mapFlag == nil
-            let host = RecordingHost(testing: testing, networkEnabled: normal || phase == "write", basemapPhase: basemapFlag == nil ? nil : phase, fixtureOrigin: origin, layerPhase: layerFlag == nil ? nil : phase)
+            let host = RecordingHost(testing: testing, networkEnabled: (normal || phase == "write") && !(origin?.hasPrefix("asset://") ?? false), basemapPhase: basemapFlag == nil ? nil : phase, fixtureOrigin: origin, layerPhase: layerFlag == nil ? nil : phase)
             recordingHost = host
             window.rootViewController = host.controller
             if arguments.contains("--platform-self-test") {

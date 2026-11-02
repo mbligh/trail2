@@ -21,7 +21,7 @@ final class OfflineResources: NSObject, IosMapResourceReader {
     init(networkEnabled: Bool = false, fixtureOrigin: String? = nil, cacheDirectory: URL? = nil, contourOrigin: String? = nil, archiveDirectory: URL? = nil) {
         self.contourOrigin = contourOrigin
         self.networkEnabled = networkEnabled
-        self.fixtureOrigin = fixtureOrigin
+        self.fixtureOrigin = fixtureOrigin?.hasPrefix("asset://") == true ? nil : fixtureOrigin
         do {
             guard let root = Bundle.main.resourceURL else { throw MapArchiveError.sqlite("No app resource directory") }
             bundle = try OfflineMapBundle(directory: root.appendingPathComponent("mapAssets"))
@@ -45,11 +45,18 @@ final class OfflineResources: NSObject, IosMapResourceReader {
         for (id, definition) in sources {
             guard let source = definition["url"] as? String, source.hasPrefix("pmtiles://") else { continue }
             let identity = String(decoding: try JSONSerialization.data(withJSONObject: definition, options: [.sortedKeys]), as: UTF8.self)
-            let address = contourOrigin.map { $0 + "/contours.pmtiles" } ?? String(source.dropFirst("pmtiles://".count))
-            guard let url = URL(string: address), url.scheme == "https" || (contourOrigin != nil && url.host == "localhost") else { throw ArchiveRangeError.response }
+            let address = contourOrigin.map { $0.hasPrefix("asset://") ? $0 : $0 + "/contours.pmtiles" } ?? String(source.dropFirst("pmtiles://".count))
             let key = ArchiveRangeCache.hash(routeSession + "\n" + address + "\n" + identity)
+            let candidate: NativePmtilesSource
+            if address.hasPrefix("asset://") {
+                guard let file = bundle.archiveURL(address) else { throw ArchiveRangeError.response }
+                candidate = try NativePmtilesSource(localURL: file, cache: archiveCache)
+            } else {
+                guard let url = URL(string: address), url.scheme == "https" || (contourOrigin != nil && url.host == "localhost") else { throw ArchiveRangeError.response }
+                candidate = NativePmtilesSource(url: url, identity: identity, cache: archiveCache, networkEnabled: networkEnabled)
+            }
             archiveLock.lock()
-            if archives[key] == nil { archives[key] = NativePmtilesSource(url: url, identity: identity, cache: archiveCache, networkEnabled: networkEnabled) }
+            if archives[key] == nil { archives[key] = candidate }
             archiveLock.unlock()
             var routed = definition
             routed["url"] = "https://trail.pmtiles.ios.invalid/\(key)/source.json"
