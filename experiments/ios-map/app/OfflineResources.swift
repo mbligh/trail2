@@ -5,6 +5,8 @@ import TrailIosProbe
 /// SQLite readers serialize their own access; UI actions remain on the main actor.
 final class OfflineResources: NSObject, IosMapResourceReader {
     private let bundle: OfflineMapBundle
+    // Renderer URLs belong to one pinned archive session; durable ranges use URL/ETag identities.
+    private let routeSession = UUID().uuidString
     private let archiveCache: ArchiveRangeCache
     private let archiveLock = NSLock()
     private var archiveReads = 0
@@ -45,7 +47,7 @@ final class OfflineResources: NSObject, IosMapResourceReader {
             let identity = String(decoding: try JSONSerialization.data(withJSONObject: definition, options: [.sortedKeys]), as: UTF8.self)
             let address = contourOrigin.map { $0 + "/contours.pmtiles" } ?? String(source.dropFirst("pmtiles://".count))
             guard let url = URL(string: address), url.scheme == "https" || (contourOrigin != nil && url.host == "localhost") else { throw ArchiveRangeError.response }
-            let key = ArchiveRangeCache.hash(address + "\n" + identity)
+            let key = ArchiveRangeCache.hash(routeSession + "\n" + address + "\n" + identity)
             archiveLock.lock()
             if archives[key] == nil { archives[key] = NativePmtilesSource(url: url, identity: identity, cache: archiveCache, networkEnabled: networkEnabled) }
             archiveLock.unlock()

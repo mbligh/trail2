@@ -1476,7 +1476,10 @@ exposes the shared map-layer choices in the existing layer menu and persists the
 independent enabled states. Only enabled overlays enter the style, and PMTiles
 sources use private app TileJSON/tile routes. Basemap changes rebuild the style
 with the current layer selections, keeping camera, trails, recordings and pins.
-The native immutable bundle router preserves those private PMTiles routes.
+The native immutable bundle router preserves those private PMTiles routes. Their
+URLs are unique to a host session, preventing renderer-owned caches from retaining
+old archive bytes across a new cohort on app reopen; durable range identities do
+not include that session and remain usable offline.
 
 `NativePmtilesSource` is a Swift actor around the common decoder. Its synchronous
 range callback returns already-fetched bytes or records the next required range;
