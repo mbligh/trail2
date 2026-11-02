@@ -7,14 +7,14 @@ case "$kind" in
         target=iosSimulatorArm64
         sdk_name=iphonesimulator
         platform=iPhoneSimulator
-        triple=arm64-apple-ios15.5-simulator
+        triple=arm64-apple-ios18.5-simulator
         app="experiments/ios-map/build/TrailIosProbe.app"
         ;;
     device)
         target=iosArm64
         sdk_name=iphoneos
         platform=iPhoneOS
-        triple=arm64-apple-ios15.5
+        triple=arm64-apple-ios18.5
         app="experiments/ios-map/build/TrailIosProbe-device.app"
         ;;
     *) echo "Usage: $0 [simulator|device]" >&2; exit 2 ;;
@@ -42,7 +42,7 @@ cp experiments/ios-map/app/Info.plist "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$app/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string $platform" "$app/Info.plist"
 sdk="$(xcrun --sdk "$sdk_name" --show-sdk-path)"
-xcrun --sdk "$sdk_name" swiftc -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
+xcrun --sdk "$sdk_name" swiftc -warnings-as-errors -parse-as-library -module-name TrailIosProbeHost -sdk "$sdk" \
     -target "$triple" \
     -F "$framework" -framework TrailIosProbe \
     -framework AVFoundation -framework CoreLocation -framework UIKit -framework CoreFoundation -framework CoreGraphics \
@@ -50,6 +50,20 @@ xcrun --sdk "$sdk_name" swiftc -parse-as-library -module-name TrailIosProbeHost 
     -framework Metal -framework QuartzCore -lc++ -lz -lsqlite3 \
     -Xlinker -ObjC \
     experiments/ios-map/app/*.swift ios/TrailPlatform/Sources/TrailPlatform/*.swift -o "$app/TrailIosProbe"
+# Reuse the Android vector artwork for the iOS launcher icon.
+python ios/make_app_icons experiments/ios-map/build/AppIcons.xcassets
+icon_info="experiments/ios-map/build/icon-info-$kind.plist"
+xcrun actool experiments/ios-map/build/AppIcons.xcassets --compile "$app" \
+    --platform "$sdk_name" --target-device iphone --minimum-deployment-target 18.5 \
+    --app-icon AppIcon --output-partial-info-plist "$icon_info"
+python - "$app/Info.plist" "$icon_info" <<'PLIST'
+import plistlib, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+info = plistlib.loads(path.read_bytes())
+info.update(plistlib.loads(Path(sys.argv[2]).read_bytes()))
+path.write_bytes(plistlib.dumps(info))
+PLIST
 # Device artifacts deliberately remain unsigned until a real team/profile is supplied.
 if [ "$kind" = simulator ]; then
     # Permit only local fixture networking in simulator packages; device builds

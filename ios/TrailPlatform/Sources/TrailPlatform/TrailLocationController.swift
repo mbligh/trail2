@@ -124,7 +124,12 @@ import UIKit
         onChange?()
     }
 
-    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    // CLLocationManager is created on the main actor above; Core Location delivers
+    // delegates on that same run loop. Assert the boundary before accessing state.
+    nonisolated public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        MainActor.assumeIsolated { authorizationChanged() }
+    }
+    private func authorizationChanged() {
         if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
             if recorder.recording != nil { _ = try? recorder.stop() }
             recorder.haltAfterStorageFailure()
@@ -142,7 +147,10 @@ import UIKit
         if wantsUpdates { startForegroundUpdates() }
     }
 
-    public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        MainActor.assumeIsolated { receive(locations) }
+    }
+    private func receive(_ locations: [CLLocation]) {
         let now = Date()
         do {
             for location in locations.sorted(by: { $0.timestamp < $1.timestamp }) {
@@ -163,7 +171,10 @@ import UIKit
         } catch { failSaving(error) }
     }
 
-    public func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+    nonisolated public func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        MainActor.assumeIsolated { receiveHeading(newHeading) }
+    }
+    private func receiveHeading(_ newHeading: CLHeading) {
         heading = newHeading.headingAccuracy >= 0 && abs(newHeading.timestamp.timeIntervalSinceNow) <= 5
             ? (newHeading.trueHeading >= 0 ? newHeading.trueHeading : nil) : nil
         headingTimer?.invalidate()
@@ -175,7 +186,10 @@ import UIKit
         onChange?()
     }
 
-    public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    nonisolated public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        MainActor.assumeIsolated { failed(error) }
+    }
+    private func failed(_ error: Error) {
         if (error as? CLError)?.code == .locationUnknown { return } // transient reception loss
         message = error.localizedDescription
         onChange?()

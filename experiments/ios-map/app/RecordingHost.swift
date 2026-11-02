@@ -276,7 +276,14 @@ import UIKit
         } catch { show(error) }
     }
 
-    func perform(action: String) {
+    nonisolated func perform(action: String) {
+        // Kotlin UI callbacks normally arrive on main. Preserve immediate button
+        // feedback there, and explicitly dispatch any future worker callback.
+        if Thread.isMainThread { MainActor.assumeIsolated { handle(action: action) } }
+        else { Task { @MainActor in self.handle(action: action) } }
+    }
+
+    private func handle(action: String) {
         if action.hasPrefix("layer:") {
             let id = String(action.dropFirst("layer:".count))
             guard let resources = offlineResources, resources.layers.contains(where: { $0.id == id }) else { return }

@@ -19,7 +19,7 @@ jobs:
         run: swift test --package-path ios/TrailPlatform
       - name: Typecheck native iOS location APIs
         run: |
-          xcrun --sdk iphonesimulator swiftc -typecheck -parse-as-library \
+          xcrun --sdk iphonesimulator swiftc -warnings-as-errors -typecheck -parse-as-library \
             -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
-            -target arm64-apple-ios15.5-simulator \
+            -target arm64-apple-ios18.5-simulator \
             ios/TrailPlatform/Sources/TrailPlatform/*.swift

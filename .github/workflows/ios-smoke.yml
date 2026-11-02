@@ -82,17 +82,20 @@ jobs:
         with:
           name: Trail-iOS-map-assets
           path: experiments/ios-map/build/mapAssets/
+      - name: Install image tooling
+        run: python -m pip install Pillow==11.3.0
       - name: Build simulator and unsigned device probes without Apple credentials
         run: |
           bash experiments/ios-map/build_probe_app simulator
           bash experiments/ios-map/build_probe_app device
+      - name: Package Trail 2 unsigned device app with production identity
+        run: python ios/package_device
       - name: Package app bundles with executable permissions
         run: |
           ditto -c -k --sequesterRsrc --keepParent experiments/ios-map/build/TrailIosProbe.app experiments/ios-map/build/TrailIosProbe-simulator.zip
           ditto -c -k --sequesterRsrc --keepParent experiments/ios-map/build/TrailIosProbe-device.app experiments/ios-map/build/TrailIosProbe-device-unsigned.zip
       - name: Verify synthetic Metal rendering in the simulator
         run: |
-          python -m pip install Pillow==11.3.0
           python experiments/ios-map/smoke_simulator.py
       - name: Verify native recording and relaunch rendering
         run: python experiments/ios-map/platform_simulator
@@ -117,6 +120,7 @@ jobs:
             shared/build/test-results/
             experiments/ios-map/build/TrailIosProbe-simulator.zip
             experiments/ios-map/build/TrailIosProbe-device-unsigned.zip
+            experiments/ios-map/build/Trail2-device-unsigned.ipa
             experiments/ios-map/build/smoke/
           if-no-files-found: warn
       - uses: actions/cache/save@v5

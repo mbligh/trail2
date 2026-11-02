@@ -1580,3 +1580,26 @@ hide/show, basemap changes and saved-state relaunch using the local source with
 networking disabled. It asserts contour/trail/pin pixels, zero fixture HTTP
 requests, and an unchanged archive hash. Prior remote range/cache replay remains
 in CI. Apple distribution identity/signing and physical Apple testing remain open.
+
+
+## iOS native actor boundaries and device package — awaiting CI
+
+The linked ICU object reports an 18.5 deployment minimum. Set the host plist,
+Swift device/simulator target and native adapter package/typecheck consistently
+to iOS 18.5, rather than advertising unverified 15.5 support. The native package's
+macOS minimum becomes 14 for `MainActor.assumeIsolated`. Kotlin UI actions enter
+through a nonisolated callback: immediate execution on main preserves record-button
+feedback; off-main callers explicitly dispatch to the main actor. Core Location
+is initialized on the main actor and its delegate callbacks assert that documented
+run-loop boundary before accessing state. Swift host compilation and native iOS
+API typechecks now treat warnings as errors.
+
+Render the existing Android horse vector into an iOS AppIcon asset catalog;
+compile it for each platform and merge the generated icon metadata before signing.
+Add a validated, unsigned development IPA with identifier `mbligh.trail`, display
+name Trail 2, Android version name and CI build number. Verify device Mach-O
+platform/minimum, background location, icon declaration, no simulator archive,
+unchanged executable bytes and ZIP permissions. Keep probe identities available
+for all existing simulator automation. This still uses a debug Kotlin framework,
+needs Apple provisioning/signing for installation, and is not an App Store
+submission archive. `ios/README.md` records reproduction and hardware limitations.
