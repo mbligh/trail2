@@ -17,7 +17,7 @@ spec = importlib.util.spec_from_file_location('contour_fixture', ROOT.parent / '
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 path = OUT / 'ios-contour-fixture.pmtiles'
-fixture.make(path)
+fixture.make(path, update_assets=False)
 ARCHIVE = path.read_bytes()
 buffer = BytesIO()
 Image.new('RGB',(256,256),(240,235,215)).save(buffer,'PNG')
