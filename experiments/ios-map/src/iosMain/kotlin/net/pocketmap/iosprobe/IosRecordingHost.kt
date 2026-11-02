@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeUIViewController
 import net.pocketmap.shared.map.PositionOverlay
 import net.pocketmap.shared.map.TrailMapContent
+import net.pocketmap.shared.ui.MapLayerChoice
 import net.pocketmap.shared.ui.MapChoice
 import net.pocketmap.shared.ui.BasemapArtwork
 import net.pocketmap.shared.ui.ReportArtwork
@@ -60,6 +61,11 @@ class IosRecordingHost(private val actions: IosPlatformActions,
     private var selectedBasemap by mutableStateOf("bright")
     private var initialCamera = IosMapCamera(40.692, -74.771, 14.5)
     private var camera = initialCamera
+    private var layerOptions by mutableStateOf(emptyList<IosLayerOption>())
+    private var enabledLayers by mutableStateOf(emptySet<String>())
+    private var layerCheck by mutableStateOf("")
+    fun setLayers(options: List<IosLayerOption>, enabled: List<String>) { layerOptions = options; enabledLayers = enabled.toSet() }
+    fun verifyLayers(phase: String) { layerCheck = phase }
     private var basemapCheck by mutableStateOf("")
     fun configureMaps(choices: List<IosBasemapOption>, selected: String, camera: IosMapCamera, trailsVisible: Boolean) {
         this.choices = choices; selectedBasemap = selected; initialCamera = camera; this.camera = camera
@@ -190,6 +196,50 @@ class IosRecordingHost(private val actions: IosPlatformActions,
             }
             actions.perform("basemapAllPass:$basemapCheck")
         }
+        LaunchedEffect(layerCheck, mapSize) {
+            if (layerCheck.isEmpty() || mapSize == IntSize.Zero) return@LaunchedEffect
+            val before = map.cameraPosition
+            suspend fun visible(): Pair<Int, Boolean> {
+                if (map.viewport == null) return 0 to false
+                val bounds = with(density) { DpRect(0.dp, 0.dp, mapSize.width.toDp(), mapSize.height.toDp()) }
+                val features = map.queryRenderedFeatures(bounds)
+                val names = features.mapNotNull { it.properties?.get("name")?.jsonPrimitive?.content }.toSet()
+                return features.count { it.properties?.containsKey("elevation_ft") == true } to
+                    setOf("Basemap trail", "Recorded trail", "Pin\nBasemap pin").all { it in names }
+            }
+            suspend fun awaitState(contours: Boolean, generation: Int = -1) {
+                repeat(160) {
+                    val (count, overlays) = visible()
+                    if (styleLoads > generation && overlays && (count > 0) == contours) return
+                    delay(250)
+                }
+                error("Contour/overlay state did not render: $contours")
+            }
+            if (layerCheck == "write") {
+                check("contours" !in enabledLayers)
+                awaitState(false)
+                actions.perform("layerDisabledPass")
+                var generation = styleLoads
+                actions.perform("layer:contours"); awaitState(true, generation)
+                generation = styleLoads
+                actions.perform("layer:contours"); awaitState(false, generation)
+                delay(500); check(visible().first == 0)
+                generation = styleLoads
+                actions.perform("layer:contours"); awaitState(true, generation)
+                for (name in listOf("hybrid", "bright")) {
+                    generation = styleLoads
+                    actions.perform("basemap:$name"); awaitState(true, generation)
+                }
+            } else {
+                check("contours" in enabledLayers)
+                awaitState(true)
+            }
+            val after = map.cameraPosition
+            check(kotlin.math.abs(before.zoom - after.zoom) < 0.001 &&
+                kotlin.math.abs(before.center.latitude - after.center.latitude) < 0.000001 &&
+                kotlin.math.abs(before.center.longitude - after.center.longitude) < 0.000001) { "Layer switch moved camera" }
+            actions.perform("layerAllPass:$layerCheck")
+        }
         LaunchedEffect(position, following) {
             if (following) position?.let { map.setCameraPosition(map.cameraPosition.copy(center = it)) }
         }
@@ -262,7 +312,7 @@ class IosRecordingHost(private val actions: IosPlatformActions,
                 basemaps = choices.map { MapChoice(it.id, it.label) }, selectedBasemap = selectedBasemap,
                 onBasemapSelected = { actions.perform("basemap:$it") }, basemapIcon = { BasemapArtwork() }, zoomLabel = (MapZoom.displayed(map.cameraPosition.zoom) * 10).toInt().let { "${it / 10}.${it % 10}" },
                 onMapCredits = { actions.perform("credits") }, trailsVisible = trailsVisible,
-                mapLayers = emptyList(), onLayerToggled = {}, onMenuAction = { actions.perform(it.name) },
+                mapLayers = layerOptions.map { MapLayerChoice(it.id, it.label, it.id in enabledLayers) }, onLayerToggled = { actions.perform("layer:$it") }, onMenuAction = { actions.perform(it.name) },
                 map = {
                     Box(Modifier.fillMaxSize()) {
                         MaplibreMap(state = map, overlay = {}, modifier = Modifier.fillMaxSize().onSizeChanged { mapSize = it }.pointerInput(Unit) {

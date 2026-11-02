@@ -51,4 +51,19 @@ class RangeCacheStorageTest {
         assertNull(storage.get(url, "bytes=4-8", "1")); assertFalse(corrupt.exists())
         assertNotNull(storage.get(url, "bytes=0-3", "1"))
     }
+    @Test fun mismatchedRangeMetadataIsDiscardedAndNeverWritten() {
+        val directory = temporary.newFolder()
+        val storage = RangeCacheStorage(directory)
+        for (header in listOf("bytes 1-4/100", "bytes 0-3/3", "bytes 0-3/*")) {
+            val file = legacyFile(directory, "bytes=0-3", "1")
+            DataOutputStream(file.outputStream()).use {
+                it.writeUTF(header); it.writeUTF("application/octet-stream")
+                it.writeInt(4); it.write(byteArrayOf(1,2,3,4))
+            }
+            assertNull(storage.get(url, "bytes=0-3", "1")); assertFalse(file.exists())
+            storage.put(url, "bytes=0-3", "1", RangeCacheStorage.Entry(header, "application/octet-stream", byteArrayOf(1,2,3,4)))
+            assertFalse(file.exists())
+        }
+    }
+
 }

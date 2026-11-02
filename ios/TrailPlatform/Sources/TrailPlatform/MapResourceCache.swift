@@ -29,7 +29,7 @@ public final class MapResourceCache {
 }
 
 
-private actor MapDownloadGate {
+actor MapDownloadGate {
     private var active = 0
     private var waiting = [CheckedContinuation<Void, Never>]()
     func acquire() async {

@@ -1,5 +1,7 @@
 package net.pocketmap
 
+import net.pocketmap.shared.pmtiles.HttpByteRange
+
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -24,15 +26,17 @@ class RangeCacheStorage(
                 val mime = input.readUTF()
                 val length = input.readInt()
                 require(length in 1..32 * 1024 * 1024)
+                require(HttpByteRange.matches(range, contentRange, length))
                 val data = ByteArray(length)
                 input.readFully(data)
+                require(input.read() == -1)
                 Entry(contentRange, mime, data)
             }
         }.getOrElse { file.delete(); null }
     }
 
     @Synchronized fun put(url: String, range: String, namespace: String, entry: Entry) {
-        if (entry.data.isEmpty() || entry.data.size > 32 * 1024 * 1024 || entry.contentRange.isBlank()) return
+        if (entry.data.isEmpty() || entry.data.size > 32 * 1024 * 1024 || !HttpByteRange.matches(range, entry.contentRange, entry.data.size)) return
         val file = file(url, range, namespace)
         val temporary = File(file.path + ".tmp")
         try {

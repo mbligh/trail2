@@ -47,7 +47,8 @@ public final class OfflineMapBundle {
             var source = definitions[id] ?? original
             // All tile sources use a local route, even if a particular archive
             // is absent. A missing seed cannot silently fetch remote imagery.
-            if source["type"] as? String == "vector" || source["type"] as? String == "raster" {
+            if !(source["url"] as? String ?? "").hasPrefix("https://trail.pmtiles.ios.invalid/") &&
+                (source["type"] as? String == "vector" || source["type"] as? String == "raster") {
                 source.removeValue(forKey: "url")
                 source["tiles"] = ["https://trail.ios.invalid/\(id)/{z}/{x}/{y}"]
                 if let archive = archives[id] {

@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-01: The user confirmed Android 2.0.18 zoom/scale works. Android 2.0.19 shares the PMTiles v3 reader and is validated/published, awaiting the contour phone check. Native Apple range/gzip bridge fixtures passed; connecting iOS HTTP ranges, archive caching and the contour switch remains unfinished.
+Updated 2026-11-02: The user confirmed Android 2.0.19 contours work offline. The next stage connects iOS contour controls to asynchronous HTTP ranges and an ETag-coherent archive cache, and shares HTTP range validation with Android; 2.0.20 validation is pending.
 
 ## Product and identity
 
@@ -1467,3 +1467,66 @@ offline and verify the contour lines remain; imported trails and recording/pin
 overlays should remain intact. Pause migration at this decoder regression gate.
 The next implementation stage is iOS HTTP ranges, coherent archive caching and
 layer controls. No iOS physical phone check is requested.
+
+
+## iOS contour controls, coherent HTTP ranges and shared validation — 2.0.20 in validation
+
+The user confirmed the 2.0.19 decoder gate, including offline contours. iOS now
+exposes the shared map-layer choices in the existing layer menu and persists their
+independent enabled states. Only enabled overlays enter the style, and PMTiles
+sources use private app TileJSON/tile routes. Basemap changes rebuild the style
+with the current layer selections, keeping camera, trails, recordings and pins.
+The native immutable bundle router preserves those private PMTiles routes.
+
+`NativePmtilesSource` is a Swift actor around the common decoder. Its synchronous
+range callback returns already-fetched bytes or records the next required range;
+the actor then awaits native I/O and retries traversal. There is no synchronous
+network wait on the UI or renderer. A per-request buffer is capped at 32 MiB;
+compressed/inflated PMTiles limits remain 16 MiB and shared directory-depth limits
+still apply. Metadata is built from the common header parser.
+
+`ArchiveRangeCache` requires HTTP 206, an exact Content-Range/byte count, identity
+HTTP encoding and a strong ETag. The initial 127-byte header is checked by the common
+PMTiles parser before publishing cache metadata. Later ranges send If-Range and
+must have the same ETag and total length; changed/full/malformed/truncated/oversized
+responses cannot enter that cohort. Each URL/source definition and ETag/length has
+its own directory. Writes and current-cohort metadata are atomic. Reopening online
+checks a fresh header; a failed/invalid refresh retains the last validated cohort.
+Offline mode never opens a network request. A running archive stays pinned to its
+cohort; if the remote version changes while a needed old range is missing, it is
+rejected rather than mixed, and reopening the app establishes a new cohort.
+Archive ranges are pruned from approximately 500 to 400 MiB, retaining header files;
+at most four archive downloads run concurrently, with 20/40-second timeouts.
+
+The configured NJ archive endpoint was checked with a 127-byte request and returned
+206, an exact range and a strong ETag. Simulator HTTP is restricted to an opt-in
+localhost fixture; normal configured sources use HTTPS. This stage supports the
+configured remote vector PMTiles archive; a native adapter for uploaded local
+PMTiles files remains a later extension.
+
+`HttpByteRange` is shared between the iOS transport callback and Android. Android
+now verifies stored/requested/response ranges and byte lengths on both cache reads
+and writes, deleting malformed old entries so they can be fetched again. A gap in
+the old adapter allowed mismatched Content-Range metadata to be stored before the
+consumer rejected it. Valid existing cache keys and binary layout remain unchanged.
+The decoder source inclusion in the isolated Compose project now includes all
+common PMTiles helpers. Tests retain the existing binary-cache interoperability
+oracle and add mismatch/unknown-total rejection.
+
+Native tests cover offline reopen, source-version and ETag cohort separation,
+If-Range, failed/invalid header refresh preserving the last cohort, full/wrong/
+short/long/encoded/weak-validator responses, and saved layer settings. The new
+`layers_simulator` uses the existing deterministic contour MVT/PMTiles generator
+and a real local range HTTP server. It queries rendered elevation features and
+app overlays, checks disabled layers make no archive requests, hide/show and
+basemap switches preserve state/camera, and cold relaunch restores contours with
+networking disabled. Magenta contour pixels plus red trails and blue recording/
+pins must be visible in both screenshots; the server request count must stay
+unchanged during offline replay. Test settings and archive data use dedicated
+fixture storage. These are action-handler/render checks, not automated menu taps.
+
+Required validation: Android build/lint/common/unit tests, production and isolated
+probe emulator checks, publication, Swift tests/typecheck, iOS frameworks/apps and
+all existing simulator checks plus the new contour HTTP/cache/layer replay. Once
+green, **2.0.20** needs an Android phone check of contour loading and the same cached
+view offline after the range validation change. No iOS physical test is requested.

@@ -1,5 +1,7 @@
 package net.pocketmap
 
+import net.pocketmap.shared.pmtiles.HttpByteRange
+
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
@@ -156,11 +158,10 @@ class TileRepository(private val context: Context) : Interceptor, Closeable {
     fun loadArchiveRange(url: String, offset: Long, length: Int): ByteArray? {
         if (closed || offset < 0 || length !in 1..(16 * 1024 * 1024) || offset > Long.MAX_VALUE - length) return null
         val range = "bytes=$offset-" + (offset + length - 1)
-        val prefix = "bytes $offset-" + (offset + length - 1) + "/"
         val request = okhttp3.Request.Builder().url(url).header("Range", range)
             .header("Accept-Encoding", "identity").build()
         return client.newCall(request).execute().use { response ->
-            if (response.code != 206 || response.header("Content-Range")?.startsWith(prefix) != true) return null
+            if (response.code != 206 || HttpByteRange(offset, length).total(response.header("Content-Range") ?: "") == null) return null
             val stream = response.body?.byteStream() ?: return null
             val bytes = ByteArray(length)
             java.io.DataInputStream(stream).readFully(bytes)

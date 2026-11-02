@@ -19,9 +19,9 @@ import UIKit
     private var preferences: MapViewPreferences?
     private var mapSettings = MapViewSettings()
 
-    init(testing: Bool = false, networkEnabled: Bool = false, basemapPhase: String? = nil, fixtureOrigin: String? = nil) {
+    init(testing: Bool = false, networkEnabled: Bool = false, basemapPhase: String? = nil, fixtureOrigin: String? = nil, layerPhase: String? = nil) {
         do {
-            if testing || basemapPhase != nil {
+            if testing || basemapPhase != nil || layerPhase != nil {
                 let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                        appropriateFor: nil, create: true)
                 store = try RecordingStore(directory: root.appendingPathComponent("Trail/integration-fixture"))
@@ -34,20 +34,24 @@ import UIKit
         if testing {
             style = "{\"version\":8,\"sources\":{},\"layers\":[{\"id\":\"background\",\"type\":\"background\",\"paint\":{\"background-color\":\"#ffffff\"}}]}"
         } else {
-            let resources = OfflineResources(networkEnabled: networkEnabled, fixtureOrigin: fixtureOrigin)
+            let archiveDirectory = layerPhase == nil ? nil : store.directory.appendingPathComponent("layer-range-cache")
+            if layerPhase == "write", let archiveDirectory { try? FileManager.default.removeItem(at: archiveDirectory) }
+            let resources = OfflineResources(networkEnabled: networkEnabled, fixtureOrigin: fixtureOrigin,
+                contourOrigin: layerPhase == nil ? nil : fixtureOrigin, archiveDirectory: archiveDirectory)
             let defaults: UserDefaults
-            if basemapPhase != nil {
-                defaults = UserDefaults(suiteName: "Trail-basemap-fixture")!
-                if basemapPhase == "write" { defaults.removePersistentDomain(forName: "Trail-basemap-fixture") }
+            if basemapPhase != nil || layerPhase != nil {
+                let suite = layerPhase == nil ? "Trail-basemap-fixture" : "Trail-layer-fixture"
+                defaults = UserDefaults(suiteName: suite)!
+                if basemapPhase == "write" || layerPhase == "write" { defaults.removePersistentDomain(forName: suite) }
             } else { defaults = .standard }
             let preferences = MapViewPreferences(defaults: defaults)
             self.preferences = preferences
-            mapSettings = preferences.read(available: resources.basemaps.map { $0.id })
-            if basemapPhase == "write" {
+            mapSettings = preferences.read(available: resources.basemaps.map { $0.id }, layers: Dictionary(uniqueKeysWithValues: resources.layers.map { ($0.id,$0.defaultVisible) }))
+            if basemapPhase == "write" || layerPhase == "write" {
                 mapSettings.latitude = 40.691; mapSettings.longitude = -74.773; mapSettings.zoom = 15
             }
             offlineResources = resources
-            do { style = try resources.style(name: mapSettings.basemap) }
+            do { style = try resources.style(name: mapSettings.basemap, enabled: mapSettings.enabledLayers) }
             catch { fatalError("Cannot prepare offline map style: \(error)") }
         }
         model = IosRecordingHost(actions: self, resources: offlineResources, styleJson: style)
@@ -55,6 +59,7 @@ import UIKit
             model.configureMaps(choices: resources.basemaps, selected: mapSettings.basemap,
                 camera: IosMapCamera(latitude: mapSettings.latitude, longitude: mapSettings.longitude, zoom: mapSettings.zoom),
                 trailsVisible: mapSettings.trailsVisible)
+            model.setLayers(options: resources.layers, enabled: Array(mapSettings.enabledLayers))
         }
         for id in ["1763", "1899", "1205", "503"] {
             if let url = Bundle.main.resourceURL?.appendingPathComponent("trail-icons/mymaps_\(id).png"),
@@ -82,6 +87,11 @@ import UIKit
                 throw RecordingStoreError.corruptSession
             }
         }
+        try installMapFixture()
+        model.verifyBasemaps(phase: phase)
+    }
+
+    private func installMapFixture() throws {
         let document = try parseTrails(Data("<kml><Document><Folder><name>Trails</name><Placemark><name>Basemap trail</name><Style><LineStyle><color>ff0000ff</color><width>8</width></LineStyle></Style><LineString><coordinates>-74.779,40.695 -74.763,40.689</coordinates></LineString></Placemark></Folder></Document></kml>".utf8))
         model.showTrails(document: document, status: "Basemap fixture")
         let geometry = IosTrackBridge().recording(points: [
@@ -90,7 +100,14 @@ import UIKit
             pins: [IosRecordedPin(latitude: 40.694, longitude: -74.766, text: "Basemap pin")])
         model.update(status: "Basemap fixture", recording: false, hasFix: false, latitude: 0, longitude: 0,
                      heading: -1, track: geometry.track, pins: geometry.pins)
-        model.verifyBasemaps(phase: phase)
+    }
+    func layerSelfTest(phase: String) throws {
+        if phase == "read" {
+            guard mapSettings.enabledLayers.contains("contours"), mapSettings.basemap == "bright",
+                  abs(mapSettings.zoom - 15) < 0.001 else { throw RecordingStoreError.corruptSession }
+        }
+        try installMapFixture()
+        model.verifyLayers(phase: phase)
     }
 
     func selfTest(phase: String) throws {
@@ -260,11 +277,32 @@ import UIKit
     }
 
     func perform(action: String) {
+        if action.hasPrefix("layer:") {
+            let id = String(action.dropFirst("layer:".count))
+            guard let resources = offlineResources, resources.layers.contains(where: { $0.id == id }) else { return }
+            var enabled = mapSettings.enabledLayers
+            if enabled.contains(id) { enabled.remove(id) } else { enabled.insert(id) }
+            do {
+                let style = try resources.style(name: mapSettings.basemap, enabled: enabled)
+                mapSettings.enabledLayers = enabled
+                model.setLayers(options: resources.layers, enabled: Array(enabled))
+                model.selectBasemap(name: mapSettings.basemap, style: style)
+                saveMapSettings()
+            } catch { show(error) }
+            return
+        }
+        if action == "layerDisabledPass" {
+            precondition(offlineResources?.archiveReadCount == 0, "Disabled layer requested an archive")
+            print("IOS_LAYER_DISABLED_PASS"); fflush(stdout); return }
+        if action.hasPrefix("layerAllPass:") {
+            saveMapSettings()
+            print("IOS_LAYER_ALL_PASS:" + action.dropFirst("layerAllPass:".count)); fflush(stdout); return
+        }
         if action.hasPrefix("basemap:") {
             let name = String(action.dropFirst("basemap:".count))
             guard let resources = offlineResources, resources.basemaps.contains(where: { $0.id == name }) else { return }
             do {
-                let style = try resources.style(name: name)
+                let style = try resources.style(name: name, enabled: mapSettings.enabledLayers)
                 model.selectBasemap(name: name, style: style)
                 mapSettings.basemap = name
                 saveMapSettings()

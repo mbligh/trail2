@@ -19,3 +19,8 @@ class IosPmtilesArchive(reader: IosPmtilesRangeReader) {
     fun tile(z: Int, x: Int, y: Int): ByteArray? = archive.get(z, x, y)
 }
 data class IosPmtilesMetadata(val minZoom: Int, val maxZoom: Int, val tileType: Int)
+
+class IosHttpByteRange {
+    fun total(offset: Long, length: Int, header: String): Long =
+        net.pocketmap.shared.pmtiles.HttpByteRange(offset, length).total(header) ?: -1
+}

@@ -5,18 +5,29 @@ import TrailIosProbe
 /// SQLite readers serialize their own access; UI actions remain on the main actor.
 final class OfflineResources: NSObject, IosMapResourceReader {
     private let bundle: OfflineMapBundle
+    private let archiveCache: ArchiveRangeCache
+    private let archiveLock = NSLock()
+    private var archiveReads = 0
+    var archiveReadCount: Int { archiveLock.lock(); defer { archiveLock.unlock() }; return archiveReads }
+    private var archives: [String: NativePmtilesSource] = [:]
+    private let contourOrigin: String?
     private let cache: MapResourceCache
     private let networkEnabled: Bool
     private let fixtureOrigin: String?
     private let configuration: IosMapConfiguration
 
-    init(networkEnabled: Bool = false, fixtureOrigin: String? = nil, cacheDirectory: URL? = nil) {
+    init(networkEnabled: Bool = false, fixtureOrigin: String? = nil, cacheDirectory: URL? = nil, contourOrigin: String? = nil, archiveDirectory: URL? = nil) {
+        self.contourOrigin = contourOrigin
         self.networkEnabled = networkEnabled
         self.fixtureOrigin = fixtureOrigin
         do {
             guard let root = Bundle.main.resourceURL else { throw MapArchiveError.sqlite("No app resource directory") }
             bundle = try OfflineMapBundle(directory: root.appendingPathComponent("mapAssets"))
             let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            archiveCache = try ArchiveRangeCache(directory: archiveDirectory ?? caches.appendingPathComponent("Trail/archive-ranges"), validateRange: { offset, length, header in
+                let total = IosHttpByteRange().total(offset: offset, length: Int32(length), header: header)
+                return total < 0 ? nil : total
+            })
             cache = try MapResourceCache(directory: cacheDirectory ?? caches.appendingPathComponent("Trail/map-resources"))
             configuration = IosMapConfiguration(reader: BundledMapAssets(root: root))
         } catch { fatalError("Cannot load bundled offline map: \(error)") }
@@ -24,7 +35,36 @@ final class OfflineResources: NSObject, IosMapResourceReader {
     }
 
     var basemaps: [IosBasemapOption] { configuration.basemaps }
-    func style(name: String = "bright") throws -> String { try bundle.route(styleJson: configuration.style(name: name)) }
+    var layers: [IosLayerOption] { configuration.layers }
+    func style(name: String = "bright", enabled: Set<String> = []) throws -> String {
+        let raw = try configuration.styleWithLayers(name: name, enabled: Array(enabled))
+        var style = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as! [String: Any]
+        var sources = style["sources"] as! [String: [String: Any]]
+        for (id, definition) in sources {
+            guard let source = definition["url"] as? String, source.hasPrefix("pmtiles://") else { continue }
+            let identity = String(decoding: try JSONSerialization.data(withJSONObject: definition, options: [.sortedKeys]), as: UTF8.self)
+            let address = contourOrigin.map { $0 + "/contours.pmtiles" } ?? String(source.dropFirst("pmtiles://".count))
+            guard let url = URL(string: address), url.scheme == "https" || (contourOrigin != nil && url.host == "localhost") else { throw ArchiveRangeError.response }
+            let key = ArchiveRangeCache.hash(address + "\n" + identity)
+            archiveLock.lock()
+            if archives[key] == nil { archives[key] = NativePmtilesSource(url: url, identity: identity, cache: archiveCache, networkEnabled: networkEnabled) }
+            archiveLock.unlock()
+            var routed = definition
+            routed["url"] = "https://trail.pmtiles.ios.invalid/\(key)/source.json"
+            sources[id] = routed
+        }
+        style["sources"] = sources
+        return try bundle.route(styleJson: String(decoding: JSONSerialization.data(withJSONObject: style), as: UTF8.self))
+    }
+    private func archive(_ url: String) -> (NativePmtilesSource, [Substring])? {
+        guard let parsed = URL(string: url), parsed.host == "trail.pmtiles.ios.invalid" else { return nil }
+        let path = parsed.path.split(separator: "/")
+        guard let key = path.first else { return nil }
+        archiveLock.lock(); defer { archiveLock.unlock() }
+        guard let source = archives[String(key)] else { return nil }
+        archiveReads += 1
+        return (source,path)
+    }
 
     static func verifyConfiguration() throws {
         let resources = OfflineResources()
@@ -47,7 +87,15 @@ final class OfflineResources: NSObject, IosMapResourceReader {
     func read(url: String, completion: IosResourceCompletion) {
         Task {
             do {
-                var data = try bundle.read(url: url)
+                var data: Data?
+                if let (archive, path) = archive(url) {
+                    if path.count == 2, path[1] == "source.json" {
+                        data = try await archive.metadata(route: "https://trail.pmtiles.ios.invalid/" + String(path[0]))
+                    } else if path.count == 4, let z = Int32(path[1]), let x = Int32(path[2]), let y = Int32(path[3]) {
+                        data = try await archive.tile(z: z, x: x, y: y)
+                    }
+                    if data != nil { print("IOS_PMTILES_HIT:\(url)"); fflush(stdout) }
+                } else { data = try bundle.read(url: url) }
                 if data == nil, let remote = bundle.remoteResource(url: url, fixtureOrigin: fixtureOrigin) {
                     data = try await cache.read(url: remote.url, identity: remote.identity, networkEnabled: networkEnabled)
                     if data != nil {
