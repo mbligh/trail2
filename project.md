@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: The user confirmed Android 2.0.19 contours work offline. The next stage connects iOS contour controls to asynchronous HTTP ranges and an ETag-coherent archive cache, and shares HTTP range validation with Android; 2.0.20 validation is pending.
+Updated 2026-11-02: The user confirmed Android 2.0.19 contours work offline. Android 2.0.20 shares stricter HTTP range/cache validation and is validated/published, awaiting the cache phone check. iOS contour controls, asynchronous ETag-coherent ranges and cached offline rendering passed device builds and simulator checks. The full iOS app is unfinished.
 
 ## Product and identity
 
@@ -1469,7 +1469,7 @@ The next implementation stage is iOS HTTP ranges, coherent archive caching and
 layer controls. No iOS physical phone check is requested.
 
 
-## iOS contour controls, coherent HTTP ranges and shared validation — 2.0.20 in validation
+## iOS contour controls, coherent HTTP ranges and shared validation — validated 2.0.20
 
 The user confirmed the 2.0.19 decoder gate, including offline contours. iOS now
 exposes the shared map-layer choices in the existing layer menu and persists their
@@ -1528,8 +1528,33 @@ pins must be visible in both screenshots; the server request count must stay
 unchanged during offline replay. Test settings and archive data use dedicated
 fixture storage. These are action-handler/render checks, not automated menu taps.
 
-Required validation: Android build/lint/common/unit tests, production and isolated
-probe emulator checks, publication, Swift tests/typecheck, iOS frameworks/apps and
-all existing simulator checks plus the new contour HTTP/cache/layer replay. Once
-green, **2.0.20** needs an Android phone check of contour loading and the same cached
-view offline after the range validation change. No iOS physical test is requested.
+Implementation: `3a4f952dc1cd23abee3320dc664d38f4bf17426d`, with private
+renderer URL session scoping in `b3255a38ec50e47cb03f30422c09a98319f99e02`.
+The fixture generator gained a data-only mode for iOS in
+`f0498a3259574f1a508e60a88082f157bbbd2033`; its standalone CLI retains the
+existing asset-manifest update behavior. All are on main. The first layer test
+stopped in fixture generation because that standalone manifest was absent in the
+iOS test directory; data-only generation was then locally verified (header,
+directory and tile payload) and both affected CI workflows passed.
+
+Validation passed:
+
+- [APK build/download-site deployment](https://github.com/mbligh/trail2/actions/runs/41451738129).
+- [Play internal-testing publication](https://github.com/mbligh/trail2/actions/runs/41451738230), version **2.0.20**.
+- [Production Android smoke tests](https://github.com/mbligh/trail2/actions/runs/41451738293): shared/Android unit tests, original cache-format interoperability, invalid-entry recovery and lint; 18 production emulator tests plus one portrait and one landscape check (**20 invocations**).
+- [Isolated Compose rendering probe](https://github.com/mbligh/trail2/actions/runs/41455751017): eight initial emulator checks plus real contour and imagery online/offline replay (**12 invocations**).
+- [Native Swift tests/typecheck](https://github.com/mbligh/trail2/actions/runs/41451738302): **15 tests**, including HTTP response/cohort failure cases and settings persistence.
+- [iOS frameworks and simulator integration](https://github.com/mbligh/trail2/actions/runs/41455750841): device/simulator apps, shared tests on iOS, all prior Metal/recording/export/report/photo/offline/trail/basemap checks, plus contour HTTP, hide/show, basemap changes and cold offline replay. Both contour screenshots had **22,707 magenta**, **14,967 blue** and **30,558 red** pixels. Native precondition confirmed zero initial disabled-layer archive requests; the read phase made no additional server requests.
+
+The final offline screenshot was reviewed: labeled synthetic contours over the
+bundled street map, red imported line, blue recording/pin, 15.0 header and safe
+screen insets. The contour fixture is synthetic, not real terrain. Existing Swift
+actor-conformance/ICU minimum-OS warnings remain as previously documented; the
+new range/cache code added no compiler warnings in the host builds.
+
+**Next Android phone gate:** update through Play to **2.0.20**, enable contours and
+view an area online, then reopen the same cached view offline. Confirm contour
+lines and the existing trails/recording/pins remain. This checks compatibility with
+on-device caches after stricter range validation. Pause migration at this gate;
+no iOS physical test is requested. Uploaded local PMTiles support, distribution
+identity/signing and real Apple hardware testing remain later iOS work.
