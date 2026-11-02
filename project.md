@@ -1586,8 +1586,8 @@ in CI. Apple distribution identity/signing and physical Apple testing remain ope
 
 The linked ICU object reports an 18.5 deployment minimum. Set the host plist,
 Swift device/simulator target and native adapter package/typecheck consistently
-to iOS 18.5, rather than advertising unverified 15.5 support. The native package's
-macOS minimum becomes 14 for `MainActor.assumeIsolated`. Kotlin UI actions enter
+to iOS 18.5, rather than advertising unverified 15.5 support. The native package retains its macOS 13 minimum; these actor boundaries are
+iOS-only. Kotlin UI actions enter
 through a nonisolated callback: immediate execution on main preserves record-button
 feedback; off-main callers explicitly dispatch to the main actor. Core Location
 is initialized on the main actor and its delegate callbacks assert that documented

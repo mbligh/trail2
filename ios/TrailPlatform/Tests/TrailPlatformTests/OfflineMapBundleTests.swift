@@ -6,7 +6,12 @@ import XCTest
 final class OfflineMapBundleTests: XCTestCase {
     func testExistingAndroidAssetLayoutRoutesEntirelyOffline() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
+        let outside = root.appendingPathExtension("pmtiles")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: outside)
+        }
+        try Data("outside archive".utf8).write(to: outside)
         for path in ["styles", "maps", "fonts"] {
             try FileManager.default.createDirectory(at: root.appendingPathComponent(path), withIntermediateDirectories: true)
         }
@@ -22,7 +27,7 @@ final class OfflineMapBundleTests: XCTestCase {
         XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE metadata(name TEXT,value TEXT); INSERT INTO metadata VALUES('maxzoom','14'); CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB); INSERT INTO tiles VALUES(2,1,2,x'010203');", nil, nil, nil), SQLITE_OK)
         sqlite3_close(db)
         try write("maps/local.pmtiles", "archive")
-        try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("maps/escape.pmtiles").path, withDestinationPath: root.deletingLastPathComponent().appendingPathComponent("outside.pmtiles").path)
+        try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent("maps/escape.pmtiles").path, withDestinationPath: outside.path)
         let bundle = try OfflineMapBundle(directory: root)
         XCTAssertEqual(bundle.archiveURL("asset://maps/local.pmtiles"), root.appendingPathComponent("maps/local.pmtiles"))
         for invalid in ["asset://../outside.pmtiles", "asset://%2e%2e/outside.pmtiles", "asset:///outside.pmtiles", "asset://maps/escape.pmtiles", "asset://maps/missing.pmtiles", "https://remote.invalid/archive.pmtiles", "asset://fonts/test.pbf"] {

@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "TrailPlatform",
-    platforms: [.iOS("18.5"), .macOS(.v14)],
+    platforms: [.iOS("18.5"), .macOS(.v13)],
     products: [.library(name: "TrailPlatform", targets: ["TrailPlatform"])],
     targets: [
         .target(name: "TrailPlatform", linkerSettings: [.linkedLibrary("sqlite3"), .linkedLibrary("z")]),

@@ -60,6 +60,10 @@ threading.Thread(target=server.serve_forever,daemon=True).start()
 devices = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json'],timeout=60))
 identifier = next(d['udid'] for runtime,values in devices['devices'].items() if '.iOS-' in runtime
                   for d in values if 'iPhone' in d['name'] and d['state'] == 'Booted')
+if LOCAL:
+    installed = Path(subprocess.check_output(['xcrun','simctl','get_app_container',identifier,'net.pocketmap.iosprobe','app'],text=True,timeout=60).strip())
+    BUNDLED = installed / 'mapAssets/maps/ios-contours.pmtiles'
+    assert hashlib.sha256(BUNDLED.read_bytes()).digest() == original, 'Installed fixture differs from build'
 try:
     for phase in ('write','read'):
         count = Handler.requests
