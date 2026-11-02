@@ -70,6 +70,7 @@ android.androidResources.noCompress += listOf("mbtiles", "pmtiles")
 // shipping app or its older MapLibre/toolchain into the isolated experiment.
 val productionCacheSources by tasks.registering(Sync::class) {
     from(rootRepo.resolve("app/src/main/java")) { include("net/pocketmap/MbTilesCache.kt", "net/pocketmap/RangeCacheStorage.kt", "net/pocketmap/PmtilesArchive.kt") }
+    from(rootRepo.resolve("shared/src/commonMain/kotlin")) { include("net/pocketmap/shared/pmtiles/SharedPmtilesArchive.kt") }
     into(layout.buildDirectory.dir("generated/productionCacheSources"))
 }
 // AGP 9 rejects TaskProvider/Provider values in the legacy SourceSet API.
