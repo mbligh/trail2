@@ -1,31 +1,37 @@
-# iOS shared-renderer probe
+# iOS integration host and renderer checks
 
-This separate fixture app proves that Trail's actual shared Compose map layers
-and live-position overlay render using the iOS Metal backend. It has synthetic
-geometry and test artwork, blocks all network resources, and does not acquire GPS,
-record real tracks, or implement the full Trail UI. The Android app is independent.
+The default app now opens Trail's shared screen with native location/recording,
+trail refresh/cache, report/photo/export handlers, map selection and contour
+controls. It remains a development host: Apple signing and real iPhone behavior
+are unverified. See [iOS packaging and limitations](../../ios/README.md).
 
-On an Apple Silicon Mac with current Xcode, JDK 17 and the Android SDK configured:
+`--metal-probe` selects the original synthetic renderer fixture. Other explicit
+self-test flags exercise native persistence, maps, trails, layer toggles and the
+shared legend. Test recording storage/preferences are separate from normal use;
+synthetic local contour archives are bundled only into simulator packages.
+
+On an ARM64 Mac with the workflow's Xcode, JDK 17 and Android SDK toolchains,
+prepare the offline seed and build the framework/app pairs from the repo root:
 
 ```sh
+python -m pip install shapely==2.1.2 Pillow==11.3.0
+python tools/prepare_maps --output experiments/ios-map/build/mapAssets
 ./gradlew :shared:linkDebugFrameworkIosArm64 \
   :shared:linkDebugFrameworkIosSimulatorArm64 :shared:iosSimulatorArm64Test \
   :iosProbe:linkDebugFrameworkIosSimulatorArm64 :iosProbe:linkDebugFrameworkIosArm64
 bash experiments/ios-map/build_probe_app simulator
 bash experiments/ios-map/build_probe_app device
-python -m pip install Pillow==11.3.0
+python ios/package_device
 python experiments/ios-map/smoke_simulator.py
 ```
 
-`build/TrailIosProbe.app` is a simulator app; ad-hoc signing requires no Apple
-account. `build/TrailIosProbe-device.app` is also compiled for a physical ARM64 iPhone,
-but is unsigned and cannot be installed without valid Apple provisioning/signing.
-It remains a fixture app, not the full Trail application. The static frameworks in `shared/build/bin/` are separate device and
-simulator slices. The dependency publishes only ARM64 variants, so an Intel Mac
-cannot run this simulator build. An iPhone build/distribution will need an actual
-iOS app host, platform services and Apple signing setup in a later stage.
+The simulator app is ad-hoc signed without an Apple account. The device app and
+Trail 2 IPA remain unsigned. These framework dependencies support ARM64 devices
+and Apple Silicon simulators; an Intel Mac cannot run this simulator build.
+The host requires iOS 18.5 because of the linked rendering dependency.
 
-The `iOS shared framework and Metal simulator smoke test` workflow runs the same
-commands on a macOS ARM64 runner and retains screenshots, pixel counts, logs,
-frameworks and zipped app bundles. The inner ZIP files preserve executable permissions. Its pixel assertions test actual GPU
-output rather than accepting an empty map surface as a successful build.
+The iOS smoke workflow runs actual Metal pixel checks plus recording/export/
+report/photo, offline map, trail refresh/visibility, five-basemap/cache, remote
+contour range/cache, bundled contour/relaunch and legend checks. Inner app ZIPs
+preserve executable permissions. Frameworks, the unsigned IPA, logs and screenshots
+are retained in the `Trail-iOS-simulator-check` Actions artifact.

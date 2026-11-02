@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: The user confirmed Android 2.0.20 works, clearing its physical-phone gate. iOS remote contour controls and cached offline rendering are validated. Work now adds bounded bundled PMTiles reads and no-network simulator rendering/relaunch checks. The full iOS app is unfinished.
+Updated 2026-11-02: The user confirmed Android 2.0.20 works. Android 2.0.21 now shares the four-color legend with iOS and is validated/published, awaiting its Legend phone check. iOS bundled/remote PMTiles, native actor boundaries and branded unsigned device packaging passed the full simulator suite. Apple provisioning and physical iPhone validation remain open.
 
 ## Product and identity
 
@@ -1560,7 +1560,7 @@ no iOS physical test is requested. Uploaded local PMTiles support, distribution
 identity/signing and real Apple hardware testing remain later iOS work.
 
 
-## Bundled PMTiles on iOS — implementation awaiting CI
+## Bundled vector PMTiles on iOS — validated with 2.0.21
 
 Android 2.0.20 was confirmed working by the user; its phone gate is cleared.
 This stage changes only iOS. Local `pmtiles://asset://maps/...pmtiles` sources
@@ -1582,7 +1582,7 @@ requests, and an unchanged archive hash. Prior remote range/cache replay remains
 in CI. Apple distribution identity/signing and physical Apple testing remain open.
 
 
-## iOS native actor boundaries and device package — awaiting CI
+## iOS native actor boundaries and device package — validated with 2.0.21
 
 The linked ICU object reports an 18.5 deployment minimum. Set the host plist,
 Swift device/simulator target and native adapter package/typecheck consistently
@@ -1605,7 +1605,7 @@ needs Apple provisioning/signing for installation, and is not an App Store
 submission archive. `ios/README.md` records reproduction and hardware limitations.
 
 
-## Shared trail legend — Android 2.0.21, awaiting CI
+## Shared trail legend — Android 2.0.21, validated
 
 Replace Android's native legend construction and iOS's generic explanatory alert
 with one common Compose dialog. Preserve the four original label/RGB pairs:
@@ -1621,7 +1621,32 @@ blank map, checks rendered colors, and runs the shared dismissal callback back
 to the map; it does not claim an automated iOS menu tap or physical interaction.
 The iOS suite also retains bundled/remote contour replay and unsigned packaging.
 
-After all CI and publication checks pass, the next physical Android gate is
+All required CI and publication checks passed. The next physical Android gate is
 2.0.21: open Menu → Legend, check all four rows, dismiss with Done and Back, and
 confirm the map and recording controls still respond. No iOS hardware check is
 requested from the user. Apple provisioning and hardware validation remain open.
+
+
+### 2.0.21 final validation
+
+Implementation through `9a10e0e2305ea5084f87ddf3e6793af54bb1f72f` is validated:
+
+- [APK build/publication](https://github.com/mbligh/trail2/actions/runs/41478522178) and [Play bundle/upload](https://github.com/mbligh/trail2/actions/runs/41478522173) passed for **2.0.21**.
+- [Production checks](https://github.com/mbligh/trail2/actions/runs/41478522215) passed shared/Android unit tests, lint, **19 production emulator tests plus one portrait and one landscape inset test: 21 invocations**. The new real-menu legend test verifies all labels and frozen RGB swatches, Done dismissal, reopening and system Back dismissal.
+- [Native Swift adapters](https://github.com/mbligh/trail2/actions/runs/41477512561) passed **17 tests** and iOS API typecheck with warnings as errors. An earlier unassigned Mac job was cancelled without logs; retrying that job passed. New coverage includes sparse-file ranges, truncation, pinned descriptors and actual existing-file symlink escapes.
+- [iOS full framework/app/simulator checks](https://github.com/mbligh/trail2/actions/runs/41478522160) passed shared device/simulator linking, shared tests on iOS, Swift hosts with warnings as errors, unsigned IPA validation, synthetic Metal, recording/export/report/photo/relaunch, bundled maps, KML failure/cache recovery, five basemaps, remote contours/cache/offline replay, the shared legend, and bundled local contours without HTTP.
+
+Both remote and local contour replay produced **22,707 magenta, 14,967 blue and
+30,558 red pixels** in write and cold-read phases. The local fixture made zero
+HTTP requests and its installed archive hash stayed unchanged. Each iOS legend
+swatch contributed **2,160 matching pixels**; dismissal returned to the map.
+Android/iOS legend screenshots and the final local-contour screenshot were
+visually reviewed: correct readable labels, intact overlays and safe insets.
+The former Swift actor-conformance and ICU minimum-OS warnings are absent from
+the final iOS host logs.
+
+The `Trail-iOS-simulator-check` artifact contains the branded
+`Trail2-device-unsigned.ipa` (development/debug framework, not an App Store
+submission archive), device/simulator app ZIPs, logs and screenshots. No Apple
+signing or physical iPhone behavior is claimed. The physical Android gate above
+is the next step before further shared UI changes.
