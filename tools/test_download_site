@@ -9,6 +9,7 @@ from pathlib import Path
 import plistlib
 import tempfile
 import unittest
+import urllib.error
 import zipfile
 
 loader = importlib.machinery.SourceFileLoader('downloads', str(Path(__file__).with_name('prepare_download_site')))
@@ -56,7 +57,10 @@ class Fixtures:
         assert repository == REPO
         output.write_bytes(self.files[artifact['id']])
     def open_public(self, url, timeout):
-        return io.BytesIO(self.public[url.rsplit('/',1)[1]])
+        name = url.rsplit('/',1)[1]
+        if name not in self.public:
+            raise urllib.error.HTTPError(url,404,'Not found',{},None)
+        return io.BytesIO(self.public[name])
     def prepare(self, output):
         return downloads.prepare(REPO, output, self.get, self.fetch,
             template='iOS {{IOS_VERSION}}, minimum {{IOS_MINIMUM_OS}}', public_open=self.open_public)
@@ -129,6 +133,21 @@ class DownloadSiteTests(unittest.TestCase):
                 f.runs['ios-smoke.yml'][0].update(change)
                 metadata = f.prepare(root/str(next(iter(change))))
                 self.assertEqual(metadata['ios']['version'], '2.0.22')
+    def test_rerun_of_successful_build_cannot_roll_back_a_newer_public_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            f = self.fixtures()
+            f.add('ios', 201, ipa('2.0.23'))
+            first = f.prepare(root/'published')
+            f.public = {p.name:p.read_bytes() for p in (root/'published').iterdir() if p.is_file()}
+            # A rerun is in progress, so the REST success filter only returns 200.
+            f.runs['ios-smoke.yml'] = [r for r in f.runs['ios-smoke.yml'] if r['id'] != 201]
+            f.add('android', 101, b'new apk')
+            second = f.prepare(root/'updated')
+            self.assertEqual(second['ios'], first['ios'])
+            self.assertEqual(second['android']['run_id'], 101)
+            self.assertEqual((root/'updated/Trail2-device-unsigned.ipa').read_bytes(), ipa('2.0.23'))
+
     def test_duplicate_archive_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)

@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import urllib.error
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,13 +75,21 @@ def extract(archive, destination, filename):
             shutil.copyfileobj(stream, output, 1024*1024)
 
 
-def restore_public(repository, platform, target, get, opener):
+def public_state(repository, get, opener):
     base = get(f'repos/{repository}/pages')['html_url'].rstrip('/')
-    with opener(base+'/build-info.json', timeout=60) as response:
-        raw = response.read(64*1024+1)
+    try:
+        with opener(base+'/build-info.json', timeout=60) as response:
+            raw = response.read(64*1024+1)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return base, {}  # First deployment from the older APK-only site.
+        raise
     if len(raw) > 64*1024:
         raise ValueError('Public build metadata is oversized')
-    item = json.loads(raw)[platform]
+    return base, json.loads(raw)
+
+
+def restore_public(base, platform, target, item, opener):
     if item['file'] != PLATFORMS[platform][2] or not re.fullmatch('[0-9a-f]{64}', item['sha256']) or not 0 < item['bytes'] <= 512*1024*1024:
         raise ValueError('Invalid public fallback metadata')
     size = 0
@@ -103,19 +112,26 @@ def prepare(repository, output, get=api, fetch=download, template=None, public_o
         site = work / 'site'
         site.mkdir()
         metadata = {}
+        base, published = public_state(repository, get, public_open)
         for platform, (workflow, names, filename) in PLATFORMS.items():
             target = site / filename
             try:
                 run, artifact = select(repository, workflow, names, get)
             except MissingArtifact:
                 # Pages is durable even after GitHub's build artifacts expire.
-                metadata[platform] = restore_public(repository, platform, target, get, public_open)
+                metadata[platform] = restore_public(base, platform, target, published[platform], public_open)
             else:
-                archive = work / f'{platform}.zip'
-                fetch(repository, artifact, archive)
-                extract(archive, target, filename)
-                metadata[platform] = dict(file=filename, run_id=run['id'], commit=run['head_sha'],
-                                          build_url=f'https://github.com/{repository}/actions/runs/{run["id"]}')
+                previous = published.get(platform)
+                if previous and int(previous['run_id']) > run['id']:
+                    # Rerunning a formerly successful run temporarily removes it
+                    # from the API's success list. Keep the newer published app.
+                    metadata[platform] = restore_public(base, platform, target, previous, public_open)
+                else:
+                    archive = work / f'{platform}.zip'
+                    fetch(repository, artifact, archive)
+                    extract(archive, target, filename)
+                    metadata[platform] = dict(file=filename, run_id=run['id'], commit=run['head_sha'],
+                                              build_url=f'https://github.com/{repository}/actions/runs/{run["id"]}')
             digest = sha256(target)
             (site / (filename+'.sha256')).write_text(f'{digest}  {filename}\n')
             metadata[platform].update(sha256=digest, bytes=target.stat().st_size)

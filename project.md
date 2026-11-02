@@ -1750,7 +1750,8 @@ into the public site.
 
 Local regression checks cover independent platform updates, legacy artifact
 layout, expired-artifact preservation, corruption, rejection of Debug/failed/fork/
-PR inputs and duplicate files. The workflow also checks both deployed files via
+PR inputs, duplicate files, and reruns temporarily hiding a newer previously
+successful build from the API. The workflow also checks both deployed files via
 anonymous HTTP and compares sizes/SHA with prepared artifacts. Both download
 locations must work before this stage is considered validated. No app feature or
 version-name change is needed; Android/iOS publishing remain independently built.
