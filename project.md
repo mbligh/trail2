@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: The user confirmed Android 2.0.21's shared Legend works. Remove OpenTopoMap in 2.0.22 and retain the independent contour overlay. Both platforms keep Bright, hybrid, NJ satellite and OpenStreetMap. Next iOS work moves the simulator/device host to optimized Release frameworks. These changes await build/publication validation.
+Updated 2026-11-02: Android 2.0.22 is validated and published with OpenTopoMap removed. Bright, hybrid, NJ satellite and OpenStreetMap remain, alongside the independent contour overlay. Saved-map migration checks pass on both platforms. Optimized Kotlin/Native and Swift iOS Release apps passed the full simulator suite and unsigned IPA validation. Apple provisioning and physical iPhone validation remain open.
 
 ## Product and identity
 
@@ -1651,7 +1651,7 @@ signing or physical iPhone behavior is claimed. The physical Android gate above
 is the next step before further shared UI changes.
 
 
-## OpenTopoMap removal — 2.0.22, validation pending
+## OpenTopoMap removal — 2.0.22, validated
 
 The user confirmed 2.0.21's Legend and requested removal of OpenTopoMap because
 Trail has its own contour overlay. Remove the OpenTopoMap basemap, raster source,
@@ -1669,7 +1669,7 @@ Historical validation sections above describe the earlier five-choice builds;
 the current shipping configuration has four choices.
 
 
-## Optimized iOS app builds — implementation awaiting CI
+## Optimized iOS app builds — validated with 2.0.22
 
 Move the Metal simulator/device host to Kotlin/Native Release frameworks and
 Swift `-O`. Run all existing real simulator rendering, native-handler and
@@ -1684,12 +1684,39 @@ Record `TrailBuildConfiguration` in the host plist. The branded unsigned IPA
 packager requires Release, preventing accidental repackaging of a Debug host as
 the device artifact. Artifact names, app identities, iOS 18.5 minimum and signing
 requirements stay consistent. The earlier debug-package limitations above are
-historical; optimization is not validated until the new Mac CI completes.
+historical; the optimized builds and full simulator checks now pass.
 
-Local status: configuration edits and saved-map fallback regressions are committed;
-offline packaging unit checks pass (generated real asset verification is skipped
-without the generated map bundle). This workspace cannot download Gradle from
-services.gradle.org and has no Apple SDK, so Android/Apple compile and render
-results must come from CI. GitHub operations are available again; publish the
-prepared changes and monitor Android publication, saved-map migration checks and
-the optimized iOS simulator suite before marking this stage validated.
+Local configuration/script checks and offline packaging unit checks passed. Full
+Android and Apple compilation, actual generated-map verification and rendered
+output were validated in CI. The GitHub connection recovered and the prepared
+changes were published as `c5c661f8ee1e2b8b1b34d529905044ffb84540bf`.
+
+### 2.0.22 final validation
+
+All six workflows passed for that implementation:
+
+- [APK build/publication](https://github.com/mbligh/trail2/actions/runs/41494218908) and [Play bundle/upload](https://github.com/mbligh/trail2/actions/runs/41494218847) passed for **2.0.22**.
+- [Production checks](https://github.com/mbligh/trail2/actions/runs/41494218896) passed shared/Android unit tests, lint and **20 production emulator tests plus one portrait and one landscape check: 22 invocations**. This includes the saved OpenTopoMap-to-Bright fallback, camera/contour preference preservation and exact remaining four-choice list.
+- [Isolated renderer checks](https://github.com/mbligh/trail2/actions/runs/41494218833) passed **8 initial emulator tests plus 4 actual contour/imagery online/offline checks: 12 invocations**.
+- [Native Swift adapters](https://github.com/mbligh/trail2/actions/runs/41494218826) passed **17 tests** and the iOS API typecheck with warnings as errors. The saved removed-map regression retains camera, contours and trail visibility.
+- [Optimized iOS framework/app/simulator checks](https://github.com/mbligh/trail2/actions/runs/41494218796) passed shared linking/tests, Release simulator/device framework linking, Swift `-O` hosts, unsigned Release IPA packaging and all existing Metal/recording/export/report/photo/offline-map/KML-cache/basemap/contour/legend/relaunch checks.
+
+The basemap write phase verified Bright, hybrid, NJ satellite and OpenStreetMap;
+cold offline replay restored OpenStreetMap without new server requests. Its green
+synthetic raster produced **1,851,253 matching pixels**, with **13,972 blue** and
+**27,470 red** overlay pixels in both phases. This solid green tile is a test
+fixture, not actual OSM imagery.
+
+Remote and local contour replay each retained **22,707 magenta, 14,967 blue and
+30,558 red pixels** in write/read phases. Local replay made zero HTTP requests
+and kept its installed archive hash unchanged. Legend colors each matched
+**2,160 pixels** and dismissal returned to the map. The final offline basemap,
+local contours and legend screenshots were visually reviewed: intact overlays,
+readable labels and safe insets.
+
+Independently inspected the uploaded `Trail2-device-unsigned.ipa`: bundle ID
+`mbligh.trail`, version **2.0.22**, minimum iOS **18.5**, configuration **release**,
+**58,170,056-byte executable**, and no simulator contour fixture. It is an unsigned
+optimized development package, not an App Store submission archive. The next
+Apple distribution step requires provisioning/signing and actual tester hardware;
+physical GPS/background recording/camera behavior is still unverified.
