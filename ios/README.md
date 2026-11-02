@@ -4,6 +4,12 @@ The shared Kotlin/Compose app is hosted by `experiments/ios-map/app`; native
 recording, location, files and map adapters live in `ios/TrailPlatform`. Android
 remains the phone-tested production app. iOS is currently a development build.
 
+Public unsigned IPA: **https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa**
+([checksum](https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa.sha256)).
+No GitHub login is required. Apple signing/provisioning is still required for
+installation. Every successful iOS build automatically triggers the download-site
+publisher; Android and iPhone files are published together to preserve both.
+
 The iOS workflow builds ARM64 simulator and device apps without Apple credentials,
 runs native/shared tests and simulator rendering/handler checks, and publishes
 `Trail-iOS-simulator-check` as a GitHub Actions artifact. That artifact contains:

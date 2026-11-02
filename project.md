@@ -1,6 +1,6 @@
 # Trail 2 — requirements and implementation
 
-Updated 2026-11-02: Android 2.0.22 is validated and published with OpenTopoMap removed. Bright, hybrid, NJ satellite and OpenStreetMap remain, alongside the independent contour overlay. Saved-map migration checks pass on both platforms. Optimized Kotlin/Native and Swift iOS Release apps passed the full simulator suite and unsigned IPA validation. Apple provisioning and physical iPhone validation remain open.
+Updated 2026-11-02: Android 2.0.22 and optimized iOS Release apps are validated. The user requested anonymous public IPA hosting through GitHub Pages. A shared publisher now prepares both app downloads from independently successful builds; publication and anonymous-download checks are pending.
 
 ## Product and identity
 
@@ -1720,3 +1720,37 @@ Independently inspected the uploaded `Trail2-device-unsigned.ipa`: bundle ID
 optimized development package, not an App Store submission archive. The next
 Apple distribution step requires provisioning/signing and actual tester hardware;
 physical GPS/background recording/camera behavior is still unverified.
+
+
+## Public iPhone IPA through GitHub Pages — implementation awaiting CI
+
+The user requested public IPA copying as part of the iOS build. Publish the stable
+URL `https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa`, its `.sha256` file,
+and an iPhone section on the existing download page. The page states that Apple
+signing/provisioning is still needed; this is a file download, not OTA installation.
+
+GitHub Pages deploys replace a whole site. Use one serialized publisher,
+`download-pages.yml`, triggered by successful main Android/iOS workflow completion,
+site/publisher changes or manual dispatch. Remove the separate APK-owned Pages
+deployment. Each publication independently chooses the latest successful trusted
+main build for both platforms, copies only APK/IPA files, and deploys both together.
+This handles overlapping completions without erasing or rolling back the other
+platform. Failed/fork/PR source runs cannot publish. Explicitly check out main.
+
+The iOS build uploads a compact `Trail2-ios-ipa` artifact only after all simulator
+checks pass. Bootstrap the existing validated build from its original larger
+artifact if needed. If a newest successful artifact has expired, preserve the
+previous public copy using its recorded size/SHA rather than substituting an older
+build. Missing or corrupt fallback data fails publication and retains the previous
+Pages deployment. ZIP extraction copies an exact expected basename into a chosen
+path, rejecting missing/duplicate/oversized entries. The IPA must be Release with
+the Trail 2 identity. Metadata `build-info.json` records source commits/runs, hashes,
+sizes and iOS version/minimum. Source archives/diagnostics remain available as CI artifacts and are not copied
+into the public site.
+
+Local regression checks cover independent platform updates, legacy artifact
+layout, expired-artifact preservation, corruption, rejection of Debug/failed/fork/
+PR inputs and duplicate files. The workflow also checks both deployed files via
+anonymous HTTP and compares sizes/SHA with prepared artifacts. Both download
+locations must work before this stage is considered validated. No app feature or
+version-name change is needed; Android/iOS publishing remain independently built.

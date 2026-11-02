@@ -111,6 +111,13 @@ jobs:
         run: python experiments/ios-map/legend_simulator
       - name: Verify bundled local PMTiles layer controls without HTTP
         run: python experiments/ios-map/layers_simulator --local
+      - name: Save validated unsigned IPA for public downloads
+        uses: actions/upload-artifact@v6
+        with:
+          name: Trail2-ios-ipa
+          overwrite: true
+          path: experiments/ios-map/build/Trail2-device-unsigned.ipa
+          if-no-files-found: error
       - uses: actions/upload-artifact@v6
         if: always()
         with:

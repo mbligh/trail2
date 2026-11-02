@@ -5,7 +5,13 @@ GPS following/heading marker, TTA trails, recording, pins, KML/GPX sharing, loca
 reports and camera flow are preserved. Android 8+; no account, API key, backend,
 analytics or Google Play Services.
 
-Download: **https://mbligh.github.io/trail2/Trail2.apk**
+Downloads: **https://mbligh.github.io/trail2/**
+
+- Android APK: https://mbligh.github.io/trail2/Trail2.apk
+- Unsigned iPhone IPA: https://mbligh.github.io/trail2/Trail2-device-unsigned.ipa
+
+The IPA requires Apple signing/provisioning before installation. Both files are
+public downloads without a GitHub login; adjacent `.sha256` files provide checksums.
 
 This is the independent `mbligh/trail2` app: label **Trail 2**, package
 `mbligh.trail`. It can coexist with the original `net.pocketmap` Trail. The Kotlin
@@ -95,7 +101,7 @@ Real-device GNSS accuracy still needs an outdoor walk with the phone locked.
 ## Distribution
 
 Main changes automatically test/lint/build and publish the development-signed APK
-and checksum to GitHub Pages. Keep the included development signing key so APKs
+and checksum to GitHub Pages through the shared download-site publisher. Keep the included development signing key so APKs
 update installed Trail 2 copies. Release bundles use the repository's existing
 private signing secrets and automatic internal-track upload when
 `ENABLE_TRAIL2_PLAY_UPLOAD=true` and the distinct Play listing is configured.
@@ -123,3 +129,11 @@ The [GitHub Pages APK](https://mbligh.github.io/trail2/Trail2.apk) is signed usi
 ### MapLibre Compose feasibility
 
 Before switching renderers, the Android `TileRepository` now exposes a blocking, offline-only resource reader intended for a future MapLibre Compose `MapResourceProvider`. It reuses the existing bundled glyph/tiles and persistent MBTiles caches, and deliberately does not fall back to the network for missing offline resources. The isolated renderer now exercises real offline streets, contours, satellite/hybrid imagery, compatible production cache files, camera/follow behavior, and app-layer fixtures. Production version 2.0.5 aligns Kotlin/Compose/AGP/Gradle with that prototype while retaining the existing native renderer. A phone regression check of this upgraded runtime is the next gate before replacing the renderer. See `project.md` for validation and next steps.
+
+
+Successful Android and iOS builds independently trigger
+`.github/workflows/download-pages.yml`. That publisher selects the latest
+successful main-branch artifact for each platform and deploys both together,
+preventing one platform from erasing the other. Existing verified public copies
+remain available if old CI artifacts expire. Failed source builds do not publish.
+`build-info.json` records the source builds, hashes and iOS version/minimum.

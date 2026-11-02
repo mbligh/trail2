@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Assemble both independently built apps into one atomic Pages deployment."""
+import argparse
+import hashlib
+import html
+import json
+import os
+from pathlib import Path
+import plistlib
+import re
+import shutil
+import subprocess
+import tempfile
+import time
+import urllib.request
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+PLATFORMS = {
+    'android': ('apk-pages.yml', ('Trail2-apk',), 'Trail2.apk'),
+    'ios': ('ios-smoke.yml', ('Trail2-ios-ipa', 'Trail-iOS-simulator-check'), 'Trail2-device-unsigned.ipa'),
+}
+
+
+def api(path):
+    return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+
+def download(repository, artifact, target):
+    with target.open('wb') as output:
+        subprocess.run(['gh', 'api', f'repos/{repository}/actions/artifacts/{artifact["id"]}/zip'], stdout=output, check=True)
+
+
+class MissingArtifact(RuntimeError):
+    pass
+
+
+def select(repository, workflow, names, get=api):
+    # Select successful main builds independently on every publication. An old
+    # completion event cannot roll the other platform back to an earlier build.
+    for page in range(1, 6):
+        runs = get(f'repos/{repository}/actions/workflows/{workflow}/runs?branch=main&status=success&per_page=20&page={page}')["workflow_runs"]
+        for run in sorted(runs, key=lambda item: item["id"], reverse=True):
+            if run['conclusion'] != 'success' or run['head_branch'] != 'main' or run['event'] not in ('push', 'workflow_dispatch'):
+                continue
+            if (run.get('head_repository') or {}).get('full_name') != repository:
+                continue
+            artifacts = get(f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100')['artifacts']
+            for name in names:
+                candidates = [a for a in artifacts if a['name'] == name and not a['expired']]
+                if candidates:
+                    return run, max(candidates, key=lambda a: (a['created_at'], a['id']))
+            # Never substitute an older retained build for the newest successful
+            # build. If its artifact expired, preserve the existing public copy.
+            raise MissingArtifact(f'Artifact expired or missing for successful run {run["id"]}')
+        if len(runs) < 20:
+            break
+    raise MissingArtifact(f'No retained successful main artifact for {workflow}; refusing an incomplete deployment')
+
+
+def sha256(file):
+    with file.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def extract(archive, destination, filename):
+    # Legacy iOS artifacts include framework ZIPs and diagnostics. Copy only the
+    # exact desired file into our chosen path; never extract arbitrary ZIP paths.
+    with zipfile.ZipFile(archive) as source:
+        files = [item for item in source.infolist() if not item.is_dir() and Path(item.filename).name == filename]
+        if len(files) != 1 or not 0 < files[0].file_size <= 512*1024*1024:
+            raise ValueError(f'Missing, ambiguous or oversized artifact file: {filename}')
+        with source.open(files[0]) as stream, destination.open('wb') as output:
+            shutil.copyfileobj(stream, output, 1024*1024)
+
+
+def restore_public(repository, platform, target, get, opener):
+    base = get(f'repos/{repository}/pages')['html_url'].rstrip('/')
+    with opener(base+'/build-info.json', timeout=60) as response:
+        raw = response.read(64*1024+1)
+    if len(raw) > 64*1024:
+        raise ValueError('Public build metadata is oversized')
+    item = json.loads(raw)[platform]
+    if item['file'] != PLATFORMS[platform][2] or not re.fullmatch('[0-9a-f]{64}', item['sha256']) or not 0 < item['bytes'] <= 512*1024*1024:
+        raise ValueError('Invalid public fallback metadata')
+    size = 0
+    with opener(base+'/'+item['file'], timeout=60) as response, target.open('wb') as output:
+        while chunk := response.read(1024*1024):
+            size += len(chunk)
+            if size > item['bytes']:
+                raise ValueError('Public fallback exceeds its declared size')
+            output.write(chunk)
+    if size != item['bytes'] or sha256(target) != item['sha256']:
+        raise ValueError('Public fallback checksum differs')
+    return item
+
+
+def prepare(repository, output, get=api, fetch=download, template=None, public_open=urllib.request.urlopen):
+    output = Path(output).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output.parent, prefix='.trail-downloads-') as temporary:
+        work = Path(temporary)
+        site = work / 'site'
+        site.mkdir()
+        metadata = {}
+        for platform, (workflow, names, filename) in PLATFORMS.items():
+            target = site / filename
+            try:
+                run, artifact = select(repository, workflow, names, get)
+            except MissingArtifact:
+                # Pages is durable even after GitHub's build artifacts expire.
+                metadata[platform] = restore_public(repository, platform, target, get, public_open)
+            else:
+                archive = work / f'{platform}.zip'
+                fetch(repository, artifact, archive)
+                extract(archive, target, filename)
+                metadata[platform] = dict(file=filename, run_id=run['id'], commit=run['head_sha'],
+                                          build_url=f'https://github.com/{repository}/actions/runs/{run["id"]}')
+            digest = sha256(target)
+            (site / (filename+'.sha256')).write_text(f'{digest}  {filename}\n')
+            metadata[platform].update(sha256=digest, bytes=target.stat().st_size)
+        with zipfile.ZipFile(site / PLATFORMS['ios'][2]) as ipa:
+            info = plistlib.loads(ipa.read('Payload/Trail2.app/Info.plist'))
+        if info.get('TrailBuildConfiguration') != 'release' or info.get('CFBundleIdentifier') != 'mbligh.trail':
+            raise ValueError('Expected the validated unsigned Trail 2 Release IPA')
+        metadata['ios'].update(version=info['CFBundleShortVersionString'], minimum_os=info['MinimumOSVersion'], signing='unsigned')
+        page = (ROOT / 'site/index.html').read_text() if template is None else template
+        page = page.replace('{{IOS_VERSION}}', html.escape(metadata['ios']['version']))
+        page = page.replace('{{IOS_MINIMUM_OS}}', html.escape(metadata['ios']['minimum_os']))
+        (site / 'index.html').write_text(page)
+        (site / 'build-info.json').write_text(json.dumps(metadata, indent=2)+'\n')
+        (site / '.nojekyll').touch()
+        # An error leaves any previous output untouched. CI supplies a fresh path.
+        site.replace(output)
+        return metadata
+
+
+def verify(base_url, output, attempts=6):
+    expected = json.loads((Path(output) / 'build-info.json').read_text())
+    for attempt in range(attempts):
+        try:
+            for item in expected.values():
+                request = urllib.request.Request(base_url.rstrip('/')+'/'+item['file'], headers={'Cache-Control':'no-cache'})
+                digest = hashlib.sha256()
+                size = 0
+                # Deliberately no GitHub token: these must be public downloads.
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    while chunk := response.read(1024*1024):
+                        digest.update(chunk)
+                        size += len(chunk)
+                if digest.hexdigest() != item['sha256'] or size != item['bytes']:
+                    raise RuntimeError(f'Public file has not updated: {item["file"]}')
+            print('Both public downloads match the published artifacts', flush=True)
+            return
+        except Exception:
+            if attempt == attempts-1:
+                raise
+            time.sleep(10)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', default='_site')
+    parser.add_argument('--verify-url')
+    args = parser.parse_args()
+    if args.verify_url:
+        verify(args.verify_url, args.output)
+    else:
+        repository = os.environ['GITHUB_REPOSITORY']
+        metadata = prepare(repository, args.output)
+        for platform, item in metadata.items():
+            print(f'{platform}: {item["file"]}, successful run {item["run_id"]}, SHA256 {item["sha256"]}', flush=True)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,50 @@
+name: Publish Android and iPhone downloads
+on:
+  workflow_run:
+    workflows: ['Build and publish APK', 'iOS shared framework and Metal simulator smoke test']
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths: ['site/**', 'tools/prepare_download_site', 'tools/test_download_site', '.github/workflows/download-pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+concurrency:
+  group: trail-download-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check independent artifact selection and preservation
+        run: python tools/test_download_site
+      - name: Assemble latest successful APK and unsigned IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/prepare_download_site
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Publish both downloads together
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Verify downloads without GitHub authentication
+        env:
+          DOWNLOAD_URL: ${{ steps.deployment.outputs.page_url }}
+        run: python tools/prepare_download_site --verify-url "$DOWNLOAD_URL"
