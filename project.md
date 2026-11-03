@@ -39,7 +39,10 @@ as possible. Underlying tile appearance may change. Retain:
 
 Use MapLibre Compose 0.20.0 with its native OpenGL runtime. Follow the mapping repository's MapLibre demo:
 OpenFreeMap **Bright**, POI/business labels removed; NJ 2020 satellite hybrid retains
-vector lines/labels with white text halos. Keep standalone satellite and OSM raster choices; contours are an independent overlay. Bright is default; migrate the previous OSM street default to
+vector lines/labels with white text halos. Keep standalone satellite and OSM raster choices; contours are an independent overlay.
+Bright and satellite hybrid label named nature reserves and wildlife refuges from
+OpenFreeMap's `park` point features at source-style zoom 12 and above. These labels
+also work with the bundled Tewksbury vector tiles. General POIs remain hidden. Bright is default; migrate the previous OSM street default to
 Bright once, retaining other explicit choices.
 
 `basemaps.json` contains configured sources, basemap choices and overlay groups.
