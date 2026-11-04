@@ -14,6 +14,7 @@ import java.time.Instant
 class RecordingService : Service(), LocationListener {
     companion object {
         @Volatile var running = false
+        @Volatile var recordingStartedElapsedRealtime = 0L
         @Volatile var latestGpsFix: Location? = null
         const val STATE_CHANGED = "net.pocketmap.RECORDING_STATE_CHANGED"
         const val STOP = "net.pocketmap.STOP_RECORDING"
@@ -61,7 +62,8 @@ class RecordingService : Service(), LocationListener {
             track = File(directory, "Trail-${Instant.now().toString().replace(':', '-')}.csv").apply { createNewFile() }
             getSharedPreferences("map", MODE_PRIVATE).edit().putString("recorded_track", track!!.name).apply()
             // elapsedRealtime includes screen-off/deep-sleep time and ignores clock changes.
-            deadlineElapsedRealtime = SystemClock.elapsedRealtime() + MAX_RECORDING_MILLIS
+            recordingStartedElapsedRealtime = SystemClock.elapsedRealtime()
+            deadlineElapsedRealtime = recordingStartedElapsedRealtime + MAX_RECORDING_MILLIS
             handler.postDelayed(timeout, MAX_RECORDING_MILLIS)
             // Wake for cleanup even if GPS has no signal and the app is in the background.
             // Android may defer this inexact alarm; the GPS callback enforces the cutoff too.
@@ -132,6 +134,7 @@ class RecordingService : Service(), LocationListener {
     }
     override fun onDestroy() {
         running = false
+        recordingStartedElapsedRealtime = 0L
         latestGpsFix = null
         recentFixes.clear()
         handler.removeCallbacks(timeout)
