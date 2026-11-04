@@ -164,12 +164,38 @@ def main():
             'filter': [
                 'all',
                 ['==', ['geometry-type'], 'Point'],
-                ['match', ['get', 'class'], ['nature_reserve', 'wildlife_refuge'], True, False],
+                ['match', ['get', 'class'], ['nature_reserve', 'wildlife_refuge', 'national_park', 'protected_area', 'state_park', 'county_park', 'wilderness_area'], True, False],
             ],
             'layout': {
                 'text-field': ['get', 'name'],
                 'text-font': ['Noto Sans Regular'],
                 'text-size': 13,
+                'text-max-width': 12,
+            },
+            'paint': {
+                'text-color': '#315d36',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 1.2,
+            },
+        })
+        # Ordinary parks are POIs rather than park-layer protected areas in OpenMapTiles.
+        # Restore their names only, never the general POI icons or business labels.
+        style['layers'].append({
+            'id': 'trail-park-labels',
+            'type': 'symbol',
+            'source': 'openmaptiles',
+            'source-layer': 'poi',
+            'minzoom': 13,
+            'filter': [
+                'all',
+                ['==', ['geometry-type'], 'Point'],
+                ['==', ['get', 'class'], 'park'],
+                ['match', ['get', 'subclass'], ['park', 'nature_reserve'], True, False],
+            ],
+            'layout': {
+                'text-field': ['get', 'name'],
+                'text-font': ['Noto Sans Regular'],
+                'text-size': 12,
                 'text-max-width': 12,
             },
             'paint': {
