@@ -1820,3 +1820,23 @@ downloads matching both prepared artifacts:
 The public URLs now update automatically after successful platform builds.
 The IPA remains unsigned; hosting does not provide signing or direct OTA
 installation. Apple provisioning and physical iPhone validation remain open.
+
+## Download-site publisher coalescing (2026-11-04)
+
+The shared Pages publisher still listens for completed Android and iOS main builds.
+GitHub creates a workflow run for each completion, including failed and cancelled
+builds, but the publish job runs only after a successful trusted source build.
+Concurrency uses one shared group and lets successful new events supersede older
+publisher preparations rather than building up redundant deployments. Failed or
+cancelled source events must not cancel a valid in-progress deployment.
+
+Before requesting a Pages deployment, the job compares its staged `build-info.json`
+and rendered `index.html` with the public site. Unchanged downloads and an
+unchanged page skip artifact upload, deployment, and verification. New APK/IPA
+content or a changed landing page still deploys. Public comparison errors fail
+the workflow; they are not silently treated as a reason to redeploy. Selection
+of the latest successful main artifact for each platform, authenticated SHA/size
+checks for expired artifacts, and combined Android/iOS Pages publication remain
+unchanged. The GitHub Actions history will still show each triggering workflow
+event; coalescing reduces active work and actual deployments, not the number of
+trigger records.
