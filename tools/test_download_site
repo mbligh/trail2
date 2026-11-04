@@ -148,6 +148,28 @@ class DownloadSiteTests(unittest.TestCase):
             self.assertEqual(second['android']['run_id'], 101)
             self.assertEqual((root/'updated/Trail2-device-unsigned.ipa').read_bytes(), ipa('2.0.23'))
 
+    def test_unchanged_downloads_skip_deploy_but_page_edits_do_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            f = self.fixtures()
+            f.prepare(root/'published')
+            f.public = {p.name:p.read_bytes() for p in (root/'published').iterdir() if p.is_file()}
+
+            def open_public(url, timeout):
+                # urllib accepts Request objects as well as URL strings.
+                address = url.full_url if hasattr(url, 'full_url') else url
+                return f.open_public(address, timeout)
+
+            self.assertTrue(downloads.already_published(REPO, root/'published', f.get, open_public))
+            (root/'published/index.html').write_text('updated landing page')
+            self.assertFalse(downloads.already_published(REPO, root/'published', f.get, open_public))
+            (root/'published/index.html').write_bytes(f.public['index.html'])
+            f.add('android', 101, b'updated apk')
+            f.prepare(root/'new')
+            self.assertFalse(downloads.already_published(REPO, root/'new', f.get, open_public))
+            f.public.pop('index.html')
+            self.assertFalse(downloads.already_published(REPO, root/'published', f.get, open_public))
+
     def test_duplicate_archive_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
