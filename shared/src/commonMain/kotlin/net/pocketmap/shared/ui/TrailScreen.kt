@@ -66,6 +66,7 @@ fun TrailScreen(
     zoomLabel: String,
     onMapCredits: () -> Unit,
     trailsVisible: Boolean,
+    onTrailsToggled: () -> Unit,
     mapLayers: List<MapLayerChoice>,
     onLayerToggled: (String) -> Unit,
     onMenuAction: (TrailMenuAction) -> Unit,
@@ -84,7 +85,7 @@ fun TrailScreen(
 ) {
     Column(Modifier.fillMaxSize().background(Color.White)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon, mapLayers.firstOrNull { it.id == "contours" }, onLayerToggled)
+            BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon, mapLayers.firstOrNull { it.id == "contours" }, onLayerToggled, trailsVisible, onTrailsToggled)
             Column(Modifier.weight(1f)) {
                 BasicText(status,
                     Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
@@ -108,7 +109,7 @@ fun TrailScreen(
                 BasicText(zoomLabel, Modifier.size(48.dp, 24.dp),
                     style = TextStyle(fontSize = 12.sp, color = Color.DarkGray, textAlign = TextAlign.Center))
             }
-            TrailMenuControl(trailsVisible, mapLayers.filterNot { it.id == "contours" }, onLayerToggled, onMenuAction)
+            TrailMenuControl(mapLayers.filterNot { it.id == "contours" }, onLayerToggled, onMenuAction)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             map() // The native MapLibre view remains underneath the Compose overlay.
@@ -232,7 +233,9 @@ private fun BasemapControl(
     onSelected: (String) -> Unit,
     icon: @Composable () -> Unit,
     contours: MapLayerChoice?,
-    onLayerToggled: (String) -> Unit
+    onLayerToggled: (String) -> Unit,
+    trailsVisible: Boolean,
+    onTrailsToggled: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -269,13 +272,21 @@ private fun BasemapControl(
                     }
                 }
             }
+            DropdownMenuItem(
+                onClick = onTrailsToggled,
+                modifier = Modifier.testTag("tta-trails-toggle")
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = trailsVisible, onCheckedChange = null)
+                    Text("TTA Trails", Modifier.padding(start = 8.dp))
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun TrailMenuControl(
-    trailsVisible: Boolean,
     mapLayers: List<MapLayerChoice>,
     onLayerToggled: (String) -> Unit,
     onAction: (TrailMenuAction) -> Unit
@@ -303,7 +314,6 @@ private fun TrailMenuControl(
                 val actions = listOf(
                     TrailMenuAction.REFRESH_TRAILS to "Refresh trails",
                     TrailMenuAction.ZOOM_TO_TRAILS to "Zoom to trails",
-                    TrailMenuAction.TOGGLE_TRAILS to if (trailsVisible) "Hide trails" else "Show trails",
                     TrailMenuAction.LEGEND to "Legend",
                     TrailMenuAction.SHARE_KML to "Share recorded KML…",
                     TrailMenuAction.SHARE_GPX to "Share recorded GPX…"
