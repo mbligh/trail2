@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.sp
 
 data class MapChoice(val id: String, val label: String)
 data class MapLayerChoice(val id: String, val label: String, val enabled: Boolean)
+data class HeaderMetrics(val miles: String, val mph: String, val minutes: String, val accuracy: String, val zoom: String)
 
 /** Host actions are platform-neutral; Android and iOS supply implementations. */
 enum class TrailMenuAction { REFRESH_TRAILS, ZOOM_TO_TRAILS, TOGGLE_TRAILS, LEGEND, SHARE_KML, SHARE_GPX }
@@ -56,14 +59,11 @@ enum class TrailMenuAction { REFRESH_TRAILS, ZOOM_TO_TRAILS, TOGGLE_TRAILS, LEGE
 /** Shared Compose screen. Map contents remain a platform-native slot until validated. */
 @Composable
 fun TrailScreen(
-    status: String,
-    trailStatus: String?,
-    recordingStatus: String?,
+    metrics: HeaderMetrics,
     basemaps: List<MapChoice>,
     selectedBasemap: String,
     onBasemapSelected: (String) -> Unit,
     basemapIcon: @Composable () -> Unit,
-    zoomLabel: String,
     onMapCredits: () -> Unit,
     trailsVisible: Boolean,
     onTrailsToggled: () -> Unit,
@@ -86,28 +86,26 @@ fun TrailScreen(
     Column(Modifier.fillMaxSize().background(Color.White)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon, mapLayers.firstOrNull { it.id == "contours" }, onLayerToggled, trailsVisible, onTrailsToggled)
-            Column(Modifier.weight(1f)) {
-                BasicText(status,
-                    Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
-                    style = TextStyle(color = Color.Black, fontSize = 14.sp))
-                if (trailStatus != null) BasicText(trailStatus,
-                    Modifier.padding(start = 12.dp, end = 12.dp, bottom = 6.dp),
-                    style = TextStyle(color = Color.Black, fontSize = 14.sp))
-                if (recordingStatus != null) BasicText(recordingStatus,
-                    Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp),
-                    style = TextStyle(color = Color.Red, fontSize = 14.sp))
-            }
-            Column(
-                modifier = Modifier.size(48.dp).background(Color.White, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onMapCredits)
-                    .semantics { contentDescription = "Map attribution, licences, and zoom level" }
-                    .testTag("map-credits"),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                BasicText("ⓘ", Modifier.size(48.dp, 24.dp),
-                    style = TextStyle(fontSize = 16.sp, color = Color.DarkGray, textAlign = TextAlign.Center))
-                BasicText(zoomLabel, Modifier.size(48.dp, 24.dp),
-                    style = TextStyle(fontSize = 12.sp, color = Color.DarkGray, textAlign = TextAlign.Center))
+            Row(Modifier.weight(1f).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                val values = listOf(metrics.miles, metrics.mph, metrics.minutes, metrics.accuracy, metrics.zoom)
+                values.forEachIndexed { index, value ->
+                    if (index > 0) Box(
+                        Modifier.size(1.dp, 18.dp).background(Color.LightGray)
+                    )
+                    Box(
+                        Modifier.weight(1f)
+                            .then(if (index == 4) Modifier.clickable(onClick = onMapCredits)
+                                .semantics { contentDescription = "Map credits and zoom level" } else Modifier)
+                            .testTag("header-metric-$index"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText(
+                            value,
+                            style = TextStyle(color = Color.Black, fontSize = 11.sp, textAlign = TextAlign.Center),
+                            maxLines = 1
+                        )
+                    }
+                }
             }
             TrailMenuControl(mapLayers.filterNot { it.id == "contours" }, onLayerToggled, onMenuAction)
         }
