@@ -32,10 +32,13 @@ as possible. Underlying tile appearance may change. Retain:
   five seconds old. Existing sensor smoothing/true-north/display-rotation logic stays.
 - Refresh/zoom/hide/show trails, legend, saved recording exports, blue track/pins,
   fixed-location report editor, camera capture/cancel/retake and Android sharing.
-- The top-left basemap selector shows exclusive radio choices, a thin divider, then a
-  persistent Contours checkbox. Contours is not duplicated in Menu → Map layers;
-  any future unrelated overlays remain there. Save overlay state and restore
-  app-owned trails/track/pins after every style/layer change.
+- The top-left basemap selector shows exclusive radio choices, a thin divider,
+  then independent Contours and **TTA Trails** checkboxes (in that order).
+  TTA Trails is enabled on first launch, can be switched off, and remembers the
+  user's choice across app restarts. Hide/Show Trails is removed from the main
+  menu; Zoom to trails still enables trails before zooming. Contours is not
+  duplicated in Menu → Map layers; any future unrelated overlays remain there.
+  Save overlay state and restore app-owned trails/track/pins after every style change.
 
 ## Maps, layers, offline coverage
 
