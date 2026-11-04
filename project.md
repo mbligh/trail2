@@ -32,8 +32,10 @@ as possible. Underlying tile appearance may change. Retain:
   five seconds old. Existing sensor smoothing/true-north/display-rotation logic stays.
 - Refresh/zoom/hide/show trails, legend, saved recording exports, blue track/pins,
   fixed-location report editor, camera capture/cancel/retake and Android sharing.
-- Add configurable overlay toggles inside Menu → Map layers. Save their state and
-  restore app-owned trails/track/pins after every style/layer change.
+- The top-left basemap selector shows exclusive radio choices, a thin divider, then a
+  persistent Contours checkbox. Contours is not duplicated in Menu → Map layers;
+  any future unrelated overlays remain there. Save overlay state and restore
+  app-owned trails/track/pins after every style/layer change.
 
 ## Maps, layers, offline coverage
 
