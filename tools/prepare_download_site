@@ -151,6 +151,26 @@ def prepare(repository, output, get=api, fetch=download, template=None, public_o
         return metadata
 
 
+def already_published(repository, output, get=api, opener=urllib.request.urlopen):
+    """Return True only if both platform metadata and the generated page match public Pages."""
+    output = Path(output)
+    expected = json.loads((output / 'build-info.json').read_text())
+    base, published = public_state(repository, get, opener)
+    if expected != published:
+        return False
+    # Site text may have changed even when neither app binary changed.
+    try:
+        request = urllib.request.Request(base + '/index.html', headers={'Cache-Control': 'no-cache'})
+        with opener(request, timeout=60) as response:
+            page = response.read(1024 * 1024 + 1)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return False
+        raise
+    if len(page) > 1024 * 1024:
+        raise ValueError('Public download page is oversized')
+    return page == (output / 'index.html').read_bytes()
+
 def verify(base_url, output, attempts=6):
     expected = json.loads((Path(output) / 'build-info.json').read_text())
     for attempt in range(attempts):
@@ -178,9 +198,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', default='_site')
     parser.add_argument('--verify-url')
+    parser.add_argument('--already-published', action='store_true')
     args = parser.parse_args()
     if args.verify_url:
         verify(args.verify_url, args.output)
+    elif args.already_published:
+        if already_published(os.environ['GITHUB_REPOSITORY'], args.output):
+            print('Download site is unchanged; skipping Pages deployment', flush=True)
+        else:
+            print('Download site differs; Pages deployment required', flush=True)
+            raise SystemExit(1)
     else:
         repository = os.environ['GITHUB_REPOSITORY']
         metadata = prepare(repository, args.output)
