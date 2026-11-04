@@ -22,6 +22,7 @@ import net.pocketmap.shared.ui.RecenterArtwork
 import net.pocketmap.shared.ui.TrailLegendDialog
 import net.pocketmap.shared.ui.TrailScreen
 import net.pocketmap.shared.ui.MapChoice
+import net.pocketmap.shared.ui.HeaderMetrics
 import net.pocketmap.shared.ui.MapLayerChoice
 import net.pocketmap.shared.ui.TrailMenuAction
 import android.content.Intent
@@ -45,7 +46,8 @@ class MainActivity : ComponentActivity(), LocationListener {
     private lateinit var selectedBasemap: Basemap
     private val legendShown = mutableStateOf(false)
     private val selectedBasemapName = mutableStateOf("bright")
-    private val zoomLabel = mutableStateOf("")
+    private val headerMetrics = mutableStateOf(HeaderMetrics("0.0mi", "0.0mph", "0min", "±—m", "17.0"))
+    private var recordedDistanceMeters = 0.0
     private val layerSelections = mutableStateOf<Set<String>>(emptySet())
     private val trailsVisibleState = mutableStateOf(true)
     private val statusText = mutableStateOf("Waiting for location…")
@@ -141,14 +143,11 @@ class MainActivity : ComponentActivity(), LocationListener {
             Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                 .windowInsetsPadding(WindowInsets.safeDrawing)) {
                 TrailScreen(
-                    status = statusText.value,
-                    trailStatus = trailStatusText.value,
-                    recordingStatus = recordingStatusText.value,
+                    metrics = headerMetrics.value,
                     basemaps = basemaps.map { MapChoice(it.name, it.label) },
                     selectedBasemap = selectedBasemapName.value,
                     onBasemapSelected = ::selectBasemap,
                     basemapIcon = { BasemapArtwork(Modifier.testTag("basemap-artwork")) },
-                    zoomLabel = zoomLabel.value,
                     onMapCredits = ::showMapCredits,
                     trailsVisible = trailsVisibleState.value,
                     onTrailsToggled = ::toggleTrailsVisibility,
@@ -198,7 +197,29 @@ class MainActivity : ComponentActivity(), LocationListener {
     private fun showLegend() { legendShown.value = true }
 
     private fun showAttribution() {
-        zoomLabel.value = formatZoom(map.zoomLevelDouble)
+        updateHeaderMetrics()
+    }
+
+    private fun updateHeaderMetrics() {
+        val running = RecordingService.running
+        val started = RecordingService.recordingStartedElapsedRealtime
+        val elapsedMillis = if (running && started > 0L)
+            (android.os.SystemClock.elapsedRealtime() - started).coerceAtLeast(0L) else 0L
+        val minutes = elapsedMillis / 60_000L
+        val miles = if (running) recordedDistanceMeters / 1609.344 else 0.0
+        val mph = if (elapsedMillis > 0) miles * 3_600_000.0 / elapsedMillis else 0.0
+        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        val fix = current?.takeIf {
+            it.hasAccuracy() && now - it.elapsedRealtimeNanos in 0..locationWindowNanos
+        }
+        val accuracy = fix?.let { "±${it.accuracy.toInt()}m" } ?: "±—m"
+        headerMetrics.value = HeaderMetrics(
+            String.format(java.util.Locale.US, "%.1fmi", miles),
+            String.format(java.util.Locale.US, "%.1fmph", mph),
+            "${minutes}min",
+            accuracy,
+            String.format(java.util.Locale.US, "%.1f", map.zoomLevelDouble)
+        )
     }
 
     private fun selectBasemap(id: String) {
@@ -583,6 +604,7 @@ class MainActivity : ComponentActivity(), LocationListener {
             count == 0 -> "● Recording • waiting for GPS"
             else -> "● Recording • $count points • every 30s"
         }
+        updateHeaderMetrics()
         if (!running) pendingRecordingSummary?.let { file ->
             pendingRecordingSummary = null
             showRecordingSummary(file)
@@ -596,6 +618,7 @@ class MainActivity : ComponentActivity(), LocationListener {
             displayedTrack = file.name; displayedLength = file.length()
             val points = RecordedTrack.read(file)
             recordedPointCount = points.size
+            recordedDistanceMeters = RecordedTrack.summarize(points).distanceMeters
             lastRecordedPoint = points.lastOrNull()
             map.showRecording(points, RecordedPins.read(file))
             redrawMap()
@@ -710,6 +733,7 @@ class MainActivity : ComponentActivity(), LocationListener {
         }
         redrawMap()
         refreshStatus()
+        updateHeaderMetrics()
     }
     override fun onProviderEnabled(provider: String) { startLocation() }
     override fun onProviderDisabled(provider: String) { current = null; redrawMap(); startLocation() }
