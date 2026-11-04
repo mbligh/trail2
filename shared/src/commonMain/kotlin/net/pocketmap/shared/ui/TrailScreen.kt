@@ -27,6 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.RadioButton
+import androidx.compose.material.Checkbox
+import androidx.compose.material.Divider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -81,7 +84,7 @@ fun TrailScreen(
 ) {
     Column(Modifier.fillMaxSize().background(Color.White)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon)
+            BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon, mapLayers.firstOrNull { it.id == "contours" }, onLayerToggled)
             Column(Modifier.weight(1f)) {
                 BasicText(status,
                     Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
@@ -105,7 +108,7 @@ fun TrailScreen(
                 BasicText(zoomLabel, Modifier.size(48.dp, 24.dp),
                     style = TextStyle(fontSize = 12.sp, color = Color.DarkGray, textAlign = TextAlign.Center))
             }
-            TrailMenuControl(trailsVisible, mapLayers, onLayerToggled, onMenuAction)
+            TrailMenuControl(trailsVisible, mapLayers.filterNot { it.id == "contours" }, onLayerToggled, onMenuAction)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             map() // The native MapLibre view remains underneath the Compose overlay.
@@ -227,7 +230,9 @@ private fun BasemapControl(
     basemaps: List<MapChoice>,
     selected: String,
     onSelected: (String) -> Unit,
-    icon: @Composable () -> Unit
+    icon: @Composable () -> Unit,
+    contours: MapLayerChoice?,
+    onLayerToggled: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -238,7 +243,6 @@ private fun BasemapControl(
             contentAlignment = Alignment.Center
         ) {
             // The host supplies its original artwork (Android: R.drawable.basemap_menu).
-            // The shared control owns the hit target and dropdown, not its artwork.
             icon()
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -247,7 +251,22 @@ private fun BasemapControl(
                     expanded = false
                     onSelected(choice.id)
                 }, modifier = Modifier.testTag("basemap-${choice.id}")) {
-                    Text((if (choice.id == selected) "✓  " else "    ") + choice.label)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = choice.id == selected, onClick = null)
+                        Text(choice.label, Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+            if (contours != null) {
+                Divider(Modifier.padding(vertical = 4.dp), thickness = 1.dp)
+                DropdownMenuItem(
+                    onClick = { onLayerToggled(contours.id) },
+                    modifier = Modifier.testTag("map-layer-contours")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = contours.enabled, onCheckedChange = null)
+                        Text("Contours", Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }
