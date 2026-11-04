@@ -20,7 +20,16 @@ ID, development signing key, private recordings/pins/reports and preferences.
 Replace osmdroid with MapLibre Native while keeping controls and behavior as close
 as possible. Underlying tile appearance may change. Retain:
 
-- White status header, left basemap icon, right info/zoom and hamburger menu.
+- White top bar with unchanged basemap selector at left and menu at right. Replace
+  multiline status text and the separate info/zoom tile with five equal-width,
+  fixed-position values separated by thin vertical rules: distance in miles
+  (summed along recorded GPS segments), average mph (distance divided by elapsed
+  recording hours), whole elapsed recording minutes (floor), current fresh GPS
+  accuracy in metres with ± prefix, and zoom to one decimal place. Distance and
+  speed start at zero when not recording; an unavailable accuracy shows ±—m.
+  Tap the zoom value for the existing map credits dialog. Elapsed duration comes
+  from the service's monotonic start time and includes time before the first fix.
+  Values update on the existing one-second tick or on camera/GPS changes.
 - Existing 37 dp corner controls: recording bottom right, report flag bottom left,
   recording pin top left, Recenter top right; existing margins/icons/colors.
 - Pinch zoom, single-finger dragging that pauses following, Recenter that restores
