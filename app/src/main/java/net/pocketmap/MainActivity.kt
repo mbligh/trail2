@@ -122,6 +122,8 @@ class MainActivity : ComponentActivity(), LocationListener {
         prefs.edit().putBoolean("maplibre_migrated", true).putString("basemap", selectedBasemap.name).apply()
         mapConfig.overlays.filter { prefs.getBoolean("overlay_${it.id}", it.defaultVisible) }.forEach { enabledOverlays.add(it.id) }
         layerSelections.value = enabledOverlays.toSet()
+        trailsVisible = prefs.getBoolean("tta_trails_visible", true)
+        trailsVisibleState.value = trailsVisible
         map = TrailMap(this, mapConfig, selectedBasemap,
             LatLng(prefs.getFloat("lat", 40.692f).toDouble(), prefs.getFloat("lon", -74.771f).toDouble()),
             prefs.getFloat("zoom", 17f).toDouble(), savedInstanceState?.getBundle("maplibre")).apply {
@@ -149,6 +151,7 @@ class MainActivity : ComponentActivity(), LocationListener {
                     zoomLabel = zoomLabel.value,
                     onMapCredits = ::showMapCredits,
                     trailsVisible = trailsVisibleState.value,
+                    onTrailsToggled = ::toggleTrailsVisibility,
                     mapLayers = mapConfig.overlays.map {
                         MapLayerChoice(it.id, it.name, it.id in layerSelections.value)
                     },
@@ -217,24 +220,27 @@ class MainActivity : ComponentActivity(), LocationListener {
         map.setOverlays(enabledOverlays.toSet())
     }
 
+    private fun setTrailsVisibility(visible: Boolean) {
+        trailsVisible = visible
+        trailsVisibleState.value = visible
+        prefs.edit().putBoolean("tta_trails_visible", visible).apply()
+        map.setTrailsVisible(visible)
+        redrawMap()
+    }
+
+    private fun toggleTrailsVisibility() = setTrailsVisibility(!trailsVisible)
+
     private fun performMenuAction(action: TrailMenuAction) {
         when (action) {
             TrailMenuAction.REFRESH_TRAILS -> refreshTrails()
             TrailMenuAction.ZOOM_TO_TRAILS -> trailDocument?.let { document ->
                 val points = document.features.flatMap { it.points }.map { LatLng(it.latitude, it.longitude) }
                 following = false
-                trailsVisible = true
-                trailsVisibleState.value = true
-                map.setTrailsVisible(true)
+                setTrailsVisibility(true)
                 map.zoomTo(points, dp(40))
                 refreshStatus()
             }
-            TrailMenuAction.TOGGLE_TRAILS -> {
-                trailsVisible = !trailsVisible
-                trailsVisibleState.value = trailsVisible
-                map.setTrailsVisible(trailsVisible)
-                redrawMap()
-            }
+            TrailMenuAction.TOGGLE_TRAILS -> toggleTrailsVisibility() // Legacy action; no longer shown in main menu.
             TrailMenuAction.LEGEND -> showLegend()
             TrailMenuAction.SHARE_KML -> chooseRecordedTrack(false)
             TrailMenuAction.SHARE_GPX -> chooseRecordedTrack(true)
