@@ -476,13 +476,13 @@ class MainActivity : ComponentActivity(), LocationListener {
             }
         }
     }
-    private fun recordings() = File(filesDir, "recordings").listFiles()?.filter { it.extension == "csv" }?.sortedByDescending { it.name } ?: emptyList()
+    private fun recordings() = File(filesDir, "recordings").listFiles()?.filter { it.extension == "csv" }?.sortedWith(compareByDescending<File> { it.lastModified() }.thenByDescending { it.name }) ?: emptyList()
     private fun latestRecording(): File? = prefs.getString("recorded_track", null)?.let { File(File(filesDir, "recordings"), it) }?.takeIf { it.exists() }
     private fun chooseRecordedTrack(gpx: Boolean) {
         val files = recordings()
         if (files.isEmpty()) { android.widget.Toast.makeText(this, "No recordings yet", android.widget.Toast.LENGTH_SHORT).show(); return }
         android.app.AlertDialog.Builder(this).setTitle("Share recorded track")
-            .setItems(files.map { it.nameWithoutExtension }.toTypedArray()) { _, index -> shareRecording(files[index], gpx) }.show()
+            .setItems(files.map { RecordingFileNames.displayName(it) }.toTypedArray()) { _, index -> shareRecording(files[index], gpx) }.show()
     }
     private fun shareRecording(file: File, gpx: Boolean = false) {
         val points = RecordedTrack.read(file)
@@ -490,12 +490,13 @@ class MainActivity : ComponentActivity(), LocationListener {
         try {
             val directory = File(filesDir, "exports").apply { mkdirs() }
             val extension = if (gpx) "gpx" else "kml"
-            val export = File(directory, file.nameWithoutExtension + "." + extension)
+            val name = RecordingFileNames.displayName(file)
+            val export = File(directory, "$name.$extension")
             val pins = RecordedPins.read(file)
             val contents = if (gpx) {
-                RecordedPins.addToGpx(RecordedTrack.gpx(file.nameWithoutExtension, points), pins)
+                RecordedPins.addToGpx(RecordedTrack.gpx(name, points), pins)
             } else {
-                RecordedPins.addToKml(RecordedTrack.kml(file.nameWithoutExtension, points), pins)
+                RecordedPins.addToKml(RecordedTrack.kml(name, points), pins)
             }
             export.writeText(contents)
             val uri = android.net.Uri.Builder().scheme("content").authority("$packageName.files").appendPath("export").appendPath(export.name).build()

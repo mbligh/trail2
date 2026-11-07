@@ -183,6 +183,13 @@ square, and Stop offers Share KML. Menu retains both saved KML and GPX exports.
 KML preserves the existing accuracy-colored segments; GPX retains coordinates/time/
 elevation and pins. The recording notification retains its Stop action.
 
+New Android recording CSVs and shared KML/GPX filenames use `Trail_YYYY-MM-DD_HH-MM-SS`
+in the device's local timezone, without subseconds or `T`/`Z` markers. The KML
+and GPX share pickers show matching local names. Existing UTC-named Android
+recordings remain intact on disk, but get converted local names when shared;
+GPS timestamps remain epoch milliseconds. iOS retains UUID session filenames
+internally for recovery, but labels and shared exports use the same local format.
+
 Reports capture a fixed recent location, six-decimal locale-independent coordinates,
 accuracy, and the existing Google satellite link. Editable description, optional
 full-resolution camera photo and draft restoration remain. Standard share chooser

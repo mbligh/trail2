@@ -437,11 +437,12 @@ import UIKit
 
     private func shareRecording(session: RecordingSession, format: String) throws {
         guard !(try store.points(in: session)).isEmpty else { alert("No GPS points", "This recording has no saved GPS points yet."); return }
-        let exported = try exportRecording(session, name: "Trail recording")
+        let name = RecordingFilename.name(for: session.startedAt)
+        let exported = try exportRecording(session, name: name)
         let contents = format == "gpx" ? exported.gpx : exported.kml
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Trail-exports/" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let url = root.appendingPathComponent("trail." + format)
+        let url = root.appendingPathComponent(name + "." + format)
         try Data(contents.utf8).write(to: url, options: .atomic)
         let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
         share.popoverPresentationController?.sourceView = controller.view

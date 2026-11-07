@@ -6,7 +6,6 @@ import UIKit
     let sessions: [RecordingSession]
     private let active: UUID?
     private let selected: (RecordingSession) -> Void
-    private let date = DateFormatter()
     private var completed = false
 
     init(sessions: [RecordingSession], active: UUID?, format: String, selected: @escaping (RecordingSession) -> Void) {
@@ -15,8 +14,6 @@ import UIKit
         self.selected = selected
         super.init(style: .insetGrouped)
         title = "Share \(format.uppercased()) recording"
-        date.dateStyle = .medium
-        date.timeStyle = .medium
         navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
@@ -25,7 +22,7 @@ import UIKit
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let session = sessions[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        cell.textLabel?.text = date.string(from: session.startedAt)
+        cell.textLabel?.text = RecordingFilename.name(for: session.startedAt)
         cell.detailTextLabel?.text = (session.id == active ? "Recording now · " : "Saved · ") + String(session.id.uuidString.prefix(8))
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -52,7 +49,7 @@ import UIKit
         picker.loadViewIfNeeded()
         let row = IndexPath(row: olderIndex, section: 0)
         let cell = picker.tableView(picker.tableView, cellForRowAt: row)
-        guard cell.textLabel?.text?.isEmpty == false else { throw RecordingStoreError.corruptSession }
+        guard cell.textLabel?.text == RecordingFilename.name(for: existing.startedAt) else { throw RecordingStoreError.corruptSession }
         picker.tableView(picker.tableView, didSelectRowAt: row)
         // Duplicate selections must not present multiple share sheets.
         picker.tableView(picker.tableView, didSelectRowAt: IndexPath(row: 0, section: 0))

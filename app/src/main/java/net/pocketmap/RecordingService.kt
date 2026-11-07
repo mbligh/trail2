@@ -9,7 +9,6 @@ import android.location.*
 import android.os.*
 import android.widget.Toast
 import java.io.File
-import java.time.Instant
 
 class RecordingService : Service(), LocationListener {
     companion object {
@@ -59,7 +58,7 @@ class RecordingService : Service(), LocationListener {
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(1, notification)
             val directory = File(filesDir, "recordings").apply { mkdirs() }
-            track = File(directory, "Trail-${Instant.now().toString().replace(':', '-')}.csv").apply { createNewFile() }
+            track = RecordingFileNames.createRecording(directory)
             getSharedPreferences("map", MODE_PRIVATE).edit().putString("recorded_track", track!!.name).apply()
             // elapsedRealtime includes screen-off/deep-sleep time and ignores clock changes.
             recordingStartedElapsedRealtime = SystemClock.elapsedRealtime()
