@@ -50,7 +50,16 @@ import androidx.compose.ui.unit.sp
 
 data class MapChoice(val id: String, val label: String)
 data class MapLayerChoice(val id: String, val label: String, val enabled: Boolean)
-data class HeaderMetrics(val miles: String, val mph: String, val minutes: String, val accuracy: String, val zoom: String)
+data class HeaderMetrics(val miles: String, val mph: String, val minutes: String, val accuracy: String, val zoom: String) {
+    /** Only recording-specific metrics disappear when the recorder is inactive. */
+    fun displayValues(recording: Boolean): List<String> = listOf(
+        if (recording) miles else "",
+        if (recording) mph else "",
+        if (recording) minutes else "",
+        accuracy,
+        zoom
+    )
+}
 
 /** Host actions are platform-neutral; Android and iOS supply implementations. */
 enum class TrailMenuAction { REFRESH_TRAILS, ZOOM_TO_TRAILS, TOGGLE_TRAILS, LEGEND, SHARE_KML, SHARE_GPX }
@@ -86,7 +95,7 @@ fun TrailScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon, mapLayers.firstOrNull { it.id == "contours" }, onLayerToggled, trailsVisible, onTrailsToggled)
             Row(Modifier.weight(1f).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                val values = listOf(metrics.miles, metrics.mph, metrics.minutes, metrics.accuracy, metrics.zoom)
+                val values = metrics.displayValues(recording)
                 values.forEachIndexed { index, value ->
                     if (index > 0) Box(
                         Modifier.size(1.dp, 18.dp).background(Color.LightGray)

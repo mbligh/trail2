@@ -25,8 +25,8 @@ as possible. Underlying tile appearance may change. Retain:
   fixed-position values separated by thin vertical rules: distance in miles
   (summed along recorded GPS segments), average mph (distance divided by elapsed
   recording hours), whole elapsed recording minutes (floor), current fresh GPS
-  accuracy in metres with ± prefix, and zoom to one decimal place. Distance and
-  speed start at zero when not recording; an unavailable accuracy shows ±—m.
+  accuracy in metres with ± prefix, and zoom to one decimal place. Distance, speed and elapsed minutes are blank when not recording; their
+  equal-width slots and vertical dividers remain visible. An unavailable accuracy shows ±—m.
   Tap the zoom value for the existing map credits dialog. Elapsed duration comes
   from the service's monotonic start time and includes time before the first fix.
   Values update on the existing one-second tick or on camera/GPS changes.
