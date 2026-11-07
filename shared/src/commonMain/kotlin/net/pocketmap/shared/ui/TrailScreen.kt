@@ -95,10 +95,12 @@ fun TrailScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             BasemapControl(basemaps, selectedBasemap, onBasemapSelected, basemapIcon, mapLayers.firstOrNull { it.id == "contours" }, onLayerToggled, trailsVisible, onTrailsToggled)
             Row(Modifier.weight(1f).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                val labels = listOf("Dist", "Speed", "Time", "GPS", "Zoom")
                 val values = metrics.displayValues(recording)
                 values.forEachIndexed { index, value ->
                     if (index > 0) Box(
-                        Modifier.size(1.dp, 18.dp).background(Color.LightGray)
+                        Modifier.size(1.dp, 36.dp).background(Color.LightGray)
+                            .testTag("header-divider-$index")
                     )
                     Box(
                         Modifier.weight(1f)
@@ -107,11 +109,23 @@ fun TrailScreen(
                             .testTag("header-metric-$index"),
                         contentAlignment = Alignment.Center
                     ) {
-                        BasicText(
-                            value,
-                            style = TextStyle(color = Color.Black, fontSize = 11.sp, textAlign = TextAlign.Center),
-                            maxLines = 1
-                        )
+                        Column(
+                            Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            BasicText(
+                                labels[index],
+                                modifier = Modifier.fillMaxWidth().testTag("header-label-$index"),
+                                style = TextStyle(color = Color.DarkGray, fontSize = 10.sp, textAlign = TextAlign.Center),
+                                maxLines = 1
+                            )
+                            BasicText(
+                                value,
+                                modifier = Modifier.fillMaxWidth().testTag("header-value-$index"),
+                                style = TextStyle(color = Color.Black, fontSize = 11.sp, textAlign = TextAlign.Center),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }

@@ -14,6 +14,26 @@ class ComposeHeaderTest {
         android.Manifest.permission.POST_NOTIFICATIONS
     )
 
+    @Test fun headerHasCenteredLabelsReadingsAndFullHeightDividers() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val ui = RealComposeUi(scenario)
+            for ((index, label) in listOf("Dist", "Speed", "Time", "GPS", "Zoom").withIndex()) {
+                ui.text(label)
+                val slot = ui.bounds("header-metric-$index")
+                val title = ui.bounds("header-label-$index")
+                val value = ui.bounds("header-value-$index")
+                assertEquals("Label not centered: $label", slot.center.x, title.center.x, 1f)
+                assertEquals("Value not centered: $label", slot.center.x, value.center.x, 1f)
+                assertEquals("Label should be above value: $label", true, title.bottom <= value.top)
+                if (index > 0) {
+                    val divider = ui.bounds("header-divider-$index")
+                    assertEquals("Divider should extend above both lines", true, divider.top <= title.top)
+                    assertEquals("Divider should extend below both lines", true, divider.bottom >= value.bottom)
+                }
+            }
+        }
+    }
+
     @Test fun basemapSelectionAndLayerMenuPersistInExistingPreferences() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val ui = RealComposeUi(scenario)
