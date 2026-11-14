@@ -59,7 +59,7 @@ class ScreenInsetsTest {
                 instrumentation.uiAutomation.executeShellCommand("stat -c %s $screenshot"))
                 .bufferedReader().use { it.readText().trim().toLongOrNull() }
             assertTrue("Missing inset regression screenshot", screenshotSize != null && screenshotSize > 0)
-            val tags = listOf("basemap-control", "map-credits", "trail-menu", "pin-control",
+            val tags = listOf("basemap-control", "header-metric-4", "trail-menu", "pin-control",
                 "recenter-control", "report-control", "record-control", "map-surface")
             for (tag in tags) {
                 val bounds = ui.bounds(tag)

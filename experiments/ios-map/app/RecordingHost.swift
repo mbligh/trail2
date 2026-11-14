@@ -99,7 +99,8 @@ import UIKit
             IosRecordedPoint(latitude: 40.694, longitude: -74.766, time: 30000)],
             pins: [IosRecordedPin(latitude: 40.694, longitude: -74.766, text: "Basemap pin")])
         model.update(status: "Basemap fixture", recording: false, hasFix: false, latitude: 0, longitude: 0,
-                     heading: -1, track: geometry.track, pins: geometry.pins)
+                     heading: -1, track: geometry.track, pins: geometry.pins,
+                     distanceMeters: 0, elapsedSeconds: 0, accuracyMeters: -1)
     }
     func layerSelfTest(phase: String) throws {
         if phase == "read" {
@@ -267,12 +268,16 @@ import UIKit
             let points = try displayed.map { try store.points(in: $0) } ?? []
             let pins = try displayed.map { try store.pins(in: $0) } ?? []
             let fix = testFix ?? location.latestFix
+            let active = location.recorder.recording
+            let distance = active == nil ? 0 : IosTrackBridge().summarize(points: points.map(exportFix)).distanceMeters
+            let elapsed = active.map { Int64(max(0, Date().timeIntervalSince($0.startedAt))) } ?? 0
             let geometry = IosTrackBridge().recording(
                 points: points.map { IosRecordedPoint(latitude: $0.latitude, longitude: $0.longitude, time: $0.time) },
                 pins: pins.map { IosRecordedPin(latitude: $0.fix.latitude, longitude: $0.fix.longitude, text: $0.text) })
-            model.update(status: location.message, recording: location.recorder.recording != nil,
+            model.update(status: location.message, recording: active != nil,
                          hasFix: fix != nil, latitude: fix?.latitude ?? 0, longitude: fix?.longitude ?? 0,
-                         heading: location.heading ?? -1, track: geometry.track, pins: geometry.pins)
+                         heading: location.heading ?? -1, track: geometry.track, pins: geometry.pins,
+                         distanceMeters: distance, elapsedSeconds: elapsed, accuracyMeters: fix?.accuracy ?? -1)
         } catch { show(error) }
     }
 

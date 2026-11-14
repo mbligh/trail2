@@ -41,6 +41,8 @@ import net.pocketmap.shared.ui.PinArtwork
 import net.pocketmap.shared.ui.RecenterArtwork
 import net.pocketmap.shared.ui.TrailLegendDialog
 import net.pocketmap.shared.ui.TrailScreen
+import net.pocketmap.shared.ui.HeaderMetrics
+import kotlin.math.roundToInt
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.map.*
@@ -82,6 +84,7 @@ class IosRecordingHost(private val actions: IosPlatformActions,
     fun areTrailsVisible() = trailsVisible
     fun verifyBasemaps(phase: String) { basemapCheck = phase }
     private var status by mutableStateOf("Location not started")
+    private var headerMetrics by mutableStateOf(HeaderMetrics("0.0mi", "0.0mph", "0min", "±—m", "14.5"))
     private var recording by mutableStateOf(false)
     private var position by mutableStateOf<Position?>(null)
     private var heading by mutableStateOf<Float?>(null)
@@ -110,14 +113,29 @@ class IosRecordingHost(private val actions: IosPlatformActions,
     fun toggleTrails() { trailsVisible = !trailsVisible }
     fun zoomToTrails() { following = false; zoomRequest++ }
 
+    private fun oneDecimal(value: Double): String {
+        val tenths = (value * 10).roundToInt()
+        return "${tenths / 10}.${tenths % 10}"
+    }
+
     fun update(status: String, recording: Boolean, hasFix: Boolean, latitude: Double,
-               longitude: Double, heading: Double, track: String, pins: String) {
+               longitude: Double, heading: Double, track: String, pins: String,
+               distanceMeters: Double, elapsedSeconds: Long, accuracyMeters: Double) {
         this.status = status
         this.recording = recording
         this.position = if (hasFix) Position(longitude, latitude) else null
         this.heading = heading.takeIf { it.isFinite() && it >= 0 }?.toFloat()
         this.track = track
         this.pins = pins
+        val elapsed = if (recording) elapsedSeconds.coerceAtLeast(0L) else 0L
+        val miles = if (recording && distanceMeters.isFinite()) distanceMeters.coerceAtLeast(0.0) / 1609.344 else 0.0
+        val mph = if (elapsed > 0) miles * 3600.0 / elapsed else 0.0
+        val accuracy = if (accuracyMeters.isFinite() && accuracyMeters >= 0)
+            "±${accuracyMeters.toInt()}m" else "±—m"
+        headerMetrics = HeaderMetrics(
+            "${oneDecimal(miles)}mi", "${oneDecimal(mph)}mph", "${elapsed / 60}min",
+            accuracy, headerMetrics.zoom
+        )
     }
 
     fun viewController() = ComposeUIViewController {
@@ -321,10 +339,11 @@ class IosRecordingHost(private val actions: IosPlatformActions,
         }
         Box(Modifier.fillMaxSize().background(Color.White).windowInsetsPadding(WindowInsets.safeDrawing)) {
             TrailScreen(
-                status = status, trailStatus = trailStatus, recordingStatus = if (recording) "Recording" else null,
+                metrics = headerMetrics.copy(zoom = (MapZoom.displayed(map.cameraPosition.zoom) * 10).roundToInt().let { "${it / 10}.${it % 10}" }),
                 basemaps = choices.map { MapChoice(it.id, it.label) }, selectedBasemap = selectedBasemap,
-                onBasemapSelected = { actions.perform("basemap:$it") }, basemapIcon = { BasemapArtwork() }, zoomLabel = (MapZoom.displayed(map.cameraPosition.zoom) * 10).toInt().let { "${it / 10}.${it % 10}" },
+                onBasemapSelected = { actions.perform("basemap:$it") }, basemapIcon = { BasemapArtwork() },
                 onMapCredits = { actions.perform("credits") }, trailsVisible = trailsVisible,
+                onTrailsToggled = { actions.perform("TOGGLE_TRAILS") },
                 mapLayers = layerOptions.map { MapLayerChoice(it.id, it.label, it.id in enabledLayers) }, onLayerToggled = { actions.perform("layer:$it") }, onMenuAction = { actions.perform(it.name) },
                 map = {
                     Box(Modifier.fillMaxSize()) {

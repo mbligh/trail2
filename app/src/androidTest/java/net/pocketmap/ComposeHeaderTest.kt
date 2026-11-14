@@ -47,7 +47,7 @@ class ComposeHeaderTest {
             ui.node("basemap-artwork")
             ui.click("basemap-control"); ui.click("basemap-hybrid")
             assertEquals("hybrid", prefs.getString("basemap", ""))
-            ui.click("trail-menu"); ui.click("menu-layers"); ui.click("map-layer-contours")
+            ui.click("basemap-control"); ui.click("map-layer-contours")
             assertEquals(!originallyEnabled, prefs.getBoolean("overlay_contours", originallyEnabled))
             ui.node("map-layer-contours"); ui.click("map-layer-contours")
             assertEquals(originallyEnabled, prefs.getBoolean("overlay_contours", !originallyEnabled))
@@ -92,8 +92,17 @@ class ComposeHeaderTest {
     @Test fun trailVisibilityMenuLabelUpdatesAfterAction() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val ui = RealComposeUi(scenario)
-            ui.click("trail-menu"); ui.click("menu-TOGGLE_TRAILS")
-            ui.click("trail-menu"); ui.text("Show trails")
+            lateinit var prefs: android.content.SharedPreferences
+            scenario.onActivity {
+                prefs = it.getSharedPreferences("map", android.content.Context.MODE_PRIVATE)
+            }
+            val original = prefs.getBoolean("tta_trails_visible", true)
+            ui.click("basemap-control")
+            ui.text("TTA Trails")
+            ui.click("tta-trails-toggle")
+            assertEquals(!original, prefs.getBoolean("tta_trails_visible", original))
+            ui.click("tta-trails-toggle")
+            assertEquals(original, prefs.getBoolean("tta_trails_visible", !original))
         }
     }
 }
