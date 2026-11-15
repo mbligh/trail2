@@ -3,6 +3,13 @@ package net.pocketmap
 import android.Manifest
 import android.app.*
 import android.content.Intent
+import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.bluetooth.BluetoothDevice
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.*
@@ -17,12 +24,28 @@ class RecordingService : Service(), LocationListener {
         @Volatile var latestGpsFix: Location? = null
         const val STATE_CHANGED = "net.pocketmap.RECORDING_STATE_CHANGED"
         const val STOP = "net.pocketmap.STOP_RECORDING"
+        const val REFRESH_BLUETOOTH = "net.pocketmap.REFRESH_BLUETOOTH"
         private const val TIMEOUT = "net.pocketmap.RECORDING_TIMEOUT"
         private const val MAX_RECORDING_MILLIS = 4 * 60 * 60 * 1000L
     }
     private lateinit var manager: LocationManager
     private var track: File? = null
     private var lastSampleWindow = Long.MIN_VALUE
+    private var lastSavedFixTime = Long.MIN_VALUE
+    private var carReceiverRegistered = false
+    private val carReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
+            val device = if (Build.VERSION.SDK_INT >= 33)
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+            }
+            val address = try { device?.address } catch (_: SecurityException) { null }
+            onCarConnected(address)
+        }
+    }
     private val recentFixes = ArrayDeque<Location>()
     private val handler = Handler(Looper.getMainLooper())
     private var deadlineElapsedRealtime = Long.MAX_VALUE
@@ -38,6 +61,10 @@ class RecordingService : Service(), LocationListener {
     @Suppress("MissingPermission")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == STOP) { stopSelf(); return START_NOT_STICKY }
+        if (intent?.action == REFRESH_BLUETOOTH) {
+            if (running) refreshBluetoothListener() else stopSelf()
+            return START_NOT_STICKY
+        }
         // A stale alarm must never start a recording or stop a newer session.
         if (intent?.action == TIMEOUT) {
             if (!running) stopSelf() else stopIfExpired()
@@ -69,6 +96,7 @@ class RecordingService : Service(), LocationListener {
             getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, deadlineElapsedRealtime, timeoutIntent)
             manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5_000L, 0f, this)
             running = true
+            refreshBluetoothListener()
             publishState()
         } catch (_: Exception) {
             Toast.makeText(this, "Could not start recording — check location permission", Toast.LENGTH_LONG).show()
@@ -97,12 +125,61 @@ class RecordingService : Service(), LocationListener {
 
         val sample = chooseSample(recentFixes) ?: return
         try {
-            track?.appendText("${sample.latitude},${sample.longitude},${sample.time},${if (sample.hasAltitude()) sample.altitude else ""},${if (sample.hasAccuracy()) sample.accuracy else ""}\n")
+            appendSample(sample)
             lastSampleWindow = fix.elapsedRealtimeNanos
         } catch (_: Exception) {
             Toast.makeText(this, "Recording stopped: could not save GPS point", Toast.LENGTH_LONG).show()
             stopSelf()
         }
+    }
+
+    private fun appendSample(sample: Location) {
+        track?.appendText(listOf(
+            sample.latitude, sample.longitude, sample.time,
+            if (sample.hasAltitude()) sample.altitude else "",
+            if (sample.hasAccuracy()) sample.accuracy else ""
+        ).joinToString(",") + "\n")
+        lastSavedFixTime = sample.time
+    }
+
+    // Listen only during a recording with an explicitly selected paired device.
+    // Android Auto commonly connects through the same car Bluetooth connection.
+    private fun refreshBluetoothListener() {
+        val selected = getSharedPreferences("map", MODE_PRIVATE).getString(CarBluetoothStop.PREF_KEY, null)
+        val permitted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        if (selected.isNullOrBlank() || !permitted) {
+            if (carReceiverRegistered) {
+                unregisterReceiver(carReceiver)
+                carReceiverRegistered = false
+            }
+            return
+        }
+        if (!carReceiverRegistered) {
+            try {
+                // Bluetooth broadcasts can originate from the privileged Bluetooth
+                // process, not our app's UID; NOT_EXPORTED would miss those.
+                ContextCompat.registerReceiver(this, carReceiver,
+                    IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED), ContextCompat.RECEIVER_EXPORTED)
+                carReceiverRegistered = true
+            } catch (_: SecurityException) { /* Permission revoked: continue GPS recording. */ }
+        }
+    }
+
+    // Separate from the receiver so the stop decision can be regression-tested.
+    internal fun onCarConnected(address: String?) {
+        if (!running || !CarBluetoothStop.matches(
+                getSharedPreferences("map", MODE_PRIVATE).getString(CarBluetoothStop.PREF_KEY, null), address)) return
+        // Keep the last recent GPS fix even when the 30-second sample isn't due.
+        val sample = chooseSample(recentFixes)
+        if (sample != null && sample.time > lastSavedFixTime &&
+            SystemClock.elapsedRealtimeNanos() - sample.elapsedRealtimeNanos in 0..15_000_000_000L) {
+            try { appendSample(sample) } catch (_: Exception) { /* Keep already saved points. */ }
+        }
+        running = false
+        latestGpsFix = null
+        Toast.makeText(this, "Recording saved: car Bluetooth connected", Toast.LENGTH_LONG).show()
+        stopSelf()
     }
 
     private fun stopIfExpired(): Boolean {
@@ -136,6 +213,10 @@ class RecordingService : Service(), LocationListener {
         recordingStartedElapsedRealtime = 0L
         latestGpsFix = null
         recentFixes.clear()
+        if (carReceiverRegistered) {
+            unregisterReceiver(carReceiver)
+            carReceiverRegistered = false
+        }
         handler.removeCallbacks(timeout)
         getSystemService(AlarmManager::class.java).cancel(timeoutIntent)
         manager.removeUpdates(this)

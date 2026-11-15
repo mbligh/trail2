@@ -124,6 +124,16 @@ RecordingService retains the existing GPS acquisition and filtering:
 - Publish the latest raw GPS fix separately from persisted samples.
 - Append completed CSV points immediately; gaps over 90 seconds split map/GPX/KML
   segments. Process termination/reboot stops recording; never auto-resume or invent fixes.
+- Android supports optional car-Bluetooth auto-stop: select one already paired
+  device or Off in the shared Menu. Store the address in existing map preferences;
+  request BLUETOOTH_CONNECT on Android 12+, legacy BLUETOOTH on older devices.
+  A new Bluetooth ACL connection to that device during a recording (regardless
+  of GPS location) ends the session and saves a recent final GPS fix if needed.
+  Do not scan, poll, or stop merely because the car was already connected at
+  recording start. Register the listener only while recording/authorized and
+  unregister at stop; changing selection while recording refreshes the listener.
+  Wireless Android Auto commonly uses the same Bluetooth link; wired Android
+  Auto and iOS CarPlay Shortcuts are deferred.
 - Stop automatically four hours after recording starts, including time waiting for
   GPS and time with the screen locked. Use elapsed realtime, a service-owned timer,
   and an idle-capable wake alarm; GPS callbacks also enforce the deadline before

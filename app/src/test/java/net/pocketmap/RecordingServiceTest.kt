@@ -52,6 +52,30 @@ class RecordingServiceTest {
 
     @After fun destroy() { if (!destroyed) controller.destroy() }
 
+    @Test fun selectedCarConnectionStopsWithoutGpsOrParkingLocation() {
+        val address = "02:11:22:33:44:55"
+        app.getSharedPreferences("map", 0).edit().putString(CarBluetoothStop.PREF_KEY, address).commit()
+        service.onCarConnected("AA:BB:CC:DD:EE:FF")
+        assertTrue(RecordingService.running)
+        service.onCarConnected(address.lowercase())
+        assertFalse(RecordingService.running)
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertTrue(RecordedTrack.read(track()).isEmpty())
+    }
+
+    @Test fun carConnectionSavesRecentFixBeforeClosing() {
+        val address = "02:11:22:33:44:55"
+        app.getSharedPreferences("map", 0).edit().putString(CarBluetoothStop.PREF_KEY, address).commit()
+        service.onLocationChanged(fix())
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(6))
+        service.onLocationChanged(fix().apply { latitude = 40.695 })
+        assertEquals(1, RecordedTrack.read(track()).size)
+        service.onCarConnected(address)
+        val points = RecordedTrack.read(track())
+        assertEquals(2, points.size)
+        assertEquals(40.695, points.last().latitude, 0.000001)
+    }
+
     @Test fun gpsStopsAtFourHoursFromStartAndKeepsSavedPoints() {
         val file = track()
         // Time spent waiting for the first GPS fix counts toward the limit too.

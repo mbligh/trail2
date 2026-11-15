@@ -1,6 +1,9 @@
 package net.pocketmap
 
 import android.Manifest
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
@@ -265,7 +268,60 @@ class MainActivity : ComponentActivity(), LocationListener {
             TrailMenuAction.LEGEND -> showLegend()
             TrailMenuAction.SHARE_KML -> chooseRecordedTrack(false)
             TrailMenuAction.SHARE_GPX -> chooseRecordedTrack(true)
+            TrailMenuAction.CAR_BLUETOOTH_STOP -> configureCarBluetoothStop()
         }
+    }
+
+    private fun configureCarBluetoothStop() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 2)
+            return
+        }
+        showCarBluetoothChoices()
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun showCarBluetoothChoices() {
+        val adapter = getSystemService(BluetoothManager::class.java).adapter
+        if (adapter == null || !adapter.isEnabled) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Car Bluetooth auto-stop")
+                .setMessage("Enable Bluetooth and pair your car in Android settings first.")
+                .setPositiveButton("Bluetooth settings") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                }
+                .setNegativeButton("Cancel", null).show()
+            return
+        }
+        val devices = try {
+            adapter.bondedDevices.sortedWith(compareBy<BluetoothDevice>({ it.name ?: "" }, { it.address }))
+        } catch (_: SecurityException) {
+            android.widget.Toast.makeText(this, "Bluetooth permission is required", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val selected = prefs.getString(CarBluetoothStop.PREF_KEY, null)
+        val options = listOf("Off") + devices.map { (it.name ?: "Unknown device") + " (" + it.address + ")" }
+        val checked = devices.indexOfFirst { it.address.equals(selected, ignoreCase = true) }.let {
+            if (it < 0) 0 else it + 1
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Stop recording when Bluetooth connects")
+            .setSingleChoiceItems(options.toTypedArray(), checked) { dialog, index ->
+                val edit = prefs.edit()
+                if (index == 0) edit.remove(CarBluetoothStop.PREF_KEY)
+                else edit.putString(CarBluetoothStop.PREF_KEY, devices[index - 1].address)
+                edit.apply()
+                if (RecordingService.running) {
+                    startService(Intent(this, RecordingService::class.java).setAction(RecordingService.REFRESH_BLUETOOTH))
+                }
+                dialog.dismiss()
+            }
+            .setNeutralButton("Bluetooth settings") { _, _ ->
+                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showMapCredits() {
@@ -743,6 +799,10 @@ class MainActivity : ComponentActivity(), LocationListener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1) startLocation()
+        if (requestCode == 2) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) showCarBluetoothChoices()
+            else android.widget.Toast.makeText(this, "Bluetooth permission is required for car auto-stop", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
     override fun onStart() { super.onStart(); map.onStart() }
     override fun onStop() { map.onStop(); super.onStop() }

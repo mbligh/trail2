@@ -62,6 +62,14 @@ nothing. Tap the saved pin to read it. Text is retained offline and in KML/GPX e
 Starting a recording requires precise location and enabled GPS. Recording continues
 while the map is paused or the screen is locked; its notification offers Stop.
 Recording stops automatically after four hours, retaining saved tracks and pins.
+For automatic shutdown when returning to your car at **any** parking spot, select
+a paired Bluetooth device in Menu → **Auto-stop on car Bluetooth…** (or choose Off).
+A *new* connection to that car during recording saves a fresh final GPS fix and
+stops the service, even when the screen is locked and regardless of location.
+No Bluetooth scanning is performed. Android 12+ requires the Nearby devices
+permission. If the device was already connected when recording started, it must
+reconnect to trigger a stop. Wireless Android Auto often uses the car's Bluetooth,
+but wired Android Auto is not a separate trigger.
 The limit includes time waiting for GPS and time with the screen locked; reopening
 the map does not reset it. Start a new recording to get another four hours.
 Stop shows distance, elapsed time (between first and last recorded GPS fixes),
