@@ -30,7 +30,7 @@ class RecordingService : Service(), LocationListener {
     private lateinit var manager: LocationManager
     private var track: File? = null
     private var lastSampleWindow = Long.MIN_VALUE
-    private var lastSavedFixTime = Long.MIN_VALUE
+    private var lastSavedFixElapsedRealtimeNanos = Long.MIN_VALUE
     private var carReceiverRegistered = false
     private val carReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -138,7 +138,7 @@ class RecordingService : Service(), LocationListener {
             if (sample.hasAltitude()) sample.altitude else "",
             if (sample.hasAccuracy()) sample.accuracy else ""
         ).joinToString(",") + "\n")
-        lastSavedFixTime = sample.time
+        lastSavedFixElapsedRealtimeNanos = sample.elapsedRealtimeNanos
     }
 
     // Listen only during a recording with an explicitly selected paired device.
@@ -171,7 +171,7 @@ class RecordingService : Service(), LocationListener {
                 getSharedPreferences("map", MODE_PRIVATE).getString(CarBluetoothStop.PREF_KEY, null), address)) return
         // Keep the last recent GPS fix even when the 30-second sample isn't due.
         val sample = chooseSample(recentFixes)
-        if (sample != null && sample.time > lastSavedFixTime &&
+        if (sample != null && sample.elapsedRealtimeNanos > lastSavedFixElapsedRealtimeNanos &&
             SystemClock.elapsedRealtimeNanos() - sample.elapsedRealtimeNanos in 0..15_000_000_000L) {
             try { appendSample(sample) } catch (_: Exception) { /* Keep already saved points. */ }
         }
