@@ -10,7 +10,6 @@ import android.bluetooth.BluetoothDevice
 import android.os.Build
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.*
 import android.os.*
