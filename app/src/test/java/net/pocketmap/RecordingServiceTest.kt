@@ -68,7 +68,7 @@ class RecordingServiceTest {
         app.getSharedPreferences("map", 0).edit().putString(CarBluetoothStop.PREF_KEY, address).commit()
         service.onLocationChanged(fix())
         ShadowSystemClock.advanceBy(Duration.ofSeconds(6))
-        service.onLocationChanged(fix().apply { latitude = 40.695 })
+        service.onLocationChanged(fix().apply { latitude = 40.695; time += 6000 })
         assertEquals(1, RecordedTrack.read(track()).size)
         service.onCarConnected(address)
         val points = RecordedTrack.read(track())
