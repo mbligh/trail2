@@ -182,6 +182,7 @@ class RecordingService : Service(), LocationListener {
         private val gate: WifiConnectionGate<Network>
 
         constructor(gate: WifiConnectionGate<Network>) : super() { this.gate = gate }
+        @android.annotation.TargetApi(Build.VERSION_CODES.S)
         constructor(gate: WifiConnectionGate<Network>, flags: Int) : super(flags) { this.gate = gate }
 
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
