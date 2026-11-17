@@ -3,6 +3,12 @@ package net.pocketmap
 import android.Manifest
 import android.app.*
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.content.Context
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -24,6 +30,7 @@ class RecordingService : Service(), LocationListener {
         const val STATE_CHANGED = "net.pocketmap.RECORDING_STATE_CHANGED"
         const val STOP = "net.pocketmap.STOP_RECORDING"
         const val REFRESH_BLUETOOTH = "net.pocketmap.REFRESH_BLUETOOTH"
+        const val REFRESH_WIFI = "net.pocketmap.REFRESH_WIFI"
         private const val TIMEOUT = "net.pocketmap.RECORDING_TIMEOUT"
         private const val MAX_RECORDING_MILLIS = 4 * 60 * 60 * 1000L
     }
@@ -45,6 +52,7 @@ class RecordingService : Service(), LocationListener {
             onCarConnected(address)
         }
     }
+    private var wifiCallback: WifiStopCallback? = null
     private val recentFixes = ArrayDeque<Location>()
     private val handler = Handler(Looper.getMainLooper())
     private var deadlineElapsedRealtime = Long.MAX_VALUE
@@ -62,6 +70,10 @@ class RecordingService : Service(), LocationListener {
         if (intent?.action == STOP) { stopSelf(); return START_NOT_STICKY }
         if (intent?.action == REFRESH_BLUETOOTH) {
             if (running) refreshBluetoothListener() else stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == REFRESH_WIFI) {
+            if (running) refreshWifiListener() else stopSelf()
             return START_NOT_STICKY
         }
         // A stale alarm must never start a recording or stop a newer session.
@@ -96,6 +108,7 @@ class RecordingService : Service(), LocationListener {
             manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5_000L, 0f, this)
             running = true
             refreshBluetoothListener()
+            refreshWifiListener()
             publishState()
         } catch (_: Exception) {
             Toast.makeText(this, "Could not start recording — check location permission", Toast.LENGTH_LONG).show()
@@ -165,10 +178,78 @@ class RecordingService : Service(), LocationListener {
         }
     }
 
+    private inner class WifiStopCallback : ConnectivityManager.NetworkCallback {
+        private val gate: WifiConnectionGate<Network>
+
+        constructor(gate: WifiConnectionGate<Network>) : super() { this.gate = gate }
+        constructor(gate: WifiConnectionGate<Network>, flags: Int) : super(flags) { this.gate = gate }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            if (wifiCallback !== this || !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return
+            // Android 12+ redacts Wi-Fi identity unless FLAG_INCLUDE_LOCATION_INFO
+            // was specified on the callback. On Android 8-9 use WifiManager.
+            val observed = if (Build.VERSION.SDK_INT >= 29) {
+                (capabilities.transportInfo as? WifiInfo)?.ssid
+            } else {
+                @Suppress("DEPRECATION")
+                try { getSystemService(WifiManager::class.java).connectionInfo?.ssid }
+                catch (_: SecurityException) { null }
+            }
+            if (gate.shouldStop(network,
+                    getSharedPreferences("map", MODE_PRIVATE).getString(WifiAutoStop.PREF_KEY, null),
+                    observed)) onWifiConnected(observed)
+        }
+
+        override fun onLost(network: Network) {
+            gate.onLost(network)
+        }
+    }
+
+    private fun refreshWifiListener() {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        wifiCallback?.let { cm.unregisterNetworkCallback(it) }
+        wifiCallback = null
+        val selected = getSharedPreferences("map", MODE_PRIVATE).getString(WifiAutoStop.PREF_KEY, null)
+        if (selected.isNullOrBlank() ||
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+
+        try {
+            // Snapshot existing Wi-Fi connections *before* registration. Android
+            // immediately sends callbacks for existing networks; these must not
+            // be interpreted as a new arrival.
+            val existing = cm.allNetworks.filter { network ->
+                cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            }
+            val gate = WifiConnectionGate(existing)
+            val callback = if (Build.VERSION.SDK_INT >= 31)
+                WifiStopCallback(gate, ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO)
+            else WifiStopCallback(gate)
+            wifiCallback = callback
+            cm.registerNetworkCallback(
+                NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),
+                callback, handler)
+        } catch (_: SecurityException) {
+            wifiCallback = null // No GPS/location permission: do not disturb the recording.
+        } catch (_: IllegalArgumentException) {
+            wifiCallback = null // Invalid network callback / unavailable connectivity.
+        }
+    }
+
+    // Separate stop decision from Android callback so it can be tested.
+    internal fun onWifiConnected(ssid: String?) {
+        if (!running || !WifiAutoStop.matches(
+                getSharedPreferences("map", MODE_PRIVATE).getString(WifiAutoStop.PREF_KEY, null), ssid)) return
+        stopForConnection("Wi-Fi connected")
+    }
+
     // Separate from the receiver so the stop decision can be regression-tested.
     internal fun onCarConnected(address: String?) {
         if (!running || !CarBluetoothStop.matches(
                 getSharedPreferences("map", MODE_PRIVATE).getString(CarBluetoothStop.PREF_KEY, null), address)) return
+        stopForConnection("car Bluetooth connected")
+    }
+
+    private fun stopForConnection(reason: String) {
         // Keep the last recent GPS fix even when the 30-second sample isn't due.
         val sample = chooseSample(recentFixes)
         if (sample != null && sample.elapsedRealtimeNanos > lastSavedFixElapsedRealtimeNanos &&
@@ -177,7 +258,7 @@ class RecordingService : Service(), LocationListener {
         }
         running = false
         latestGpsFix = null
-        Toast.makeText(this, "Recording saved: car Bluetooth connected", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Recording saved: $reason", Toast.LENGTH_LONG).show()
         stopSelf()
     }
 
@@ -216,6 +297,8 @@ class RecordingService : Service(), LocationListener {
             unregisterReceiver(carReceiver)
             carReceiverRegistered = false
         }
+        wifiCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
+        wifiCallback = null
         handler.removeCallbacks(timeout)
         getSystemService(AlarmManager::class.java).cancel(timeoutIntent)
         manager.removeUpdates(this)

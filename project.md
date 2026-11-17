@@ -134,6 +134,19 @@ RecordingService retains the existing GPS acquisition and filtering:
   unregister at stop; changing selection while recording refreshes the listener.
   Wireless Android Auto commonly uses the same Bluetooth link; wired Android
   Auto and iOS CarPlay Shortcuts are deferred.
+- Android supports optional Wi-Fi auto-stop by exact SSID, independently of car
+  Bluetooth. Menu → Auto-stop on Wi-Fi lets the user enter an SSID, prefilled
+  with the current one if available, or select Off. Save only the SSID in map
+  preferences; do not enumerate system saved networks or perform Wi-Fi scans.
+  During an active recording use ConnectivityManager callbacks for Wi-Fi networks,
+  with FLAG_INCLUDE_LOCATION_INFO on Android 12+. Ignore the immediate replay of
+  networks already connected when recording starts or when the choice changes;
+  react only to newly connected matching SSIDs. On Android 8–9 get the active SSID
+  from WifiManager; 10+ uses WifiInfo from callback NetworkCapabilities. Requires
+  existing precise-location permission (and enabled device Location), plus the
+  ACCESS_WIFI_STATE manifest permission. Save a fresh final fix and stop service
+  exactly as for Bluetooth. Unregister callback on stop and on option changes.
+  Wi-Fi and Bluetooth must operate independently; no wakeup scanning/polling.
 - Stop automatically four hours after recording starts, including time waiting for
   GPS and time with the screen locked. Use elapsed realtime, a service-owned timer,
   and an idle-capable wake alarm; GPS callbacks also enforce the deadline before

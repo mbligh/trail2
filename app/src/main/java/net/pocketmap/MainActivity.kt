@@ -3,6 +3,7 @@ package net.pocketmap
 import android.Manifest
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
@@ -269,6 +270,7 @@ class MainActivity : ComponentActivity(), LocationListener {
             TrailMenuAction.SHARE_KML -> chooseRecordedTrack(false)
             TrailMenuAction.SHARE_GPX -> chooseRecordedTrack(true)
             TrailMenuAction.CAR_BLUETOOTH_STOP -> configureCarBluetoothStop()
+            TrailMenuAction.WIFI_AUTO_STOP -> configureWifiAutoStop()
         }
     }
 
@@ -322,6 +324,55 @@ class MainActivity : ComponentActivity(), LocationListener {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun configureWifiAutoStop() {
+        val wifi = getSystemService(WifiManager::class.java)
+        @Suppress("DEPRECATION")
+        val current = try {
+            WifiAutoStop.normalize(wifi.connectionInfo?.ssid)
+        } catch (_: SecurityException) { null }
+        val selected = prefs.getString(WifiAutoStop.PREF_KEY, null)
+        val editor = android.widget.EditText(this).apply {
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            hint = "Wi-Fi network name (SSID)"
+            setText(selected ?: current.orEmpty())
+            setSelection(text.length)
+        }
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = "Stop when the phone newly connects to this Wi-Fi network during recording." +
+                    (current?.let { "\n\nCurrent Wi-Fi: $it" } ?: "\n\nEnter the network name exactly as shown in Android Wi-Fi settings.")
+            })
+            addView(editor)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Wi-Fi auto-stop")
+            .setView(container)
+            .setPositiveButton("Save") { _, _ ->
+                val name = editor.text.toString()
+                if (name.isBlank()) {
+                    android.widget.Toast.makeText(this, "Enter a Wi-Fi network name, or choose Off", android.widget.Toast.LENGTH_LONG).show()
+                } else {
+                    prefs.edit().putString(WifiAutoStop.PREF_KEY, name).apply()
+                    refreshWifiAutoStop()
+                }
+            }
+            .setNeutralButton("Off") { _, _ ->
+                prefs.edit().remove(WifiAutoStop.PREF_KEY).apply()
+                refreshWifiAutoStop()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun refreshWifiAutoStop() {
+        if (RecordingService.running) {
+            startService(Intent(this, RecordingService::class.java).setAction(RecordingService.REFRESH_WIFI))
+        }
     }
 
     private fun showMapCredits() {

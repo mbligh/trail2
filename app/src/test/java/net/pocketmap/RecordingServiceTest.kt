@@ -76,6 +76,30 @@ class RecordingServiceTest {
         assertEquals(40.695, points.last().latitude, 0.000001)
     }
 
+    @Test fun selectedWifiConnectionStopsButOtherNetworksDoNot() {
+        app.getSharedPreferences("map", 0).edit().putString(WifiAutoStop.PREF_KEY, "Home").commit()
+        service.onWifiConnected("\"Other\"")
+        assertTrue(RecordingService.running)
+        service.onWifiConnected("<unknown ssid>")
+        assertTrue(RecordingService.running)
+        service.onWifiConnected("\"Home\"")
+        assertFalse(RecordingService.running)
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertTrue(RecordedTrack.read(track()).isEmpty())
+    }
+
+    @Test fun wifiStopFlushesLastRecentFix() {
+        app.getSharedPreferences("map", 0).edit().putString(WifiAutoStop.PREF_KEY, "Home").commit()
+        service.onLocationChanged(fix())
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(6))
+        service.onLocationChanged(fix().apply { latitude = 40.701; time += 6000 })
+        assertEquals(1, RecordedTrack.read(track()).size)
+        service.onWifiConnected("Home")
+        val points = RecordedTrack.read(track())
+        assertEquals(2, points.size)
+        assertEquals(40.701, points.last().latitude, 0.000001)
+    }
+
     @Test fun gpsStopsAtFourHoursFromStartAndKeepsSavedPoints() {
         val file = track()
         // Time spent waiting for the first GPS fix counts toward the limit too.

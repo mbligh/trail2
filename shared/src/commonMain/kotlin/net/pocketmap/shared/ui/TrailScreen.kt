@@ -62,7 +62,7 @@ data class HeaderMetrics(val miles: String, val mph: String, val minutes: String
 }
 
 /** Host actions are platform-neutral; Android and iOS supply implementations. */
-enum class TrailMenuAction { REFRESH_TRAILS, ZOOM_TO_TRAILS, TOGGLE_TRAILS, LEGEND, SHARE_KML, SHARE_GPX, CAR_BLUETOOTH_STOP }
+enum class TrailMenuAction { REFRESH_TRAILS, ZOOM_TO_TRAILS, TOGGLE_TRAILS, LEGEND, SHARE_KML, SHARE_GPX, CAR_BLUETOOTH_STOP, WIFI_AUTO_STOP }
 
 /** Shared Compose screen. Map contents remain a platform-native slot until validated. */
 @Composable
@@ -337,7 +337,8 @@ private fun TrailMenuControl(
                     TrailMenuAction.LEGEND to "Legend",
                     TrailMenuAction.SHARE_KML to "Share recorded KML…",
                     TrailMenuAction.SHARE_GPX to "Share recorded GPX…",
-                    TrailMenuAction.CAR_BLUETOOTH_STOP to "Auto-stop on car Bluetooth…"
+                    TrailMenuAction.CAR_BLUETOOTH_STOP to "Auto-stop on car Bluetooth…",
+                    TrailMenuAction.WIFI_AUTO_STOP to "Auto-stop on Wi-Fi…"
                 )
                 actions.forEach { (action, title) ->
                     DropdownMenuItem(

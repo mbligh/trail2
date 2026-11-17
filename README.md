@@ -70,6 +70,14 @@ No Bluetooth scanning is performed. Android 12+ requires the Nearby devices
 permission. If the device was already connected when recording started, it must
 reconnect to trigger a stop. Wireless Android Auto often uses the car's Bluetooth,
 but wired Android Auto is not a separate trigger.
+
+For automatic stop on arrival at a Wi-Fi location, choose Menu → **Auto-stop on Wi-Fi…**.
+Enter the exact SSID (prepopulated from the current connection when available), or
+select Off. During a recording a *new* connection to that Wi-Fi network saves a
+fresh final GPS fix and stops the service, even with the screen locked. Existing
+connections at recording start do not trigger auto-stop, and no Wi-Fi scanning
+occurs. This depends on precise location permission and Android's location
+setting being enabled so the system supplies the SSID.
 The limit includes time waiting for GPS and time with the screen locked; reopening
 the map does not reset it. Start a new recording to get another four hours.
 Stop shows distance, elapsed time (between first and last recorded GPS fixes),
