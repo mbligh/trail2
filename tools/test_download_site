@@ -27,9 +27,9 @@ def zip_bytes(files):
     return result.getvalue()
 
 
-def ipa(version, mode='release'):
+def ipa(version, mode='release', minimum_os='15.5'):
     return zip_bytes({'Payload/Trail2.app/Info.plist':plistlib.dumps(dict(CFBundleIdentifier='mbligh.trail',
-        CFBundleShortVersionString=version, MinimumOSVersion='18.5', TrailBuildConfiguration=mode)),
+        CFBundleShortVersionString=version, MinimumOSVersion=minimum_os, TrailBuildConfiguration=mode)),
         'Payload/Trail2.app/TrailIosProbe':b'fixture native executable'})
 
 
@@ -88,7 +88,7 @@ class DownloadSiteTests(unittest.TestCase):
             self.assertEqual(third['ios'], second['ios'])
             self.assertEqual((root/'third/Trail2.apk').read_bytes(), b'new apk')
             self.assertEqual(third['android']['sha256'], hashlib.sha256(b'new apk').hexdigest())
-            self.assertEqual((root/'third/index.html').read_text(), 'iOS 2.0.23, minimum 18.5')
+            self.assertEqual((root/'third/index.html').read_text(), 'iOS 2.0.23, minimum 15.5')
             self.assertFalse((root/'third/unrelated.txt').exists())
     def test_expired_artifact_preserves_verified_public_copy_instead_of_older_build(self):
         with tempfile.TemporaryDirectory() as directory:
