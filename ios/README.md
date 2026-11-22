@@ -20,10 +20,15 @@ runs native/shared tests and simulator rendering/handler checks, and publishes
   `mbligh.trail`, display name **Trail 2**, Android version name and workflow build
   number. Uses the existing horse icon. This is not an App Store submission archive.
 
-The iOS app minimum is **18.5**, matching the linked renderer's ICU object. The
-former 15.5 probe target was unverified and emitted a deployment-target warning.
-Physical iPhone operation is still unverified. The minimum can be lowered only
-after replacing/rebuilding that dependency and validating the older OS.
+The iOS host and the native Swift adapter now target **iOS 15.5**, which is the
+minimum documented by MapLibre Compose 0.20.0. The previous 18.5 minimum came
+from a higher deployment version reported by an ICU object in the linked native
+renderer, not from an app-level feature requirement. Re-targeting the host alone
+does **not** prove the precompiled ICU object works on older OS releases; inspect
+linker diagnostics and test actual iOS 15.5/16/17 simulator runtimes or hardware
+before treating those OS versions as verified. The CI simulator checks on the
+runner's available runtime validate the build and app behavior, not every older
+supported iOS release. Physical iPhone operation remains unverified.
 
 `ios/package_device` packages the existing compiled device host. It verifies the
 Mach-O device platform/minimum, source plist, icon, background-location declaration,
