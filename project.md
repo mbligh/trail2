@@ -1886,3 +1886,21 @@ these edits. A successful build alone does **not** verify execution on iOS 15.5:
 inspect linker diagnostics and exercise a simulator/device running older iOS
 before declaring compatibility. Successful iOS CI keeps publishing the unsigned
 IPA automatically; unsuccessful builds leave the last published IPA intact.
+
+## iOS 15.5 CI launch diagnostics (2026-11-22)
+
+The first full 15.5-targeted iOS smoke run, [#45028173170](https://github.com/mbligh/trail2/actions/runs/45028173170),
+compiled the simulator and device frameworks, linked both host applications and
+packaged the unsigned Release IPA. Its first Metal screenshot test failed: the
+captured image was SpringBoard's Home Screen with the Trail iOS Probe icon, not
+the app. The legacy cleanup then timed out trying to terminate the app, hiding
+the original simulator launch failure. The linked ICU data object still warned
+that it was built for iOS 18.5 while the host is linked for 15.5.
+
+Both `experiments/ios-map/smoke_simulator.py` and `tools/ios_probe_replay` now
+capture simulator unified logs and crash reports *before* termination, tolerate
+stuck simctl cleanup, and print their diagnostics to the Actions log. A new
+build and diagnostic replay are needed to establish whether the app is crashing
+or simulator startup is intermittent. Do not claim iOS 15.5 compatibility or
+publish the new IPA unless the complete simulator smoke suite passes; the
+existing successful-artifact publisher already enforces this gate.
