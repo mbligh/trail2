@@ -1873,3 +1873,16 @@ checks for expired artifacts, and combined Android/iOS Pages publication remain
 unchanged. The GitHub Actions history will still show each triggering workflow
 event; coalescing reduces active work and actual deployments, not the number of
 trigger records.
+
+## iOS deployment compatibility experiment (2026-11-22)
+
+The iOS host/Swift package deployment target is being lowered from 18.5 to
+**15.5**, matching the supported minimum documented by MapLibre Compose 0.20.0.
+The Swift compiler target triple and asset catalog minimum now derive from the
+host `Info.plist`, and IPA validation compares the actual device Mach-O minimum
+to that same value. The earlier 18.5 setting was adopted after a linked ICU
+object emitted a higher-minimum warning; the prebuilt renderer is not rebuilt by
+these edits. A successful build alone does **not** verify execution on iOS 15.5:
+inspect linker diagnostics and exercise a simulator/device running older iOS
+before declaring compatibility. Successful iOS CI keeps publishing the unsigned
+IPA automatically; unsuccessful builds leave the last published IPA intact.
