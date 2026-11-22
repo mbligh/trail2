@@ -29,7 +29,9 @@ Both app hosts use Kotlin/Native Release frameworks and Swift `-O`.
 The simulator app is ad-hoc signed without an Apple account. The device app and
 Trail 2 IPA remain unsigned. These framework dependencies support ARM64 devices
 and Apple Silicon simulators; an Intel Mac cannot run this simulator build.
-The host requires iOS 18.5 because of the linked rendering dependency.
+The host now targets iOS 15.5, the minimum documented for MapLibre Compose 0.20.0.
+The precompiled renderer's ICU object previously reported a higher deployment
+minimum, so older-OS runtime support must still be verified independently.
 
 The iOS smoke workflow runs actual Metal pixel checks plus recording/export/
 report/photo, offline map, trail refresh/visibility, four-basemap/cache, remote
