@@ -1,0 +1,127 @@
+name: Diagnose iOS deployment targets (15.5 / 17.0 / 18.5)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ios-deployment-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: trail-ios-deployment-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install shapely==2.1.2
+      - uses: actions/cache@v5
+        with:
+          path: .map-downloads
+          key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
+      - name: Prepare the same offline map resources as production
+        run: python tools/prepare_maps --output experiments/ios-map/build/mapAssets
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Trail-iOS-diagnostic-map-assets
+          path: experiments/ios-map/build/mapAssets/
+  compare:
+    needs: assets
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Configure toolchains
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
+      - uses: actions/cache/restore@v5
+        with:
+          path: ~/.konan
+          key: trail-konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('build.gradle.kts', 'shared/build.gradle.kts', 'experiments/ios-map/build.gradle.kts') }}
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: trail-ios-gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('*.gradle.kts', 'gradle/**', 'shared/**', 'experiments/ios-map/**/*.kt') }}
+          restore-keys: trail-ios-gradle-${{ runner.os }}-${{ runner.arch }}-
+      - name: Compile the shared Release simulator framework once
+        run: ./gradlew --no-daemon --build-cache :iosProbe:linkReleaseFrameworkIosSimulatorArm64
+      - uses: actions/download-artifact@v6
+        with:
+          name: Trail-iOS-diagnostic-map-assets
+          path: experiments/ios-map/build/mapAssets/
+      - name: Install simulator screenshot dependencies
+        run: python -m pip install Pillow==11.3.0
+      - name: Compare iOS 18.5, 17.0 and 15.5 on the SAME simulator and framework
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p experiments/ios-map/build/deployment-diagnostic
+          echo 'All three builds use the exact same Kotlin/Native Release framework, macOS/Xcode runner and available simulator runtime.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Swift/plist min iOS | Build | Metal smoke | ICU deployment warning |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---|---|---|---|' >> "$GITHUB_STEP_SUMMARY"
+          failed=0
+          for version in 18.5 17.0 15.5; do
+            echo "::group::Target iOS $version"
+            out="experiments/ios-map/build/deployment-diagnostic/ios-$version"
+            mkdir -p "$out"
+            /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion $version" experiments/ios-map/app/Info.plist
+            build_status=PASS
+            smoke_status=NOT_RUN
+            if bash experiments/ios-map/build_probe_app simulator release > "$out/build.log" 2>&1; then
+              xcrun vtool -show-build experiments/ios-map/build/TrailIosProbe.app/TrailIosProbe > "$out/macho-version.txt" 2>&1
+              if python experiments/ios-map/smoke_simulator.py > "$out/smoke.log" 2>&1; then
+                smoke_status=PASS
+              else
+                smoke_status=FAIL
+                failed=1
+              fi
+              if [ -d experiments/ios-map/build/smoke ]; then
+                cp -R experiments/ios-map/build/smoke "$out/smoke-artifacts"
+              fi
+              rm -rf experiments/ios-map/build/smoke
+            else
+              build_status=FAIL
+              failed=1
+            fi
+            icu_count=$(grep -c 'libicu.icudtl_dat.o.*built for newer' "$out/build.log" || true)
+            echo "| $version | $build_status | $smoke_status | $icu_count |" >> "$GITHUB_STEP_SUMMARY"
+            echo "Target $version: build=$build_status, Metal=$smoke_status, ICU warning count=$icu_count"
+            grep -E 'libicu.icudtl_dat.o|built for newer|error:|fatal error:' "$out/build.log" | tail -20 || true
+            if [ "$smoke_status" = FAIL ]; then
+              tail -100 "$out/smoke.log"
+            fi
+            echo "::endgroup::"
+          done
+          # Restore the working copy (this test never commits or publishes a package).
+          /usr/libexec/PlistBuddy -c 'Set :MinimumOSVersion 15.5' experiments/ios-map/app/Info.plist
+          exit "$failed"
+      - name: Retain per-version compilation logs, runtime logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Trail-iOS-deployment-diagnostic
+          path: experiments/ios-map/build/deployment-diagnostic/
+          if-no-files-found: warn
