@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 kind="${1:-simulator}"
+# One source of truth for both host triples and asset-catalog compilation.
+minimum_ios="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' experiments/ios-map/app/Info.plist)"
 configuration="${2:-release}"
 case "$configuration" in
     release) swift_options=(-O); xcode_configuration=Release ;;
@@ -13,14 +15,14 @@ case "$kind" in
         target=iosSimulatorArm64
         sdk_name=iphonesimulator
         platform=iPhoneSimulator
-        triple=arm64-apple-ios18.5-simulator
+        triple="arm64-apple-ios${minimum_ios}-simulator"
         app="experiments/ios-map/build/TrailIosProbe.app"
         ;;
     device)
         target=iosArm64
         sdk_name=iphoneos
         platform=iPhoneOS
-        triple=arm64-apple-ios18.5
+        triple="arm64-apple-ios${minimum_ios}"
         app="experiments/ios-map/build/TrailIosProbe-device.app"
         ;;
     *) echo "Usage: $0 [simulator|device] [release|debug]" >&2; exit 2 ;;
@@ -68,7 +70,7 @@ xcrun --sdk "$sdk_name" swiftc -warnings-as-errors "${swift_options[@]}" -parse-
 python ios/make_app_icons experiments/ios-map/build/AppIcons.xcassets
 icon_info="experiments/ios-map/build/icon-info-$kind.plist"
 xcrun actool experiments/ios-map/build/AppIcons.xcassets --compile "$app" \
-    --platform "$sdk_name" --target-device iphone --minimum-deployment-target 18.5 \
+    --platform "$sdk_name" --target-device iphone --minimum-deployment-target "$minimum_ios" \
     --app-icon AppIcon --output-partial-info-plist "$icon_info"
 python - "$app/Info.plist" "$icon_info" "$configuration" <<'PLIST'
 import plistlib, sys
