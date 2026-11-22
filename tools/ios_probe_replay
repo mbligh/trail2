@@ -53,22 +53,49 @@ try:
         if process.poll() is not None or all(counts[c] > 150 for c in counts):
             break
 finally:
-    subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    # Inspect the launch failure before cleanup. The simctl --console wrapper
+    # can remain alive after the application exits, and simctl terminate can hang.
+    with (OUT / 'app-log.txt').open('w') as log:
+        try:
+            subprocess.run(
+                ['xcrun', 'simctl', 'spawn', identifier, 'log', 'show',
+                 '--last', '12m', '--style', 'compact', '--predicate',
+                 'process == "TrailIosProbe" OR eventMessage CONTAINS[c] "iosprobe"'],
+                stdout=log, stderr=subprocess.STDOUT, timeout=75, check=False)
+        except subprocess.TimeoutExpired:
+            log.write('simctl log show timed out\n')
+    reports = []
+    for directory in (Path.home() / 'Library/Logs/DiagnosticReports',
+                      Path.home() / 'Library/Developer/CoreSimulator/Devices' /
+                      identifier / 'data/Library/Logs/DiagnosticReports'):
+        if directory.exists():
+            reports.extend(directory.glob('TrailIosProbe*'))
+    for report in sorted(reports, key=lambda p: p.stat().st_mtime)[-4:]:
+        shutil.copy2(report, OUT / report.name)
+        print('IOS_CRASH_REPORT_BEGIN\n' + report.read_text(errors='replace')[:100000] +
+              '\nIOS_CRASH_REPORT_END', flush=True)
     try:
-        process.wait(timeout=15)
+        subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
+    except subprocess.TimeoutExpired:
+        print('WARNING: simctl terminate timed out after launch failure', flush=True)
+    try:
+        process.wait(timeout=10)
     except subprocess.TimeoutExpired:
         process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
     console.close()
-    print('IOS_CONSOLE_BEGIN\n' + console_path.read_text(errors='replace')[-100000:] + '\nIOS_CONSOLE_END')
-    reports = sorted((Path.home() / 'Library/Logs/DiagnosticReports').glob('TrailIosProbe*.ips'),
-                     key=lambda p: p.stat().st_mtime)
-    for report in reports[-2:]:
-        shutil.copy2(report, OUT / report.name)
-        print('IOS_CRASH_REPORT_BEGIN\n' + report.read_text(errors='replace')[:100000] + '\nIOS_CRASH_REPORT_END')
+    print('IOS_CONSOLE_BEGIN\n' + console_path.read_text(errors='replace')[-100000:] +
+          '\nIOS_CONSOLE_END', flush=True)
+    app_log = (OUT / 'app-log.txt').read_text(errors='replace')
+    print('IOS_SYSTEM_LOG_BEGIN\n' + app_log[-50000:] + '\nIOS_SYSTEM_LOG_END', flush=True)
     if screenshot.exists():
         image = Image.open(screenshot).convert('RGB')
         image.thumbnail((480, 960))
         buffer = io.BytesIO()
         image.save(buffer, format='PNG')
-        print('IOS_RENDER_PNG_BASE64:' + base64.b64encode(buffer.getvalue()).decode())
+        print('IOS_RENDER_PNG_BASE64:' + base64.b64encode(buffer.getvalue()).decode(), flush=True)
