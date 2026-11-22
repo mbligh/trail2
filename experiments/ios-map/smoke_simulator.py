@@ -61,20 +61,45 @@ try:
     else:
         raise AssertionError(f'Missing shared map content: {counts}')
 finally:
-    subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    # Collect diagnostics BEFORE cleanup: simctl terminate can hang when the app
+    # exits immediately or SpringBoard never brings it to the foreground.
+    # The --console process can remain open after the actual app has died.
+    with (OUTPUT / 'app-log.txt').open('w') as log:
+        try:
+            subprocess.run(
+                ['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--last', '12m',
+                 '--style', 'compact', '--predicate',
+                 'process == "TrailIosProbe" OR eventMessage CONTAINS[c] "iosprobe"'],
+                stdout=log, stderr=subprocess.STDOUT, timeout=75, check=False,
+            )
+        except subprocess.TimeoutExpired:
+            log.write('simctl log show timed out\n')
+    reports = []
+    for directory in (Path.home() / 'Library/Logs/DiagnosticReports',
+                      Path.home() / 'Library/Developer/CoreSimulator/Devices' /
+                      identifier / 'data/Library/Logs/DiagnosticReports'):
+        if directory.exists():
+            reports.extend(directory.glob('TrailIosProbe*'))
+    for report in sorted(reports, key=lambda path: path.stat().st_mtime)[-4:]:
+        shutil.copy2(report, OUTPUT / report.name)
     try:
-        launch.wait(timeout=15)
+        subprocess.run(['xcrun', 'simctl', 'terminate', identifier, 'net.pocketmap.iosprobe'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=15, check=False)
+    except subprocess.TimeoutExpired:
+        print('WARNING: simctl terminate hung; preserving original test failure', flush=True)
+    try:
+        launch.wait(timeout=10)
     except subprocess.TimeoutExpired:
         launch.terminate()
-        launch.wait(timeout=15)
+        try:
+            launch.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            launch.kill()
+            launch.wait(timeout=5)
     console.close()
-    print('IOS_CONSOLE_BEGIN\n' + console_path.read_text(errors='replace')[-40000:] + '\nIOS_CONSOLE_END')
-    reports = sorted((Path.home() / 'Library/Logs/DiagnosticReports').glob('TrailIosProbe*.ips'),
-                     key=lambda path: path.stat().st_mtime)
-    for report in reports[-2:]:
-        shutil.copy2(report, OUTPUT / report.name)
-    with (OUTPUT / 'app-log.txt').open('w') as log:
-        subprocess.run(['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--last', '5m',
-                        '--predicate', 'process == "TrailIosProbe"', '--style', 'compact'],
-                       stdout=log, stderr=subprocess.STDOUT, timeout=60, check=False)
+    print('IOS_CONSOLE_BEGIN\n' + console_path.read_text(errors='replace')[-40000:] +
+          '\nIOS_CONSOLE_END', flush=True)
+    app_log = (OUTPUT / 'app-log.txt').read_text(errors='replace')
+    print('IOS_SYSTEM_LOG_BEGIN\n' + app_log[-50000:] + '\nIOS_SYSTEM_LOG_END',
+          flush=True)
