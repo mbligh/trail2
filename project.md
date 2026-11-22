@@ -1904,3 +1904,23 @@ build and diagnostic replay are needed to establish whether the app is crashing
 or simulator startup is intermittent. Do not claim iOS 15.5 compatibility or
 publish the new IPA unless the complete simulator smoke suite passes; the
 existing successful-artifact publisher already enforces this gate.
+
+## Controlled iOS deployment-target comparison (2026-11-22)
+
+A separate, non-publishing workflow
+[Diagnose iOS deployment targets](https://github.com/mbligh/trail2/actions/workflows/ios-deployment-diagnostic.yml)
+tests **18.5**, **17.0**, and **15.5**, in that order. It compiles the same
+optimized Kotlin/Native simulator framework only once, then changes only the
+host \`MinimumOSVersion\` in the CI workspace. The standard
+\`build_probe_app\` script derives Swift target and asset catalog target from
+that plist. For each version the workflow saves the linker output, actual
+Mach-O deployment minimum, simulator test logs, crash/system logs and a
+screenshot. The CI job reports all three results even if one fails.
+
+This is a controlled target-metadata/linking comparison on a single available
+macOS-26 runner simulator, **not a test on iOS 17 itself**. It does not build or
+publish an IPA, does not modify the repository plist, and is deliberately
+excluded from the workflow-run triggers of the public download publisher.
+A different outcome at 17.0 would narrow the suspect deployment-version
+boundary; if all three fail, simulator environment or unrelated launch behavior
+remains plausible. The shipping build still targets iOS 15.5 pending validation.
