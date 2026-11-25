@@ -33,8 +33,8 @@ as possible. Underlying tile appearance may change. Retain:
   Tap the zoom value for the existing map credits dialog. Elapsed duration comes
   from the service's monotonic start time and includes time before the first fix.
   Values update on the existing one-second tick or on camera/GPS changes.
-- Existing 37 dp corner controls: recording bottom right, report flag bottom left,
-  recording pin top left, Recenter top right; existing margins/icons/colors.
+- Existing 37 dp corner controls: recording top left, report flag bottom left,
+  recording pin bottom right, Recenter top right; existing margins/icons/colors.
 - Pinch zoom, single-finger dragging that pauses following, Recenter that restores
   following and existing permission/location-settings behavior. Map remains north-up,
   with rotation/tilt disabled. Preserve geographic center and apparent scale across
@@ -180,7 +180,7 @@ and medical artwork (including tint/scale/anchors). Cache the last validated doc
 retain it on refresh failure. Parser/network safety limits remain unchanged. No local
 KML/KMZ import is added. Fresh install trail refresh needs a connection.
 
-Tap the top-left blue pin to save an unannotated pin immediately. Hold it for one
+Tap the bottom-right blue pin to save an unannotated pin immediately. Hold it for one
 second to open a multiline text dialog **while the finger is still down**, with
 standard long-press haptic feedback; release must not add a second pin. Moving out,
 cancelling, pausing or detaching the button cancels a pending hold. Preserve native
@@ -1924,3 +1924,11 @@ excluded from the workflow-run triggers of the public download publisher.
 A different outcome at 17.0 would narrow the suspect deployment-version
 boundary; if all three fail, simulator environment or unrelated launch behavior
 remains plausible. The shipping build still targets iOS 15.5 pending validation.
+
+## Map corner control swap — 2.0.23 (2026-11-25)
+
+Swap the record and blue pin buttons in shared `TrailScreen` for Android and iOS.
+Record/stop is now top left, and the pin is bottom right. Report and recenter
+stay in their original corners. Preserve the 37 dp sizes, margins, artwork,
+recording state, pin availability, and one-second pin hold gesture. The Android
+inset regression checks all four corner positions and matching margins.

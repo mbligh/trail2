@@ -165,7 +165,7 @@ private fun BoxScope.MapCornerControls(
     recenterIcon: @Composable () -> Unit
 ) {
     CornerButton("pin-control", "Add pin to recorded track; hold for one second to add text",
-        Modifier.align(Alignment.TopStart).padding(16.dp),
+        Modifier.align(Alignment.BottomEnd).padding(16.dp),
         icon = pinIcon,
         onClick = onPin,
         onHold = onPinWithText,
@@ -182,7 +182,7 @@ private fun BoxScope.MapCornerControls(
         onClick = onReport
     )
     CornerButton("record-control", if (recording) "Stop recording" else "Start recording",
-        Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        Modifier.align(Alignment.TopStart).padding(16.dp),
         icon = {
             Canvas(Modifier.size(24.dp)) {
                 if (recording) {

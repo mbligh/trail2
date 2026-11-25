@@ -74,6 +74,18 @@ class ScreenInsetsTest {
             assertEquals("Header has doubled/missing top inset", safe.top.toFloat(), header.top, 1f)
             assertEquals("Map has doubled/missing bottom inset", safe.bottom.toFloat(), map.bottom, 1f)
 
+            // Record and pin swapped corners; flag and recenter remain in place.
+            val record = ui.bounds("record-control")
+            val pin = ui.bounds("pin-control")
+            val report = ui.bounds("report-control")
+            val recenter = ui.bounds("recenter-control")
+            assertTrue("Record must be top left", record.center.x < map.center.x && record.center.y < map.center.y)
+            assertTrue("Pin must be bottom right", pin.center.x > map.center.x && pin.center.y > map.center.y)
+            assertTrue("Report must be bottom left", report.center.x < map.center.x && report.center.y > map.center.y)
+            assertTrue("Recenter must be top right", recenter.center.x > map.center.x && recenter.center.y < map.center.y)
+            assertEquals("Record and report left margins differ", report.left, record.left, 1f)
+            assertEquals("Pin and report bottom margins differ", report.bottom, pin.bottom, 1f)
+
         }
     }
 }
