@@ -1932,3 +1932,7 @@ Record/stop is now top left, and the pin is bottom right. Report and recenter
 stay in their original corners. Preserve the 37 dp sizes, margins, artwork,
 recording state, pin availability, and one-second pin hold gesture. The Android
 inset regression checks all four corner positions and matching margins.
+
+## Android map smoke CI dependency resilience (2026-11-26)
+
+The map smoke workflow retains Gradle's downloaded modules/wrapper and Robolectric's Maven artifacts between runs. Build verification retries recognized dependency-resolution failures up to twice with backoff; all build, lint, unit and emulator checks remain required. Ordinary test failures are not retried by this build loop. Each build attempt and unit-test report is retained in the smoke diagnostic artifact, including on failure. Root Gradle/toolchain changes also trigger this workflow. The job allows 40 minutes for the bounded retries and emulator checks.

@@ -2,7 +2,7 @@ name: MapLibre Compose production smoke tests
 on:
   push:
     branches: [main, codex/maplibre-migration]
-    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', 'tools/check_native_alignment', '.github/workflows/map-smoke.yml']
+    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', 'tools/check_native_alignment', '*.gradle.kts', 'gradle.properties', 'gradle/**', 'gradlew*', '.github/workflows/map-smoke.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,7 +12,7 @@ concurrency:
 jobs:
   native-map:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -31,13 +31,35 @@ jobs:
         with:
           path: .map-downloads
           key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
+      - name: Cache Gradle and Robolectric dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper
+            ~/.m2/repository/org/robolectric
+          key: trail-map-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/**') }}
+          restore-keys: trail-map-deps-${{ runner.os }}-${{ runner.arch }}-
       - name: Build and verify
+        shell: bash
         run: |
           sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
           if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
             ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
           fi
-          ./gradlew --no-daemon :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+          mkdir -p smoke-results
+          # Retry only dependency resolution failures, not failed application tests.
+          for attempt in 1 2 3; do
+            log="smoke-results/gradle-build-$attempt.log"
+            if ./gradlew --no-daemon --console=plain --stacktrace :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee "$log"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ] || ! grep -Ei 'could not resolve plugin artifact|MavenArtifactFetcher|could not (resolve|download|GET|HEAD).*(https?://|artifact)|could not resolve all (files|artifacts)' "$log"; then
+              exit 1
+            fi
+            echo "::warning::Dependency resolution failed (attempt $attempt); retrying the build"
+            sleep "$((attempt * 15))"
+          done
           python tools/test_offline_maps
           python tools/check_native_alignment app/build/outputs/apk/debug/app-debug.apk
       - name: Install emulator
@@ -93,5 +115,9 @@ jobs:
           name: maplibre-smoke-results
           path: |
             smoke-results/
+            app/build/reports/tests/
+            app/build/test-results/
+            shared/build/reports/tests/
+            shared/build/test-results/
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
