@@ -1936,3 +1936,7 @@ inset regression checks all four corner positions and matching margins.
 ## Android map smoke CI dependency resilience (2026-11-26)
 
 The map smoke workflow retains Gradle's downloaded modules/wrapper and Robolectric's Maven artifacts between runs. Build verification retries recognized dependency-resolution failures up to twice with backoff; all build, lint, unit and emulator checks remain required. Ordinary test failures are not retried by this build loop. Each build attempt and unit-test report is retained in the smoke diagnostic artifact, including on failure. Root Gradle/toolchain changes also trigger this workflow. The job allows 40 minutes for the bounded retries and emulator checks.
+
+## Pin-hold instrumentation after the corner swap (2026-11-27)
+
+Map smoke run [#45915447492](https://github.com/mbligh/trail2/actions/runs/45915447492) passed build verification and emulator startup, but the pin-hold test still injected touches at the old top-left coordinates (now the record control). Resolve the real `pin-control` semantics screen bounds before every ACTION_DOWN, convert its center to Activity decor coordinates, and retain the same coordinates and down time through ACTION_UP. Keep real pointer dispatch, the one-second hold, dialog-before-release, no-duplicate-pin, recreation, and subsequent short-tap assertions. The independent inset test still enforces the actual bottom-right placement. No production behavior changes.

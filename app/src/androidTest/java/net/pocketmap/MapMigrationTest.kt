@@ -313,22 +313,21 @@ class MapMigrationTest {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 // Dispatch real-time pointer events directly to the Activity decor view.
                 // This verifies the 1,000 ms hold without test-clock timing tricks.
-                val density = context.resources.displayMetrics.density
+                val ui = RealComposeUi(scenario)
                 var x = 0f
                 var y = 0f
                 var downTime = 0L
                 fun touch(action: Int) {
                     if (action == android.view.MotionEvent.ACTION_DOWN) {
-                        // Trail status may disappear or reappear after Activity recreation.
-                        // Recompute the Compose button's position before each new press.
+                        // Resolve the actual pin control on every press, including after
+                        // Activity recreation; do not assume a particular map corner.
                         instrumentation.waitForIdleSync()
+                        val pin = ui.screenBounds("pin-control")
                         scenario.onActivity { activity ->
-                            val mapOrigin = IntArray(2)
                             val decorOrigin = IntArray(2)
-                            renderer(activity).getLocationOnScreen(mapOrigin)
                             activity.window.decorView.getLocationOnScreen(decorOrigin)
-                            x = mapOrigin[0] - decorOrigin[0] + (16f + 37f / 2f) * density
-                            y = mapOrigin[1] - decorOrigin[1] + (16f + 37f / 2f) * density
+                            x = pin.center.x - decorOrigin[0]
+                            y = pin.center.y - decorOrigin[1]
                         }
                         downTime = SystemClock.uptimeMillis()
                     }
