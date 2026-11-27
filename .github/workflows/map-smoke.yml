@@ -2,7 +2,7 @@ name: MapLibre Compose production smoke tests
 on:
   push:
     branches: [main, codex/maplibre-migration]
-    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', 'tools/check_native_alignment', '*.gradle.kts', 'gradle.properties', 'gradle/**', 'gradlew*', '.github/workflows/map-smoke.yml']
+    paths: ['shared/**', 'app/**', 'basemaps.json', 'offline-maps.json', 'maps/**', 'tools/prepare_maps', 'tools/test_offline_maps', 'tools/check_native_alignment', 'tools/ci_gradle', '*.gradle.kts', 'gradle.properties', 'gradle/**', 'gradlew*', '.github/workflows/map-smoke.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,7 +39,9 @@ jobs:
             ~/.gradle/wrapper
             ~/.m2/repository/org/robolectric
           key: trail-map-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/**') }}
-          restore-keys: trail-map-deps-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: |
+            trail-map-deps-${{ runner.os }}-${{ runner.arch }}-
+            trail-android-deps-${{ runner.os }}-${{ runner.arch }}-
       - name: Build and verify
         shell: bash
         run: |
@@ -47,19 +49,7 @@ jobs:
           if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
             ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
           fi
-          mkdir -p smoke-results
-          # Retry only dependency resolution failures, not failed application tests.
-          for attempt in 1 2 3; do
-            log="smoke-results/gradle-build-$attempt.log"
-            if ./gradlew --no-daemon --console=plain --stacktrace :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee "$log"; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ] || ! grep -Ei 'could not resolve plugin artifact|MavenArtifactFetcher|could not (resolve|download|GET|HEAD).*(https?://|artifact)|could not resolve all (files|artifacts)' "$log"; then
-              exit 1
-            fi
-            echo "::warning::Dependency resolution failed (attempt $attempt); retrying the build"
-            sleep "$((attempt * 15))"
-          done
+          CI_GRADLE_LOG_DIR=smoke-results tools/ci_gradle :shared:jvmTest testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
           python tools/test_offline_maps
           python tools/check_native_alignment app/build/outputs/apk/debug/app-debug.apk
       - name: Install emulator

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Retry transient Maven/Gradle dependency failures, never ignore a failing build.
+set -euo pipefail
+log_dir="${CI_GRADLE_LOG_DIR:-build/ci-gradle}"
+mkdir -p "$log_dir"
+for attempt in 1 2 3; do
+  log="$log_dir/gradle-build-$attempt.log"
+  if ./gradlew --no-daemon --console=plain --stacktrace "$@" 2>&1 | tee "$log"; then
+    exit 0
+  fi
+  if [ "$attempt" -eq 3 ] || ! grep -Eiq 'could not resolve plugin artifact|MavenArtifactFetcher|could not (resolve|download|GET|HEAD).*(https?://|artifact)|could not resolve all (files|artifacts)|status code (429|502|503|504)' "$log"; then
+    exit 1
+  fi
+  echo "::warning::Dependency resolution failed (attempt $attempt); retrying the build"
+  sleep "$((attempt * 30))"
+done

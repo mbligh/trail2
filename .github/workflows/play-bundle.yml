@@ -11,6 +11,7 @@ on:
       - 'tools/prepare_maps'
       - 'tools/test_offline_maps'
       - 'tools/check_native_alignment'
+      - 'tools/ci_gradle'
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'gradle/**'
@@ -52,7 +53,7 @@ jobs:
     needs: configuration
     if: needs.configuration.outputs.ready == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       TRAIL_UPLOAD_KEYSTORE: ${{ github.workspace }}/.private-signing/trail-upload.p12
       TRAIL_UPLOAD_PASSWORD: ${{ secrets.TRAIL_UPLOAD_PASSWORD }}
@@ -94,10 +95,23 @@ jobs:
         with:
           path: .map-downloads
           key: offline-maps-${{ hashFiles('offline-maps.json', 'basemaps.json', 'tools/prepare_maps') }}
+      - name: Cache Gradle and Robolectric dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper
+            ~/.m2/repository/org/robolectric
+          key: trail-android-deps-${{ runner.os }}-${{ runner.arch }}-play-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/**') }}
+          restore-keys: |
+            trail-map-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/**') }}
+            trail-android-deps-${{ runner.os }}-${{ runner.arch }}-play-
+            trail-map-deps-${{ runner.os }}-${{ runner.arch }}-
+            trail-android-deps-${{ runner.os }}-${{ runner.arch }}-
       - name: Validate offline tile selection
         run: python tools/test_offline_maps
       - name: Test, lint, and build release bundle
-        run: ./gradlew --no-daemon :shared:jvmTest testReleaseUnitTest lintRelease bundleRelease
+        run: tools/ci_gradle :shared:jvmTest testReleaseUnitTest lintRelease bundleRelease
       - name: Verify complete bundled offline coverage
         run: python tools/test_offline_maps
       - name: Verify 16 KiB native alignment
@@ -125,6 +139,18 @@ jobs:
           tracks: internal
           status: completed
           releaseName: Trail 2 build ${{ github.run_number }}.${{ github.run_attempt }}
+      - name: Save build failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: play-build-diagnostics
+          path: |
+            build/ci-gradle/
+            app/build/test-results/
+            app/build/reports/tests/
+            shared/build/test-results/
+            shared/build/reports/tests/
+          if-no-files-found: warn
       - name: Remove upload key
         if: always()
         run: rm -rf .private-signing
